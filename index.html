@@ -1218,6 +1218,65 @@ function statusLegend(){
   </div>`;
 }
 
+// Gráfico de barras — vendas por dia
+function drawBarVendas(id, data, cssW, cssH){
+  const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
+  const P={t:22,r:16,b:26,l:32};
+  const cW=cssW-P.l-P.r, cH=cssH-P.t-P.b;
+  const n=data.length; if(n===0)return;
+  const vals=data.map(d=>d.vendas||0);
+  const maxV=Math.max(...vals,1);
+
+  // Grid horizontal
+  const ticks=4;
+  for(let i=0;i<=ticks;i++){
+    const y=P.t+(i/ticks)*cH;
+    ctx.strokeStyle=GRID_C;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(P.l,y);ctx.lineTo(P.l+cW,y);ctx.stroke();
+    if(i<ticks){
+      const lv=Math.round(maxV-(i/ticks)*maxV);
+      ctx.fillStyle=TICK_C;ctx.font="9px 'JetBrains Mono',monospace";ctx.textAlign="right";
+      ctx.fillText(lv,P.l-4,y+3);
+    }
+  }
+
+  // Barras
+  const slot=cW/n;
+  const barW=Math.max(3,Math.min(28,slot*0.6));
+  const GREEN="#34d399";
+  for(let i=0;i<n;i++){
+    const v=vals[i];
+    const bh=Math.max(v>0?2:0,(v/maxV)*cH);
+    const cx=P.l+slot*i+slot/2;
+    const x=cx-barW/2;
+    const y=P.t+cH-bh;
+    // Gradiente verde
+    const g=ctx.createLinearGradient(0,y,0,P.t+cH);
+    g.addColorStop(0,GREEN+"dd");g.addColorStop(1,GREEN+"55");
+    ctx.fillStyle=g;
+    // Barra com cantos arredondados no topo
+    const r=Math.min(3,barW/2,bh/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.lineTo(x+barW-r,y);
+    ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
+    ctx.lineTo(x+barW,y+bh);ctx.lineTo(x,y+bh);ctx.lineTo(x,y+r);
+    ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+    ctx.fill();
+    // Número acima da barra
+    if(v>0){
+      ctx.fillStyle="#e8edf6";
+      ctx.font=`bold ${Math.max(8,Math.min(11,barW-1))}px 'DM Sans',sans-serif`;
+      ctx.textAlign="center";
+      ctx.fillText(v,cx,y-4);
+    }
+  }
+
+  // Labels X
+  const step=n>60?7:n>30?3:n>14?2:1;
+  ctx.fillStyle=TICK_C;ctx.font="9px 'JetBrains Mono',monospace";ctx.textAlign="center";ctx.setLineDash([]);
+  data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,P.l+slot*i+slot/2,P.t+cH+18);});
+}
+
 // ── Render Principal ───────────────────────────────────────────────────────
 function renderPrincipal(){
   const el=document.getElementById("page-principal");if(!el)return;
@@ -1251,7 +1310,7 @@ function renderPrincipal(){
       </div>
       <div style="position:relative"><canvas id="c-dual"></canvas><div class="tip" id="t-dual"></div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
       <div class="cc" style="position:relative">
         <div class="ch"><span class="ct">ROAS diário</span></div>
         <div style="position:relative"><canvas id="c-roas"></canvas><div class="tip" id="t-roas"></div></div>
@@ -1261,14 +1320,23 @@ function renderPrincipal(){
         <div style="position:relative"><canvas id="c-fat"></canvas><div class="tip" id="t-fat"></div></div>
       </div>
     </div>
+    <div class="cc" style="margin-bottom:12px">
+      <div class="ch">
+        <span class="ct">Vendas do Reto (dia a dia)</span>
+        <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas/dia</span></div>
+      </div>
+      <canvas id="c-bar-vendas"></canvas>
+    </div>
     <p class="foot">Base Meta + Base Vendas (Hotmart)</p>`;
 
   requestAnimationFrame(()=>{
     const mW=document.getElementById("c-dual")?.parentElement?.offsetWidth||720;
     const sW=document.getElementById("c-roas")?.parentElement?.offsetWidth||340;
+    const bW=document.getElementById("c-bar-vendas")?.parentElement?.offsetWidth||720;
     drawDual("c-dual",daily,mW,230);
     drawChartWithOverlay("c-roas", daily,"roas",  v=>v.toFixed(2)+"x",META_ROAS,"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
+    drawBarVendas("c-bar-vendas",daily,bW,160);
     setupTip("c-dual","t-dual",daily,[
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
