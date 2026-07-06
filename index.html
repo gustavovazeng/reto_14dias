@@ -363,6 +363,8 @@ const S = {
   cSort:{col:"spend",dir:"desc"},
   selectedCamps:new Set(),
   selectedAds:new Set(),
+  campSearch:"", adSearch:"",
+  manualSpendHoje:null,
   aTab:"tempo",
   anaStartDate:"", anaEndDate:"", anaActiveQuick:"all",
   anaTempoProd1:"reto", anaTempoProd2:"cero",
@@ -1013,6 +1015,14 @@ function clearSelectedAds(){
   S.selectedAds.clear();
   renderAnuncios();
 }
+function setCampSearch(v){ S.campSearch=v; renderAnuncios(); }
+function setAdSearch(v)  { S.adSearch=v;  renderAnuncios(); }
+function setManualSpendHoje(v){
+  const n=parseFloat(String(v).replace(/[R$\s.]/g,"").replace(",","."));
+  S.manualSpendHoje=(isNaN(n)||n<=0)?null:n;
+  renderResumo();
+}
+function clearManualSpend(){ S.manualSpendHoje=null; renderResumo(); }
 function copyResumoAds(){
   const el=document.getElementById("resumo-ads-pre");
   if(!el||!el._text) return;
@@ -1470,6 +1480,7 @@ function renderTrafego(){
 // ── Render Campanhas + Anúncios (aba unificada) ───────────────────────────
 function renderAnuncios(){
   const el=document.getElementById("page-anuncios");if(!el)return;
+  const _focusedId=document.activeElement?.id; // preserva foco dos inputs de busca
   const dd=D();
   const start=S.startDate, end=S.endDate;
 
@@ -1610,6 +1621,9 @@ function renderAnuncios(){
     if(typeof av==="string") return cDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
     return cDir==="asc"?av-bv:bv-av;
   });
+  const filteredCamps=S.campSearch.trim()
+    ? sortedCamps.filter(c=>c.campName.toLowerCase().includes(S.campSearch.trim().toLowerCase()))
+    : sortedCamps;
 
   // ── 2. allowedAdIds: campRows já está filtrado por país, então a interseção é automática
   const hasFilter=S.selectedCamps.size>0;
@@ -1748,6 +1762,9 @@ function renderAnuncios(){
     if(typeof av==="string") return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
     return dir==="asc"?av-bv:bv-av;
   });
+  const filteredAds=S.adSearch.trim()
+    ? sorted.filter(r=>r.advCode.toLowerCase().includes(S.adSearch.trim().toLowerCase()))
+    : sorted;
 
   function sc(v,meta,hi){return statusColor(v,meta,hi);}
 
@@ -1756,7 +1773,9 @@ function renderAnuncios(){
     const activeDir=sortFn==="camp"?cDir:dir;
     const arrow=active?(activeDir==="asc"?" ↑":" ↓"):" ↕";
     const fn=sortFn==="camp"?`sortCampanhas('${col_}')`:`sortAnuncios('${col_}')`;
-    return `<th onclick="${fn}" style="padding:10px 14px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:${active?"var(--text)":"var(--hint)"};cursor:pointer;user-select:none;border-bottom:1px solid var(--border);white-space:nowrap">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};font-size:9px;margin-left:3px">${arrow}</span></th>`;
+    const isName=col_==="campName"||col_==="advCode";
+    const align=isName?"left":"right";
+    return `<th onclick="${fn}" style="padding:10px 14px;text-align:${align};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:${active?"var(--text)":"var(--hint)"};cursor:pointer;user-select:none;border-bottom:1px solid var(--border);white-space:nowrap">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};font-size:9px;margin-left:3px">${arrow}</span></th>`;
   }
 
   // ── 6. Render ────────────────────────────────────────────────────────────
@@ -1764,7 +1783,7 @@ function renderAnuncios(){
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">Campanhas / Anúncios</div>
-        <div class="hdr-sub">atualizado em: ${dd.updated||"—"} · ${sortedCamps.length} campanhas · ${sorted.length} anúncios${hasFilter?" · filtrando "+S.selectedCamps.size+" campanha"+(S.selectedCamps.size>1?"s":""):""}</div>
+        <div class="hdr-sub">atualizado em: ${dd.updated||"—"} · ${filteredCamps.length}/${sortedCamps.length} campanhas · ${filteredAds.length}/${sorted.length} anúncios${hasFilter?" · filtrando "+S.selectedCamps.size+" campanha"+(S.selectedCamps.size>1?"s":""):""}</div>
       </div>
       <div>${statusLegend()}</div>
     </div>
@@ -1860,13 +1879,18 @@ function renderAnuncios(){
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span class="section-lbl" style="margin:0">Campanhas</span>
       ${hasFilter?`<button onclick="clearCamps()" style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(59,130,246,.18);border:1px solid rgba(96,165,250,.35);color:#93c5fd;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.selectedCamps.size})</button>`:""}
+      <input id="camp-search-input" oninput="setCampSearch(this.value)" value="${S.campSearch.replace(/"/g,'&quot;')}"
+        placeholder="Buscar campanha\u2026"
+        style="background:var(--surf);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 10px;outline:none;width:200px;transition:border-color .15s"
+        onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur="this.style.borderColor='var(--border)'">
+      \${S.campSearch?`<button onclick="setCampSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
       <span style="font-size:10px;color:var(--hint)">Clique para filtrar anúncios por campanha</span>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
-          <th style="padding:10px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--hint);border-bottom:1px solid var(--border)">Campanha</th>
-          ${thC("spend","Investimento","camp")}
+          \${thC("campName","Campanha","camp")}
+          \${thC("spend","Investimento","camp")}
           ${thC("qtd","Vendas","camp")}
           ${thC("cpv","Custo/Venda","camp")}
           ${thC("roas","ROAS","camp")}
@@ -1876,7 +1900,7 @@ function renderAnuncios(){
           ${thC("cpc","CPC","camp")}
         </tr></thead>
         <tbody>
-          ${sortedCamps.map(r=>{
+          ${filteredCamps.map(r=>{
             const sel=S.selectedCamps.has(r.campName);
             const bg=sel?"rgba(59,130,246,.12)":"transparent";
             const bord=sel?"border-left:3px solid #3b82f6":"border-left:3px solid transparent";
@@ -1912,13 +1936,18 @@ function renderAnuncios(){
       ${hasFilter?`<span style="font-size:10px;color:#93c5fd;background:rgba(59,130,246,.15);border:1px solid rgba(96,165,250,.3);padding:2px 8px;border-radius:5px">${[...S.selectedCamps].join(", ").substring(0,80)}${([...S.selectedCamps].join(", ").length>80?"…":"")}</span>`:""}
       ${S.selectedAds.size>0?`<button onclick="clearSelectedAds()" style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.selectedAds.size})</button>`:""}
       <span style="font-size:10px;color:var(--hint)">Selecione anúncios para gerar resumo ↓</span>
+      <input id="ad-search-input" oninput="setAdSearch(this.value)" value="${S.adSearch.replace(/"/g,'&quot;')}"
+        placeholder="Buscar anúncio\u2026"
+        style="background:var(--surf);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 10px;outline:none;width:200px;transition:border-color .15s"
+        onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur="this.style.borderColor='var(--border)'">
+      \${S.adSearch?`<button onclick="setAdSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           <th style="padding:10px 12px;border-bottom:1px solid var(--border);width:36px"></th>
-          <th style="padding:10px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--hint);border-bottom:1px solid var(--border)">Anúncio</th>
-          ${thC("spend","Investimento","ad")}
+          \${thC("advCode","Anúncio","ad")}
+          \${thC("spend","Investimento","ad")}
           ${thC("qtd","Vendas","ad")}
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
@@ -1929,8 +1958,8 @@ function renderAnuncios(){
           <th style="padding:10px 12px;border-bottom:1px solid var(--border)"></th>
         </tr></thead>
         <tbody>
-          ${sorted.length===0?`<tr><td colspan="11" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
-          ${sorted.map(r=>{
+          ${filteredAds.length===0?`<tr><td colspan="11" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
+          ${filteredAds.map(r=>{
             const selAd=S.selectedAds.has(r.advCode);
             const bgAd=selAd?"rgba(16,185,129,.10)":"transparent";
             const bordAd=selAd?"border-left:3px solid #10b981":"border-left:3px solid transparent";
@@ -2001,6 +2030,13 @@ function renderAnuncios(){
     })()}
 
     <p class="foot">Base Meta (Stract) + Base Vendas (Hotmart) · Google Sheets API v4</p>`;
+  // Restaura foco nos inputs de busca (innerHTML reseta o foco a cada tecla)
+  if(_focusedId==="camp-search-input"||_focusedId==="ad-search-input"){
+    requestAnimationFrame(()=>{
+      const inp=document.getElementById(_focusedId);
+      if(inp){inp.focus();const l=inp.value.length;inp.setSelectionRange(l,l);}
+    });
+  }
 }
 
 
@@ -2470,6 +2506,7 @@ function renderFunil(){
 // ── Render Resumo Diário ───────────────────────────────────────────────────
 function renderResumo(){
   const el=document.getElementById("page-resumo");if(!el)return;
+  const _resumoFocus=document.activeElement?.id;
   const today=todayISO(), yest=yesterdayISO();
   const start=S.startDate||today, end=S.endDate||today;
 
@@ -2489,7 +2526,13 @@ function renderResumo(){
 
   const tot  = periodMetrics(start, end);
   const ontem= periodMetrics(yest,  yest);
-  const hoje = periodMetrics(today, today);
+  const hojeBase = periodMetrics(today, today);
+  const hoje = {...hojeBase};
+  if(S.manualSpendHoje!==null){
+    hoje.spend=S.manualSpendHoje;
+    hoje.cpv=hoje.vendas>0?hoje.spend/hoje.vendas:0;
+    hoje.roas=hoje.spend>0?hoje.valor/hoje.spend:0;
+  }
 
   // Emoji de status
   function em(val, meta, higher){
@@ -2556,7 +2599,7 @@ ${block("Hoje", hoje, false)}`;
     </div>`;
   }
 
-  function section(label, m, isTotal){
+  function section(label, m, isTotal, isHoje=false){
     const cpvE  =em(m.cpv,      META_CPV,                false);
     const roasE =em(m.roas,     META_ROAS,               true);
     const pcE   =em(m.txPagChk, METAS_T.txPagChk.val,   true);
@@ -2567,10 +2610,27 @@ ${block("Hoje", hoje, false)}`;
     const cpmE  =em(m.cpm,      METAS_T.cpm.val,         false);
     const vLabel=isTotal?"Vendas (período)":"Vendas";
     const cpvLabel=isTotal?"Custo por venda":"Custo por venda";
+    const isManual=isHoje&&S.manualSpendHoje!==null;
+    const spendRow=isHoje?`
+      <div style="display:grid;grid-template-columns:220px 1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);align-items:center">
+        <span style="color:var(--muted);font-size:12px">Investimento</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input id="manual-spend-input"
+            value="${isManual?String(m.spend.toFixed(2)).replace('.',','):''}"
+            placeholder="${fBRL(m.spend)}"
+            onblur="setManualSpendHoje(this.value||'0')"
+            onkeydown="if(event.key==='Enter')this.blur()"
+            style="background:${isManual?'rgba(251,191,36,.08)':'var(--surf)'};border:1px solid ${isManual?'rgba(251,191,36,.5)':'var(--border)'};border-radius:6px;color:${isManual?'#fbbf24':'var(--text-strong)'};font-family:'JetBrains Mono',monospace;font-size:12px;padding:3px 8px;outline:none;width:120px;transition:all .15s"
+            onfocus="this.style.borderColor='rgba(96,165,250,.5)'"
+            onblur2="this.style.borderColor='${isManual?'rgba(251,191,36,.5)':'var(--border)'}'">
+          ${isManual?`<button onclick="clearManualSpend()" title="Restaurar valor do Sheets" style="font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:#fbbf24;cursor:pointer;font-family:'DM Sans',sans-serif">↩ Restaurar</button>`:''}
+        </div>
+        <span style="font-size:13px;min-width:28px;text-align:right">${isManual?'✏️':''}</span>
+      </div>`:row("Investimento", fBRL(m.spend), "", "");
     return `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;color:var(--text-strong);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">→ ${label}</div>
-      ${row("Investimento", fBRL(m.spend), "", "")}
+      ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), `meta $${META_CPV}`, cpvE)}
       ${row("ROAS", m.roas.toFixed(2), `meta ${META_ROAS}x`, roasE)}
@@ -2599,13 +2659,31 @@ ${block("Hoje", hoje, false)}`;
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
 
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;max-width:560px;margin-bottom:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap">Hoje — Investimento</span>
+      <input id="manual-spend-input"
+        value="${S.manualSpendHoje!==null?String(S.manualSpendHoje.toFixed(2)).replace('.',','):''}"
+        placeholder="${fBRL(hojeBase.spend)}"
+        onblur="setManualSpendHoje(this.value||'0')"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        style="background:${S.manualSpendHoje!==null?'rgba(251,191,36,.08)':'var(--surf)'};border:1px solid ${S.manualSpendHoje!==null?'rgba(251,191,36,.5)':'var(--border)'};border-radius:7px;color:${S.manualSpendHoje!==null?'#fbbf24':'var(--text-strong)'};font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 10px;outline:none;width:130px;transition:all .15s"
+        onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur2="">
+      ${S.manualSpendHoje!==null?`<span style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);padding:2px 8px;border-radius:5px">✏️ manual</span><button onclick="clearManualSpend()" style="font-size:10px;padding:3px 9px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">↩ Restaurar</button>`:'<span style="font-size:10px;color:var(--hint)">Edite para substituir o valor do Sheets · pressione Enter para aplicar</span>'}
+    </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:560px">
       <pre id="resumo-preview" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);white-space:pre-wrap;line-height:1.8;margin:0;user-select:all">${resumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>
-    <p class="foot">Ontem e Hoje são sempre datas fixas · Total reflete o filtro de datas do header</p>`;
+    <p class="foot">Ontem e Hoje são sempre datas fixas · Total reflete o filtro de datas do header</p>\`;
 
   // Armazena texto para o botão copiar
   el._resumoText=resumoText;
+  // Restaura foco no input manual de investimento
+  if(document.activeElement?.id==="manual-spend-input"||_resumoFocus==="manual-spend-input"){
+    requestAnimationFrame(()=>{
+      const inp=document.getElementById("manual-spend-input");
+      if(inp){inp.focus();const l=inp.value.length;inp.setSelectionRange(l,l);}
+    });
+  }
 }
 
 function copyResumo(){
