@@ -1883,14 +1883,14 @@ function renderAnuncios(){
         placeholder="Buscar campanha\u2026"
         style="background:var(--surf);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 10px;outline:none;width:200px;transition:border-color .15s"
         onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur="this.style.borderColor='var(--border)'">
-      \${S.campSearch?`<button onclick="setCampSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
+      ${S.campSearch?`<button onclick="setCampSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
       <span style="font-size:10px;color:var(--hint)">Clique para filtrar anúncios por campanha</span>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
-          \${thC("campName","Campanha","camp")}
-          \${thC("spend","Investimento","camp")}
+          ${thC("campName","Campanha","camp")}
+          ${thC("spend","Investimento","camp")}
           ${thC("qtd","Vendas","camp")}
           ${thC("cpv","Custo/Venda","camp")}
           ${thC("roas","ROAS","camp")}
@@ -1940,14 +1940,14 @@ function renderAnuncios(){
         placeholder="Buscar anúncio\u2026"
         style="background:var(--surf);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 10px;outline:none;width:200px;transition:border-color .15s"
         onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur="this.style.borderColor='var(--border)'">
-      \${S.adSearch?`<button onclick="setAdSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
+      ${S.adSearch?`<button onclick="setAdSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           <th style="padding:10px 12px;border-bottom:1px solid var(--border);width:36px"></th>
-          \${thC("advCode","Anúncio","ad")}
-          \${thC("spend","Investimento","ad")}
+          ${thC("advCode","Anúncio","ad")}
+          ${thC("spend","Investimento","ad")}
           ${thC("qtd","Vendas","ad")}
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
@@ -2645,6 +2645,18 @@ ${block("Hoje", hoje, false)}`;
     </div>`;
   }
 
+  // Melhoria 3: variáveis para card de investimento (sem backtick aninhado)
+  const _mSpend    = S.manualSpendHoje!==null;
+  const _spendVal  = _mSpend ? String(S.manualSpendHoje.toFixed(2)).replace('.',',') : '';
+  const _spendPH   = fBRL(hojeBase.spend);
+  const _spendBg   = _mSpend ? 'rgba(251,191,36,.08)' : 'var(--surf)';
+  const _spendBord = _mSpend ? 'rgba(251,191,36,.5)' : 'var(--border)';
+  const _spendCol  = _mSpend ? '#fbbf24' : 'var(--text-strong)';
+  const _spendExtra= _mSpend
+    ? '<span style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);padding:2px 8px;border-radius:5px">&#x270F;&#xFE0F; manual</span>'
+      + ' <button onclick="clearManualSpend()" style="font-size:10px;padding:3px 9px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer">&#x21A9; Restaurar</button>'
+    : '<span style="font-size:10px;color:var(--hint)">Edite para substituir o valor do Sheets &middot; Enter para aplicar</span>';
+
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:16px">
       <div>
@@ -2662,18 +2674,18 @@ ${block("Hoje", hoje, false)}`;
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;max-width:560px;margin-bottom:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap">Hoje — Investimento</span>
       <input id="manual-spend-input"
-        value="${S.manualSpendHoje!==null?String(S.manualSpendHoje.toFixed(2)).replace('.',','):''}"
-        placeholder="${fBRL(hojeBase.spend)}"
-        onblur="setManualSpendHoje(this.value||'0')"
+        value="${_spendVal}"
+        placeholder="${_spendPH}"
         onkeydown="if(event.key==='Enter')this.blur()"
-        style="background:${S.manualSpendHoje!==null?'rgba(251,191,36,.08)':'var(--surf)'};border:1px solid ${S.manualSpendHoje!==null?'rgba(251,191,36,.5)':'var(--border)'};border-radius:7px;color:${S.manualSpendHoje!==null?'#fbbf24':'var(--text-strong)'};font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 10px;outline:none;width:130px;transition:all .15s"
-        onfocus="this.style.borderColor='rgba(96,165,250,.5)'" onblur2="">
-      ${S.manualSpendHoje!==null?`<span style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);padding:2px 8px;border-radius:5px">✏️ manual</span><button onclick="clearManualSpend()" style="font-size:10px;padding:3px 9px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">↩ Restaurar</button>`:'<span style="font-size:10px;color:var(--hint)">Edite para substituir o valor do Sheets · pressione Enter para aplicar</span>'}
+        onblur="setManualSpendHoje(this.value||'0');this.style.borderColor='${_spendBord}'"
+        onfocus="this.style.borderColor='rgba(96,165,250,.5)'"
+        style="background:${_spendBg};border:1px solid ${_spendBord};border-radius:7px;color:${_spendCol};font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 10px;outline:none;width:130px;transition:all .15s">
+      ${_spendExtra}
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:560px">
       <pre id="resumo-preview" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);white-space:pre-wrap;line-height:1.8;margin:0;user-select:all">${resumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>
-    <p class="foot">Ontem e Hoje são sempre datas fixas · Total reflete o filtro de datas do header</p>\`;
+    <p class="foot">Ontem e Hoje são sempre datas fixas · Total reflete o filtro de datas do header</p>`;
 
   // Armazena texto para o botão copiar
   el._resumoText=resumoText;
