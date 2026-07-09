@@ -364,6 +364,7 @@ const S = {
   selectedCamps:new Set(),
   selectedAds:new Set(),
   campSearch:"", adSearch:"",
+  lastClickedCamp:null, lastClickedAd:null,
   manualSpendHoje:null,
   aTab:"tempo",
   anaStartDate:"", anaEndDate:"", anaActiveQuick:"all",
@@ -743,7 +744,7 @@ async function loadData(force=false){
   let mj, retoJ, ceroJ, mapaJ;
   try{
     [mj, retoJ, ceroJ, mapaJ] = await Promise.all([
-      fetchSheetPaged(SHEET_META,"L",5000),
+      fetchSheetPaged(SHEET_META,"T",5000),
       fetchSheetPaged(SHEET_RETO,"L",5000),
       fetchSheetPaged(SHEET_CERO,"Z",5000),
       fetchSheetPaged(SHEET_MAPA,"Z",5000),
@@ -776,55 +777,82 @@ async function loadData(force=false){
       const spendV=parseBRL(r["Spend (Cost, Amount Spent)"]);
       const clicksV=parseInt(r["Action Link Clicks"]||0)||0;
       const impressV=parseInt(r["Impressions"]||0)||0;
+      const icV      =parseInt(r["Action Omni Initiated Checkout"]||0)||0;
+      const video3sV =parseInt(r["Action Video View"]||0)||0;
+      const video15sV=parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
+      const adStatusR  =r["Ad status"]||"";
+      const campStatusR=r["Campaign status"]||"";
+      const adsetStatusR=r["Adset status"]||"";
       const advCode=extractAdvCode(adName);
       if(advCode){
-        if(!mByAd[advCode])mByAd[advCode]={advCode,adIds:new Set(),spend:0,clicks:0,impressions:0,igUrl:"",dates:new Set()};
+        if(!mByAd[advCode])mByAd[advCode]={advCode,adName:adName,adIds:new Set(),spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,igUrl:"",dates:new Set()};
         if(adId) mByAd[advCode].adIds.add(adId);
         mByAd[advCode].spend       += spendV;
         mByAd[advCode].clicks      += clicksV;
         mByAd[advCode].impressions += impressV;
+        mByAd[advCode].ic        += icV;
+        mByAd[advCode].video3s   += video3sV;
+        mByAd[advCode].video15s  += video15sV;
         mByAd[advCode].dates.add(d);
         if(igUrl && !mByAd[advCode].igUrl) mByAd[advCode].igUrl=igUrl;
+        if(!mByAd[advCode].adName&&adName) mByAd[advCode].adName=adName;
         if(!mByAdByDate[advCode]) mByAdByDate[advCode]={};
-        if(!mByAdByDate[advCode][d]) mByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,adIds:new Set(),igUrl:""};
+        if(!mByAdByDate[advCode][d]) mByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,adIds:new Set(),igUrl:""};
         mByAdByDate[advCode][d].spend       += spendV;
         mByAdByDate[advCode][d].clicks      += clicksV;
         mByAdByDate[advCode][d].impressions += impressV;
+        mByAdByDate[advCode][d].ic       += icV;
+        mByAdByDate[advCode][d].video3s  += video3sV;
+        mByAdByDate[advCode][d].video15s += video15sV;
         if(adId) mByAdByDate[advCode][d].adIds.add(adId);
         if(igUrl && !mByAdByDate[advCode][d].igUrl) mByAdByDate[advCode][d].igUrl=igUrl;
       }
       // Índice por adId (granularidade máxima — permite filtrar por campanha/país depois)
       if(adId && advCode){
-        if(!mByAdId[adId]) mByAdId[adId]={adId,advCode,campName,country,byDate:{}};
-        if(!mByAdId[adId].byDate[d]) mByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,igUrl:""};
+        if(!mByAdId[adId]) mByAdId[adId]={adId,advCode,campName,country,adStatus:"",campStatus:"",adsetStatus:"",lastStatusDate:"",byDate:{}};
+        if(!mByAdId[adId].byDate[d]) mByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,igUrl:""};
         mByAdId[adId].byDate[d].spend       += spendV;
         mByAdId[adId].byDate[d].clicks      += clicksV;
         mByAdId[adId].byDate[d].impressions += impressV;
+        mByAdId[adId].byDate[d].ic       += icV;
+        mByAdId[adId].byDate[d].video3s  += video3sV;
+        mByAdId[adId].byDate[d].video15s += video15sV;
         if(igUrl && !mByAdId[adId].byDate[d].igUrl) mByAdId[adId].byDate[d].igUrl=igUrl;
+        if(!mByAdId[adId].lastStatusDate||d>mByAdId[adId].lastStatusDate){
+          mByAdId[adId].adStatus=adStatusR; mByAdId[adId].campStatus=campStatusR;
+          mByAdId[adId].adsetStatus=adsetStatusR; mByAdId[adId].lastStatusDate=d;
+        }
       }
       // Agrupa por país (derivado do adset name)
       if(adId){
-        if(!mByCountry[country]) mByCountry[country]={country,adIds:new Set(),spend:0,clicks:0,impressions:0};
+        if(!mByCountry[country]) mByCountry[country]={country,adIds:new Set(),spend:0,clicks:0,impressions:0,ic:0};
         mByCountry[country].spend       += spendV;
         mByCountry[country].clicks      += clicksV;
         mByCountry[country].impressions += impressV;
+        mByCountry[country].ic          += icV;
         mByCountry[country].adIds.add(adId);
       }
       // Agrupa por campanha
       if(campName&&campName!=="—"){
-        if(!mByCamp[campName])mByCamp[campName]={campName,adIds:new Set(),spend:0,clicks:0,impressions:0};
+        if(!mByCamp[campName])mByCamp[campName]={campName,adIds:new Set(),spend:0,clicks:0,impressions:0,ic:0,campStatus:"",lastStatusDate:""};
         mByCamp[campName].spend       += spendV;
         mByCamp[campName].clicks      += clicksV;
         mByCamp[campName].impressions += impressV;
+        mByCamp[campName].ic          += icV;
+        if(!mByCamp[campName].lastStatusDate||d>mByCamp[campName].lastStatusDate){
+          mByCamp[campName].campStatus=campStatusR; mByCamp[campName].lastStatusDate=d;
+        }
         if(adId) mByCamp[campName].adIds.add(adId);
         if(!mByCampByDate[campName]) mByCampByDate[campName]={};
-        if(!mByCampByDate[campName][d]) mByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,adIds:new Set()};
+        if(!mByCampByDate[campName][d]) mByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,ic:0,adIds:new Set()};
         mByCampByDate[campName][d].spend       += spendV;
         mByCampByDate[campName][d].clicks      += clicksV;
         mByCampByDate[campName][d].impressions += impressV;
+        mByCampByDate[campName][d].ic          += icV;
         if(adId) mByCampByDate[campName][d].adIds.add(adId);
       }
     }
+
     S.meta=mD; S.metaByAd=mByAd; S.metaByAdByDate=mByAdByDate;
     S.metaByCamp=mByCamp; S.metaByCampByDate=mByCampByDate;
     S.metaByAdId=mByAdId; S.metaByCountry=mByCountry;
@@ -988,9 +1016,14 @@ function sortCampanhas(col){
   else {S.cSort.col=col;S.cSort.dir="desc";}
   renderAnuncios();
 }
-function toggleCamp(name){
-  if(S.selectedCamps.has(name)) S.selectedCamps.delete(name);
-  else S.selectedCamps.add(name);
+function toggleCamp(name, shiftKey){
+  if(shiftKey && S.lastClickedCamp && S._campOrder){
+    const a=S._campOrder.indexOf(S.lastClickedCamp), b=S._campOrder.indexOf(name);
+    if(a>=0&&b>=0){ const lo=Math.min(a,b),hi=Math.max(a,b); for(let i=lo;i<=hi;i++) S.selectedCamps.add(S._campOrder[i]); }
+  } else {
+    if(S.selectedCamps.has(name)) S.selectedCamps.delete(name); else S.selectedCamps.add(name);
+  }
+  S.lastClickedCamp=name;
   renderAnuncios();
 }
 function clearCamps(){
@@ -1006,9 +1039,14 @@ function sortAnuncios(col){
   else {S.aSort.col=col;S.aSort.dir="desc";}
   renderAnuncios();
 }
-function toggleAd(code){
-  if(S.selectedAds.has(code)) S.selectedAds.delete(code);
-  else S.selectedAds.add(code);
+function toggleAd(code, shiftKey){
+  if(shiftKey && S.lastClickedAd && S._adOrder){
+    const a=S._adOrder.indexOf(S.lastClickedAd), b=S._adOrder.indexOf(code);
+    if(a>=0&&b>=0){ const lo=Math.min(a,b),hi=Math.max(a,b); for(let i=lo;i<=hi;i++) S.selectedAds.add(S._adOrder[i]); }
+  } else {
+    if(S.selectedAds.has(code)) S.selectedAds.delete(code); else S.selectedAds.add(code);
+  }
+  S.lastClickedAd=code;
   renderAnuncios();
 }
 function clearSelectedAds(){
@@ -1543,12 +1581,13 @@ function renderAnuncios(){
   const countryBuyerSets={};
   for(const [adId,adData] of Object.entries(dd.metaByAdId)){
     const country=adData.country;
-    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0};
+    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0,ic:0};
     for(const [d,vals] of Object.entries(adData.byDate)){
       if(d>=start&&d<=end){
         countryStats[country].spend+=vals.spend;
         countryStats[country].clicks+=vals.clicks;
         countryStats[country].impressions+=vals.impressions;
+        countryStats[country].ic+=vals.ic||0;
       }
     }
     const vByD=dd.vendasByAdDate[adId]||{};
@@ -1578,17 +1617,17 @@ function renderAnuncios(){
       : adIdsPeriod;
     if(adIdsC.size===0) continue;
     // Spend/clicks/impressions — recalcula por adId quando país filtrado
-    let cSpend=0,cClicks=0,cImpr=0;
+    let cSpend=0,cClicks=0,cImpr=0,cIc=0;
     if(countryAllowedIds){
       for(const adId of adIdsC){
         const adData=dd.metaByAdId[adId];if(!adData)continue;
         for(const [d,vals] of Object.entries(adData.byDate)){
-          if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;}
+          if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;}
         }
       }
     } else {
       for(const [d,vals] of Object.entries(byDate)){
-        if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;}
+        if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;}
       }
     }
     if(cSpend===0) continue;
@@ -1613,6 +1652,8 @@ function renderAnuncios(){
       cpv:cQtd>0?cSpend/cQtd:0,
       roas:cSpend>0?campFunilRev/cSpend:0,
       ticket:cQtd>0?campFunilRev/cQtd:0,
+      ic:cIc, cpic:cIc>0?cSpend/cIc:0,
+      campStatus:dd.metaByCamp[campName]?.campStatus||'',
       adIds:adIdsC});
   }
   const {col:cCol,dir:cDir}=S.cSort;
@@ -1624,6 +1665,7 @@ function renderAnuncios(){
   const filteredCamps=S.campSearch.trim()
     ? sortedCamps.filter(c=>c.campName.toLowerCase().includes(S.campSearch.trim().toLowerCase()))
     : sortedCamps;
+  S._campOrder=filteredCamps.map(r=>r.campName);
 
   // ── 2. allowedAdIds: campRows já está filtrado por país, então a interseção é automática
   const hasFilter=S.selectedCamps.size>0;
@@ -1658,7 +1700,7 @@ function renderAnuncios(){
       if(useIds.size===0) continue;
 
       // Spend / clicks / impressions — calculado a partir dos adIds filtrados
-      let spend=0,clicks=0,impressions=0,igUrl="";
+      let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,igUrl="";
       if(allowedAdIds){
         // Usa metaByAdId para precisão por campanha
         for(const adId of useIds){
@@ -1666,6 +1708,7 @@ function renderAnuncios(){
           for(const [d,vals] of Object.entries(adData.byDate)){
             if(d>=start&&d<=end){
               spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
+              ic+=vals.ic||0;video3s+=vals.video3s||0;video15s+=vals.video15s||0;
               if(!igUrl&&vals.igUrl) igUrl=vals.igUrl;
             }
           }
@@ -1675,6 +1718,7 @@ function renderAnuncios(){
         for(const [d,vals] of Object.entries(byDate)){
           if(d>=start&&d<=end){
             spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
+            ic+=vals.ic||0;video3s+=vals.video3s||0;video15s+=vals.video15s||0;
             if(!igUrl&&vals.igUrl) igUrl=vals.igUrl;
           }
         }
@@ -1691,6 +1735,17 @@ function renderAnuncios(){
       }
       if(!igUrl) igUrl=meta.igUrl;
 
+      // Status: ativo se qualquer adId tiver ad+adset+camp todos ACTIVE
+      let isActive=false, hasStatusData=false;
+      for(const adId of useIds){
+        const adData=dd.metaByAdId[adId];
+        if(!adData) continue;
+        if(adData.adStatus) hasStatusData=true;
+        if(adData.adStatus==="ACTIVE"&&adData.adsetStatus==="ACTIVE"&&adData.campStatus==="ACTIVE"){
+          isActive=true; break;
+        }
+      }
+
       // Ticket ascensão (funil completo, sem filtro de data)
       let totalAscensoes=0;
       for(const adId of useIds){
@@ -1698,13 +1753,18 @@ function renderAnuncios(){
           totalAscensoes+=(buyerTotalSpent.get(eventKey)||0);
         }
       }
-      rows.push({advCode,spend,clicks,impressions,qtd,valor,igUrl,
+      rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,spend,clicks,impressions,qtd,valor,igUrl,
         cpc:clicks>0?spend/clicks:0,
         ctr:impressions>0?(clicks/impressions)*100:0,
         cpm:impressions>0?(spend/impressions)*1000:0,
         cpv:qtd>0?spend/qtd:0,
         ticket:qtd>0?valor/qtd:0,
-        ticketAsc:qtd>0?totalAscensoes/qtd:0});
+        ticketAsc:qtd>0?totalAscensoes/qtd:0,
+        roas:spend>0&&totalAscensoes>0?totalAscensoes/spend:0,
+        ic, cpic:ic>0?spend/ic:0,
+        hookRate:impressions>0?(video3s/impressions)*100:0,
+        holdRate:video3s>0?(video15s/video3s)*100:0,
+        isActive, hasStatusData});
     }
     return rows.filter(r=>r.spend>0);
   }
@@ -1765,6 +1825,7 @@ function renderAnuncios(){
   const filteredAds=S.adSearch.trim()
     ? sorted.filter(r=>r.advCode.toLowerCase().includes(S.adSearch.trim().toLowerCase()))
     : sorted;
+  S._adOrder=filteredAds.map(r=>r.advCode);
 
   function sc(v,meta,hi){return statusColor(v,meta,hi);}
 
@@ -1816,10 +1877,10 @@ function renderAnuncios(){
         "Nicarágua":"🇳🇮","Cuba":"🇨🇺","República Dominicana":"🇩🇴",
       };
       // Linha "Todos" agrega todos os países
-      const totRow={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0};
+      const totRow={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0,ic:0};
       for(const s of Object.values(countryStats)){
         totRow.spend+=s.spend;totRow.clicks+=s.clicks;
-        totRow.impressions+=s.impressions;totRow.qtd+=s.qtd;totRow.funilRev+=s.funilRev;
+        totRow.impressions+=s.impressions;totRow.qtd+=s.qtd;totRow.funilRev+=s.funilRev;totRow.ic+=(s.ic||0);
       }
       function cpRow(c,s,isTodos){
         const sel=!isTodos&&S.selectedCountry===c;
@@ -1843,6 +1904,7 @@ function renderAnuncios(){
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.qtd>0?sc(cpv,META_CPV,false):"var(--hint)"}">${s.qtd>0?fBRL(cpv):"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.qtd>0?sc(roas,META_ROAS,true):"var(--hint)"}">${s.qtd>0?roas.toFixed(2)+"x":"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">${s.qtd>0?fBRL(ticket):"—"}</td>
+          <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">${(s.ic||0)>0?fBRL(s.spend/(s.ic||1)):"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${sc(ctr,METAS_T.ctr.val,true)}">${fPct(ctr)}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${sc(cpm,METAS_T.cpm.val,false)}">${fBRL(cpm)}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${sc(cpc,METAS_T.cpc.val,false)}">${fBRL(cpc)}</td>
@@ -1864,6 +1926,7 @@ function renderAnuncios(){
             <th style="${thStyle};text-align:right">Custo/Venda</th>
             <th style="${thStyle};text-align:right">ROAS</th>
             <th style="${thStyle};text-align:right">Ticket Médio</th>
+            <th style="${thStyle};text-align:right">Custo/IC</th>
             <th style="${thStyle};text-align:right">CTR</th>
             <th style="${thStyle};text-align:right">CPM</th>
             <th style="${thStyle};text-align:right">CPC</th>
@@ -1890,11 +1953,13 @@ function renderAnuncios(){
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           ${thC("campName","Campanha","camp")}
+          ${thC("campStatus","Status","camp")}
           ${thC("spend","Investimento","camp")}
           ${thC("qtd","Vendas","camp")}
           ${thC("cpv","Custo/Venda","camp")}
           ${thC("roas","ROAS","camp")}
           ${thC("ticket","Ticket Médio","camp")}
+          ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
           ${thC("cpm","CPM","camp")}
           ${thC("cpc","CPC","camp")}
@@ -1906,7 +1971,7 @@ function renderAnuncios(){
             const bord=sel?"border-left:3px solid #3b82f6":"border-left:3px solid transparent";
             const safeN=r.campName.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
             return `<tr data-camp="${safeN}" style="border-bottom:1px solid var(--border);background:${bg};${bord};cursor:pointer;transition:background .1s"
-              onclick="toggleCamp(this.dataset.camp)"
+              onclick="toggleCamp(this.dataset.camp,event.shiftKey)"
               onmouseover="this.style.background='${sel?"rgba(59,130,246,.18)":"rgba(255,255,255,.025)"}'"
               onmouseout="this.style.background='${bg}'">
               <td style="padding:10px 14px;text-align:left;max-width:300px">
@@ -1917,11 +1982,13 @@ function renderAnuncios(){
                   <span style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.campName}">${r.campName}</span>
                 </div>
               </td>
+              <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus}"></div></td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)}">${fBRL(r.cpc)}</td>
@@ -1931,6 +1998,49 @@ function renderAnuncios(){
       </table>
     </div>
 
+    ${(()=>{
+      // Painel de resumo para seleção múltipla (Item 2)
+      const selCampNames=[...S.selectedCamps];
+      const selAdCodes=[...S.selectedAds];
+      if(selCampNames.length<1&&selAdCodes.length<1) return "";
+      // Aggregate selected camps
+      let pSpend=0,pQtd=0,pIc=0,pClicks=0,pImpr=0,pValor=0;
+      if(selCampNames.length>0){
+        for(const c of campRows){
+          if(!S.selectedCamps.has(c.campName)) continue;
+          pSpend+=c.spend; pQtd+=c.qtd; pIc+=c.ic||0;
+          pClicks+=c.clicks; pImpr+=c.impressions; pValor+=c.valor||0;
+        }
+      } else if(selAdCodes.length>0){
+        for(const r of adRows){
+          if(!S.selectedAds.has(r.advCode)) continue;
+          pSpend+=r.spend; pQtd+=r.qtd; pIc+=r.ic||0;
+          pClicks+=r.clicks; pImpr+=r.impressions; pValor+=r.valor||0;
+        }
+      }
+      const pCpv=pQtd>0?pSpend/pQtd:0;
+      const pRoas=pSpend>0?pValor/pSpend:0;
+      const pTicket=pQtd>0?pValor/pQtd:0;
+      const pCtr=pImpr>0?(pClicks/pImpr)*100:0;
+      const pCpm=pImpr>0?(pSpend/pImpr)*1000:0;
+      const pCpc=pClicks>0?pSpend/pClicks:0;
+      const pCpic=pIc>0?pSpend/pIc:0;
+      const label=selCampNames.length>0?`${selCampNames.length} campanha${selCampNames.length>1?"s":""} selecionada${selCampNames.length>1?"s":""}`:`${selAdCodes.length} anúncio${selAdCodes.length>1?"s":""} selecionado${selAdCodes.length>1?"s":""}`;
+      return `<div style="background:rgba(59,130,246,.06);border:1px solid rgba(96,165,250,.25);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#60a5fa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">📊 Resumo da seleção — ${label}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Investimento</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${fBRL(pSpend)}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Vendas</div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">${pQtd}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?statusBorder(pCpv,META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?statusBorder(pRoas,META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Ticket Médio</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pTicket):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/IC</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pIc>0?fBRL(pCpic):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CTR</div><div style="font-size:13px;font-weight:700;color:${sc(pCtr,METAS_T.ctr.val,true)}">${fPct(pCtr)}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CPM</div><div style="font-size:13px;font-weight:700;color:${sc(pCpm,METAS_T.cpm.val,false)};font-family:'JetBrains Mono',monospace">${fBRL(pCpm)}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CPC</div><div style="font-size:13px;font-weight:700;color:${sc(pCpc,METAS_T.cpc.val,false)};font-family:'JetBrains Mono',monospace">${fBRL(pCpc)}</div></div>
+        </div>
+      </div>`;
+    })()}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span class="section-lbl" style="margin:0">Anúncios</span>
       ${hasFilter?`<span style="font-size:10px;color:#93c5fd;background:rgba(59,130,246,.15);border:1px solid rgba(96,165,250,.3);padding:2px 8px;border-radius:5px">${[...S.selectedCamps].join(", ").substring(0,80)}${([...S.selectedCamps].join(", ").length>80?"…":"")}</span>`:""}
@@ -1947,18 +2057,23 @@ function renderAnuncios(){
         <thead><tr>
           <th style="padding:10px 12px;border-bottom:1px solid var(--border);width:36px"></th>
           ${thC("advCode","Anúncio","ad")}
+          ${thC("adStatus","Status","ad")}
           ${thC("spend","Investimento","ad")}
           ${thC("qtd","Vendas","ad")}
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
           ${thC("ticketAsc","Ticket Médio Ascensões","ad")}
+          ${thC("roas","ROAS","ad")}
+          ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
           ${thC("cpc","CPC","ad")}
+          ${thC("hookRate","Hook Rate","ad")}
+          ${thC("holdRate","Hold Rate","ad")}
           <th style="padding:10px 12px;border-bottom:1px solid var(--border)"></th>
         </tr></thead>
         <tbody>
-          ${filteredAds.length===0?`<tr><td colspan="11" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
+          ${filteredAds.length===0?`<tr><td colspan="17" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
           ${filteredAds.map(r=>{
             const selAd=S.selectedAds.has(r.advCode);
             const bgAd=selAd?"rgba(16,185,129,.10)":"transparent";
@@ -1966,7 +2081,7 @@ function renderAnuncios(){
             const safeAd=r.advCode.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
             return `
           <tr data-ad="${safeAd}" style="border-bottom:1px solid var(--border);background:${bgAd};${bordAd};cursor:pointer;transition:background .1s"
-            onclick="toggleAd(this.dataset.ad)"
+            onclick="toggleAd(this.dataset.ad,event.shiftKey)"
             onmouseover="if(!S.selectedAds.has(this.dataset.ad))this.style.background='rgba(255,255,255,.025)'"
             onmouseout="this.style.background='${bgAd}'">
             <td style="padding:10px 12px;text-align:center">
@@ -1975,16 +2090,21 @@ function renderAnuncios(){
               </div>
             </td>
             <td style="padding:10px 14px;text-align:left">
-              <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace">${r.advCode}</span>
+              <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace" title="${r.adName}">${r.adName||r.advCode}</span>
             </td>
+            <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)};font-weight:600">${fBRL(r.cpc)}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.hookRate>0?r.hookRate.toFixed(1)+"%":"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.holdRate>0?r.holdRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:8px 12px;text-align:center" onclick="event.stopPropagation()">
               ${r.igUrl?`<a href="${r.igUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;background:var(--surf);border:1px solid var(--border-h);color:var(--muted);padding:4px 9px;border-radius:7px;font-size:10px;text-decoration:none;white-space:nowrap;font-weight:500">Ver ↗</a>`:"—"}
             </td>
