@@ -1087,20 +1087,56 @@ async function loadData(force=false){
       }
     }
     S.distMeta=dD; S.distMetaByAd=dByAd; S.distMetaByAdByDate=dByAdByDate;
-    // ── Seguidores Nova (same structure, may use ISO date format) ──────────
+    // ── Seguidores Nova — contém todos os dados a partir de 24/07 ────────────
+    // Gasto em MXN → dividir por 18. Sem coluna Account Name.
     for(const r of parseSheet(segNovaJ)){
       const dRaw=r["Dia"]||""; if(!dRaw||dRaw==="Dia")continue;
-      // Support both DD/MM/YYYY and YYYY-MM-DD formats
       let d;
       if(dRaw.includes("/")){
         const parts=dRaw.split("/");
-        d=parts.length===3?`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`:""; 
+        d=parts.length===3?`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`:"";
       } else { d=dRaw; }
       if(!d)continue;
-      const segV =parseInt(r["Seguidores no Instagram"]||0)||0;
-      const visV =parseInt(r["Visitas ao perfil do Instagram"]||0)||0;
-      const adName  =(r["Nome do anúncio"]||"").trim();
-      const campName=(r["Nome da campanha"]||"").trim();
+      // Métricas de spend/tráfego (MXN → USD)
+      const spendV   =(parseBRL(r["Valor usado (MXN)"]||"0"))||0;
+      const spendUSD =spendV/18;
+      const clicksV  =parseInt(r["Cliques no link"]||0)||0;
+      const impressV =parseInt(r["Impressões"]||0)||0;
+      const video3sV =parseInt(r["Reproduções do vídeo por no mínimo 3 segundos"]||0)||0;
+      // Sem coluna 15s — usar 25% como proxy para hold rate
+      const video15sV=parseInt(r["Reproduções de 25% do vídeo"]||0)||0;
+      const segV     =parseInt(r["Seguidores no Instagram"]||0)||0;
+      const visV     =parseInt(r["Visitas ao perfil do Instagram"]||0)||0;
+      const adName   =(r["Nome do anúncio"]||"").trim();
+      const campName =(r["Nome da campanha"]||"").trim();
+      const igUrl    ="";
+      // Acumula em distMeta (daily)
+      if(!dD[d])dD[d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
+      dD[d].spend+=spendUSD; dD[d].clicks+=clicksV; dD[d].impressions+=impressV;
+      dD[d].video3s+=video3sV; dD[d].video15s+=video15sV; dD[d].profileVisits+=visV;
+      // Acumula em distMetaByAd
+      if(adName){
+        if(!dByAd[adName])dByAd[adName]={adName,campName,igUrl,spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0,seguidores:0};
+        dByAd[adName].spend+=spendUSD; dByAd[adName].clicks+=clicksV; dByAd[adName].impressions+=impressV;
+        dByAd[adName].video3s+=video3sV; dByAd[adName].video15s+=video15sV; dByAd[adName].profileVisits+=visV;
+        if(!dByAdByDate[adName])dByAdByDate[adName]={};
+        if(!dByAdByDate[adName][d])dByAdByDate[adName][d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
+        dByAdByDate[adName][d].spend+=spendUSD; dByAdByDate[adName][d].clicks+=clicksV;
+        dByAdByDate[adName][d].impressions+=impressV; dByAdByDate[adName][d].video3s+=video3sV;
+        dByAdByDate[adName][d].video15s+=video15sV; dByAdByDate[adName][d].profileVisits+=visV;
+      }
+      // Acumula em distMetaByCamp
+      if(campName){
+        if(!dByCamp[campName])dByCamp[campName]={campName,spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0,seguidores:0};
+        dByCamp[campName].spend+=spendUSD; dByCamp[campName].clicks+=clicksV; dByCamp[campName].impressions+=impressV;
+        dByCamp[campName].video3s+=video3sV; dByCamp[campName].video15s+=video15sV; dByCamp[campName].profileVisits+=visV;
+        if(!dByCampByDate[campName])dByCampByDate[campName]={};
+        if(!dByCampByDate[campName][d])dByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
+        dByCampByDate[campName][d].spend+=spendUSD; dByCampByDate[campName][d].clicks+=clicksV;
+        dByCampByDate[campName][d].impressions+=impressV; dByCampByDate[campName][d].video3s+=video3sV;
+        dByCampByDate[campName][d].video15s+=video15sV; dByCampByDate[campName][d].profileVisits+=visV;
+      }
+      // Acumula em distSeg (seguidores)
       if(!sD[d])sD[d]={seguidores:0,profileVisits:0};
       sD[d].seguidores+=segV; sD[d].profileVisits+=visV;
       if(adName){
