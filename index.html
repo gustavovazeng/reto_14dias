@@ -1098,7 +1098,7 @@ async function loadData(force=false){
       } else { d=dRaw; }
       if(!d)continue;
       // Métricas de spend/tráfego (MXN → USD)
-      const spendV   =(parseBRL(r["Valor usado (MXN)"]||"0"))||0;
+      const spendV   =(parseFloat((r["Valor usado (MXN)"]||"0").replace(",","."))||0);
       const spendUSD =spendV/18;
       const clicksV  =parseInt(r["Cliques no link"]||0)||0;
       const impressV =parseInt(r["Impressões"]||0)||0;
