@@ -831,25 +831,22 @@ async function fetchSheetPaged(tab, lastCol="L", pageSize=5000){
 async function loadData(force=false){
   S.loading=true; S.error=null; render();
 
-  // Tenta buscar do Google Sheets; fallback para dados embutidos
+  // Tenta buscar do Google Sheets; cada aba falha de forma independente
+  const _empty={values:[]};
+  const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
   let mj, retoJ, ceroJ, mapaJ, distJ, segJ, segNovaJ, aquecMornoJ, aquecSegJ;
-  try{
-    [mj, retoJ, ceroJ, mapaJ, distJ, segJ, segNovaJ, aquecMornoJ, aquecSegJ] = await Promise.all([
-      fetchSheetPaged(SHEET_META,"V",5000),
-      fetchSheetPaged(SHEET_RETO,"L",5000),
-      fetchSheetPaged(SHEET_CERO,"Z",5000),
-      fetchSheetPaged(SHEET_MAPA,"Z",5000),
-      fetchSheetPaged(SHEET_DIST,"T",5000),
-      fetchSheetPaged(SHEET_SEG,"E",5000),
-      fetchSheetPaged(SHEET_SEG_NOVA,"T",5000),
-      fetchSheetPaged(SHEET_AQUEC_MORNO,"T",5000),
-      fetchSheetPaged(SHEET_AQUEC_SEG,"E",5000),
-    ]);
-    console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1);
-  }catch(fetchErr){
-    console.warn("[sheets] Falha ao buscar do Sheets, usando dados embutidos:",fetchErr.message);
-    mj=_DATA_META; retoJ=_DATA_RETO; ceroJ=_DATA_CERO; mapaJ=_DATA_MAPA; distJ=_DATA_DIST; segJ=_DATA_SEG; segNovaJ=_DATA_SEG_NOVA; aquecMornoJ=_DATA_AQUEC_MORNO; aquecSegJ=_DATA_AQUEC_SEG;
-  }
+  [mj, retoJ, ceroJ, mapaJ, distJ, segJ, segNovaJ, aquecMornoJ, aquecSegJ] = await Promise.all([
+    _fetchSafe(SHEET_META,"V",5000),
+    _fetchSafe(SHEET_RETO,"L",5000),
+    _fetchSafe(SHEET_CERO,"Z",5000),
+    _fetchSafe(SHEET_MAPA,"Z",5000),
+    _fetchSafe(SHEET_DIST,"T",5000),
+    _fetchSafe(SHEET_SEG,"E",5000),
+    _fetchSafe(SHEET_SEG_NOVA,"T",5000),
+    _fetchSafe(SHEET_AQUEC_MORNO,"T",5000),
+    _fetchSafe(SHEET_AQUEC_SEG,"E",5000),
+  ]);
+  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1);
   S.loading=false; S.error=null;
 
   try{
