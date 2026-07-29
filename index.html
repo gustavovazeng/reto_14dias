@@ -428,6 +428,7 @@ const S = {
   anaStatusFiltro:"all", anaStatusGroup:"produto",
   overlays:{cpc:{inv:false,cpv:false},ctr:{inv:false,cpv:false},cpm:{inv:false,cpv:false},
     txPagChk:{inv:false,cpv:false},txChkVnd:{inv:false,cpv:false},connect:{inv:false,cpv:false}},
+  distOverlays:{ctr:{inv:false},cpm:{inv:false},cpc:{inv:false}},
   currentPage:"principal",
 };
 
@@ -496,7 +497,7 @@ function renderHeader(){
   const tabs=isAquec
     ? [{id:"principal",icon:"⊞",label:"Principal"},{id:"anuncios",icon:"◈",label:"Campanhas / Anúncios"},{id:"resumo",icon:"📋",label:"Resumo diário"}]
     : isDist
-    ? [{id:"principal",icon:"⊞",label:"Principal"},{id:"anuncios",icon:"◈",label:"Campanhas / Anúncios"},{id:"resumo",icon:"📋",label:"Resumo"}]
+    ? [{id:"principal",icon:"⊞",label:"Principal"},{id:"trafego",icon:"⟳",label:"Métricas tráfego"},{id:"anuncios",icon:"◈",label:"Campanhas / Anúncios"},{id:"resumo",icon:"📋",label:"Resumo"}]
     : [{id:"principal",icon:"⊞",label:"Principal"},{id:"trafego",icon:"⟳",label:"Métricas tráfego"},{id:"funil",icon:"▽",label:"Métricas do funil"},{id:"anuncios",icon:"◈",label:"Anúncios"},{id:"resumo",icon:"📋",label:"Resumo diário"}];
   const tabsEl=document.getElementById("hdr-tabs");
   if(tabsEl) tabsEl.innerHTML=tabs.map(t=>`<button class="htab${p===t.id?" htab-active":""}" onclick="navTo('${t.id}')"><span class="htab-icon">${t.icon}</span>${t.label}</button>`).join("");
@@ -3357,6 +3358,7 @@ function render(){
   }
   if(S.currentFunil==="dist"){
     if(S.currentPage==="principal") renderDistPrincipal();
+    else if(S.currentPage==="trafego") renderDistTrafego();
     else if(S.currentPage==="anuncios") renderDistAnuncios();
     else if(S.currentPage==="resumo") renderDistResumo();
   } else if(S.currentFunil==="aquec"){
@@ -3503,6 +3505,102 @@ function renderDistPrincipal(){
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpVisita",color:"#f59e0b",name:"Custo/Visita",fmt:fBRL},
     ]);
+  });
+}
+
+// ── Distribuição: Métricas Tráfego ───────────────────────────────────────
+function renderDistTrafego(){
+  const el=document.getElementById("page-trafego");if(!el)return;
+  const today=todayISO();
+  const start=S.startDate, end=S.endDate;
+  const daily=getDistDaily(start,end);
+
+  // Hoje + últimos 3 dias como totais
+  const todayD=getDistTotals(today,today);
+  const p3Start=subDays(today,3), p3End=subDays(today,1);
+  const p3Tot=getDistTotals(p3Start,p3End);
+
+  const METRICS_ROW=[
+    {key:"spend", lbl:"Investimento", fmt:fBRL, meta:null, higher:null},
+    {key:"ctr",   lbl:"CTR",          fmt:fPct, meta:METAS_DIST.ctr.val, higher:true},
+    {key:"cpm",   lbl:"CPM",          fmt:fBRL, meta:METAS_DIST.cpm.val, higher:false},
+    {key:"cpc",   lbl:"CPC",          fmt:fBRL, meta:METAS_DIST.cpc.val, higher:false},
+  ];
+
+  function metricsRow(obj){
+    return METRICS_ROW.map(m=>{
+      const v=obj[m.key]||0;
+      const color=m.meta!=null?statusColor(v,m.meta,m.higher):"var(--text-strong)";
+      const bord=m.meta!=null?statusBorder(v,m.meta,m.higher):"var(--border)";
+      return `<div class="kc" style="padding:12px 14px;border-color:${bord}">
+        <div class="kc-lbl">${m.lbl}</div>
+        <div class="kc-val" style="color:${color};font-size:17px">${m.fmt(v)}</div>
+        ${m.meta!=null?`<div class="kc-sub">Meta: ${m.fmt(m.meta)}</div>`:""}
+      </div>`;
+    }).join("");
+  }
+
+  const CHART_CONFIGS=[
+    {key:"ctr", lbl:"CTR", fmt:fPct, meta:METAS_DIST.ctr.val, metaLbl:"Meta "+METAS_DIST.ctr.label},
+    {key:"cpm", lbl:"CPM", fmt:fBRL, meta:METAS_DIST.cpm.val, metaLbl:"Meta "+METAS_DIST.cpm.label},
+    {key:"cpc", lbl:"CPC", fmt:fBRL, meta:METAS_DIST.cpc.val, metaLbl:"Meta "+METAS_DIST.cpc.label},
+  ];
+
+  function dChart(c){
+    const ov=S.distOverlays[c.key];
+    const invOn=ov.inv;
+    return `<div class="cc" style="position:relative">
+      <div class="ch">
+        <span class="ct">${c.lbl}</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:10px;color:var(--hint)">${c.metaLbl}</span>
+          <div class="overlay-btns">
+            <button class="btn-overlay${invOn?" on":""}"
+              style="${invOn?`border-color:${CHART_INV};color:${CHART_INV};background:${CHART_INV}18`:""}"
+              onclick="S.distOverlays['${c.key}'].inv=!S.distOverlays['${c.key}'].inv;renderDistTrafego()">+ Invest.</button>
+          </div>
+        </div>
+      </div>
+      <div style="position:relative">
+        <canvas id="dtc-${c.key}"></canvas>
+        <div class="tip" id="dtt-${c.key}"></div>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML=`
+    <div class="hdr" style="margin-bottom:6px">
+      <div>
+        <div class="hdr-title">Métricas de Tráfego — Distribuição</div>
+        <div class="hdr-sub">atualizado em: ${fDateBR(today)} · ${daily.length} dias</div>
+      </div>
+      <div>${statusLegend()}</div>
+    </div>
+
+    <div class="section-lbl">Hoje — ${fDateBR(today)}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      ${metricsRow(todayD)}
+    </div>
+
+    <div class="section-lbl">Últimos 3 dias — ${fDateBR(p3Start)} a ${fDateBR(p3End)}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+      ${metricsRow(p3Tot)}
+    </div>
+
+    <div class="charts-2x3">
+      ${CHART_CONFIGS.map(c=>dChart(c)).join("")}
+    </div>
+    <p class="foot">Base Distribuição (Meta Ads) · Google Sheets API v4</p>`;
+
+  requestAnimationFrame(()=>{
+    const sW=document.getElementById("dtc-ctr")?.parentElement?.offsetWidth||500;
+    CHART_CONFIGS.forEach(c=>{
+      const ov=S.distOverlays[c.key];
+      drawChartWithOverlay(`dtc-${c.key}`,daily,c.key,c.fmt,c.meta,c.metaLbl,ov.inv,false,sW,170);
+      const tipLines=[{key:c.key,color:CHART_COLOR,name:c.lbl,fmt:c.fmt}];
+      if(ov.inv) tipLines.push({key:"spend",color:CHART_INV,name:"Investimento",fmt:fBRL});
+      setupTip(`dtc-${c.key}`,`dtt-${c.key}`,daily,tipLines,52,ov.inv?52:12);
+    });
   });
 }
 
