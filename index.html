@@ -2935,7 +2935,10 @@ function buildFunilData(rows, start, end, funil){
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        const mp=paid.filter(p=>p.id===primaryId).sort((a,b)=>a.date.localeCompare(b.date))[0];
+        // compra do Reto deve estar dentro do período filtrado
+        const mp=paid.filter(p=>p.id===primaryId
+          &&(!start||p.date>=start)&&(!end||p.date<=end))
+          .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
         const ascendeu=paid.some(p=>p.id==="cero"&&p.date>=mp.date);
         if(ascendeu) cnt++;
@@ -2947,7 +2950,10 @@ function buildFunilData(rows, start, end, funil){
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        const cp=paid.filter(p=>p.id==="cero").sort((a,b)=>a.date.localeCompare(b.date))[0];
+        // compra do Cero deve estar dentro do período filtrado
+        const cp=paid.filter(p=>p.id==="cero"
+          &&(!start||p.date>=start)&&(!end||p.date<=end))
+          .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
         const comprou=paid.some(p=>p.id==="mapa"&&p.date>=cp.date);
         if(comprou) cnt++;
