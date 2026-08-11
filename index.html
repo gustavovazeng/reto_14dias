@@ -1651,27 +1651,31 @@ function statusLegend(){
 // Gráfico de barras — vendas por dia
 function drawBarVendas(id, data, cssW, cssH, showGap){
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
-  const P={t:22,r:16,b:26,l:32};
+  const P={t:24,r:showGap?50:16,b:26,l:36};
   const cW=cssW-P.l-P.r, cH=cssH-P.t-P.b;
   const n=data.length; if(n===0)return;
   const vals=data.map(d=>d.vendas||0);
-  const gVals=showGap?data.map(d=>d.gerenciador||0):[];
-  const maxV=Math.max(...vals,...gVals,1);
+  const maxV=Math.max(...vals,1);
 
-  // Grid horizontal
+  // Compute GAP% per day
+  const gapPcts=showGap?data.map(d=>{
+    const h=d.vendas||0,g=d.gerenciador||0;
+    return h>0?((g-h)/h)*100:0;
+  }):[];
+
+  // Horizontal grid (left scale = vendas count)
   const ticks=4;
   for(let i=0;i<=ticks;i++){
     const y=P.t+(i/ticks)*cH;
     ctx.strokeStyle=GRID_C;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(P.l,y);ctx.lineTo(P.l+cW,y);ctx.stroke();
     if(i<ticks){
-      const lv=Math.round(maxV-(i/ticks)*maxV);
       ctx.fillStyle=TICK_C;ctx.font="9px 'JetBrains Mono',monospace";ctx.textAlign="right";
-      ctx.fillText(lv,P.l-4,y+3);
+      ctx.fillText(Math.round(maxV*(1-i/ticks)),P.l-4,y+3);
     }
   }
 
-  // Barras Hotmart
+  // Green bars (Hotmart vendas)
   const slot=cW/n;
   const barW=Math.max(3,Math.min(28,slot*0.6));
   const GREEN="#34d399";
@@ -1680,58 +1684,68 @@ function drawBarVendas(id, data, cssW, cssH, showGap){
     const bh=Math.max(v>0?2:0,(v/maxV)*cH);
     const cx=P.l+slot*i+slot/2;
     const x=cx-barW/2;
-    const y=P.t+cH-bh;
-    const g=ctx.createLinearGradient(0,y,0,P.t+cH);
+    const yb=P.t+cH-bh;
+    const g=ctx.createLinearGradient(0,yb,0,P.t+cH);
     g.addColorStop(0,GREEN+"dd");g.addColorStop(1,GREEN+"55");
     ctx.fillStyle=g;
     const r=Math.min(3,barW/2,bh/2);
     ctx.beginPath();
-    ctx.moveTo(x+r,y);ctx.lineTo(x+barW-r,y);
-    ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
-    ctx.lineTo(x+barW,y+bh);ctx.lineTo(x,y+bh);ctx.lineTo(x,y+r);
-    ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+    ctx.moveTo(x+r,yb);ctx.lineTo(x+barW-r,yb);
+    ctx.quadraticCurveTo(x+barW,yb,x+barW,yb+r);
+    ctx.lineTo(x+barW,yb+bh);ctx.lineTo(x,yb+bh);ctx.lineTo(x,yb+r);
+    ctx.quadraticCurveTo(x,yb,x+r,yb);ctx.closePath();
     ctx.fill();
     if(v>0){
       ctx.fillStyle="#e8edf6";
       ctx.font=`bold ${Math.max(8,Math.min(11,barW-1))}px 'DM Sans',sans-serif`;
       ctx.textAlign="center";
-      ctx.fillText(v,cx,y-4);
+      ctx.fillText(v,cx,yb-4);
     }
   }
 
-  // GAP overlay — linha vermelha tracejada com pontos (gerenciador)
-  if(showGap&&gVals.length>0){
+  // GAP% overlay — separate y-scale, no numbers on bars
+  if(showGap&&gapPcts.length>0){
     const RED="#f87171";
+    const maxGap=Math.max(Math.max(...gapPcts.map(Math.abs)),5);
+    // Y mapping: 0% → mid chart; ±maxGap → top/bottom within 80% of chart height
+    const gapY=pct=>P.t+cH*0.1+(1-((pct/maxGap)*0.8+1)/2)*cH*0.8;
+
+    // Faint 0% reference line
+    const y0=gapY(0);
+    ctx.strokeStyle="rgba(248,113,113,0.25)";ctx.lineWidth=1;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(P.l,y0);ctx.lineTo(P.l+cW,y0);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // GAP% line
     ctx.strokeStyle=RED;ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
     ctx.beginPath();
-    let started=false;
     for(let i=0;i<n;i++){
-      const gv=gVals[i];
       const cx=P.l+slot*i+slot/2;
-      const gy=P.t+cH-(gv/maxV)*cH;
-      if(!started){ctx.moveTo(cx,gy);started=true;}else{ctx.lineTo(cx,gy);}
+      const gy=gapY(gapPcts[i]);
+      if(i===0) ctx.moveTo(cx,gy); else ctx.lineTo(cx,gy);
     }
     ctx.stroke();ctx.setLineDash([]);
-    // Pontos e valores gerenciador
+
+    // Dots + right-margin % labels
+    const lblStep=n<=10?1:n<=20?2:n<=40?3:4;
     for(let i=0;i<n;i++){
-      const gv=gVals[i];if(!gv)continue;
-      const hotm=vals[i];
       const cx=P.l+slot*i+slot/2;
-      const gy=P.t+cH-(gv/maxV)*cH;
+      const gy=gapY(gapPcts[i]);
       ctx.fillStyle=RED;
-      ctx.beginPath();ctx.arc(cx,gy,3,0,Math.PI*2);ctx.fill();
-      // Etiqueta: gerenciador (GAP%)
-      const gap=hotm>0?Math.round((gv-hotm)/hotm*100):null;
-      ctx.fillStyle=RED;
-      ctx.font="bold 9px 'DM Sans',sans-serif";ctx.textAlign="center";
-      const lbl=gap!==null?(gv+" ("+(gap>=0?"+":"")+gap+"%)"):String(gv);
-      ctx.fillText(lbl,cx,gy-5);
+      ctx.beginPath();ctx.arc(cx,gy,2.5,0,Math.PI*2);ctx.fill();
+      if(i===n-1||(i%lblStep===0)){
+        const pct=gapPcts[i];
+        const lbl=(pct>=0.5?"+":"")+Math.round(pct)+"%";
+        ctx.fillStyle=RED;ctx.font="bold 8px 'DM Sans',sans-serif";
+        ctx.textAlign="left";
+        ctx.fillText(lbl,P.l+cW+4,gy+3);
+      }
     }
   }
 
-  // Labels X
+  // X labels
   const step=n>60?7:n>30?3:n>14?2:1;
-  ctx.fillStyle=TICK_C;ctx.font="9px 'JetBrains Mono',monospace";ctx.textAlign="center";ctx.setLineDash([]);
+  ctx.fillStyle=TICK_C;ctx.font="9px 'JetBrains Mono',monospace";ctx.textAlign="center";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,P.l+slot*i+slot/2,P.t+cH+18);});
 }
 
@@ -1831,6 +1845,7 @@ function renderPrincipal(){
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
       ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",`meta ${META_ROAS.toFixed(2)}x`,roasC,false,tot.roas,true)}
@@ -1865,7 +1880,8 @@ function renderPrincipal(){
           <button onclick="S.showGapVendas=!S.showGapVendas;render()" style="font-size:10px;font-weight:600;padding:4px 12px;border-radius:8px;border:1px solid ${S.showGapVendas?"#f87171":"var(--border)"};background:${S.showGapVendas?"rgba(248,113,113,.15)":"transparent"};color:${S.showGapVendas?"#f87171":"var(--hint)"};cursor:pointer;font-family:inherit;transition:all .15s">GAP</button>
         </div>
       </div>
-      <canvas id="c-bar-vendas"></canvas>
+      <div style="position:relative"><canvas id="c-bar-vendas"></canvas><div class="tip" id="t-bar-vendas"></div></div>
+      ${S.showGapVendas?`<p style="font-size:9px;color:var(--hint);margin:4px 0 0;line-height:1.5">GAP % = (vendas reportadas pelo gerenciador do Meta – vendas reais Hotmart) ÷ vendas reais. Positivo = gerenciador reportou mais do que realmente converteu.</p>`:""}
     </div>
     <p class="foot">Base Meta + Base Vendas (Hotmart)</p>`;
 
@@ -1877,6 +1893,9 @@ function renderPrincipal(){
     drawChartWithOverlay("c-roas", daily,"roas",  v=>v.toFixed(2)+"x",META_ROAS,"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
     drawBarVendas("c-bar-vendas",daily,bW,160,S.showGapVendas);
+    setupTip("c-bar-vendas","t-bar-vendas",daily,S.showGapVendas
+      ?[{key:"vendas",color:"#34d399",name:"Hotmart"},{key:"gerenciador",color:"#f87171",name:"Gerenciador"}]
+      :[{key:"vendas",color:"#34d399",name:"Vendas"}]);
     setupTip("c-dual","t-dual",daily,[
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
@@ -1978,7 +1997,7 @@ function renderTrafego(){
       <div>${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-
+    ${retoTempFilterBar()}
     <div class="section-lbl">Hoje — ${fDateBR(today)}</div>
     <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:16px">
       ${metricsRow(todayM)}
@@ -3034,7 +3053,7 @@ function buildFunilData(rows, start, end, funil){
 
   // Spend no período (da base Meta do funil ativo, filtrado por temperatura)
   let totalSpend=0;
-  const _metaD=getMetaActive();
+  const _metaD=S.meta||D().meta||{};
   for(const d of Object.keys(_metaD)){
     if(start && d<start) continue;
     if(end   && d>end)   continue;
@@ -3085,7 +3104,9 @@ function renderFunil(){
   const el=document.getElementById("page-funil");if(!el)return;
 
   const _dd=D();
-  const fd=buildFunilData(_dd.funilRows,S.startDate||"",S.endDate||"");
+  let fd;
+  try{ fd=buildFunilData(_dd.funilRows,S.startDate||"",S.endDate||""); }
+  catch(e){ console.error("renderFunil/buildFunilData:",e); el.innerHTML=`<div style="padding:24px;color:var(--red)">Erro ao calcular funil: ${e.message}</div>`; return; }
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const retoCount=counts["reto"]||0;
