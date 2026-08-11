@@ -3084,9 +3084,9 @@ function buildFunilData(rows, start, end, funil){
   }
   const totalTaxa = totalTaxaPaga + totalTaxaReemb;
 
-  // Spend no período (da base Meta do funil ativo, filtrado por temperatura)
+  // Spend no período — respeita filtro de temperatura via getMetaActive()
   let totalSpend=0;
-  const _metaD=S.meta||D().meta||{};
+  const _metaD=getMetaActive();
   for(const d of Object.keys(_metaD)){
     if(start && d<start) continue;
     if(end   && d>end)   continue;
