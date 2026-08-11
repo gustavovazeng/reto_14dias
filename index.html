@@ -1648,6 +1648,14 @@ function statusLegend(){
   </div>`;
 }
 
+function retoTempFilterBar(){
+  const opts=[{k:"todos",l:"Todos"},{k:"frio",l:"🧊 Frio"},{k:"morno",l:"🔥 Morno"},{k:"quente",l:"⚡ Quente"}];
+  return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--hint);margin-right:2px">Temperatura:</span>
+    ${opts.map(o=>`<button class="btn-q${S.retoTempFilter===o.k?" on":""}" onclick="S.retoTempFilter='${o.k}';render()">${o.l}</button>`).join("")}
+  </div>`;
+}
+
 // Gráfico de barras — vendas por dia
 function drawBarVendas(id, data, cssW, cssH, showGap){
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
