@@ -432,6 +432,7 @@ const S = {
   distOverlays:{ctr:{inv:false},cpm:{inv:false},cpc:{inv:false}},
   retoTempFilter:"todos",
   metaByTemp:{frio:{},morno:{},quente:{}},
+  funilRowsByTemp:{frio:[],morno:[],quente:[]},
   currentPage:"principal",
 };
 
@@ -1054,6 +1055,28 @@ async function loadData(force=false){
     const ceroFunil=ceroRows.map(r=>({...r,"Nome do produto":"Cero"}));
     const mapaFunil=mapaRows.map(r=>({...r,"Nome do produto":"Mapa del Inversor"}));
     S.funilRows=[...retoFunil,...ceroFunil,...mapaFunil];
+    // Build funilRowsByTemp: link each buyer to temp via their Reto purchase adId→campName
+    {
+      const buyerTemp={};
+      for(const r of retoRows){
+        if(r["Status da compra"]!=="Paga") continue;
+        const adId=r["Ad Id"]; if(!adId) continue;
+        const adData=mByAdId[adId]; if(!adData) continue;
+        const temp=extractTempFromCamp(adData.campName); if(!temp) continue;
+        const em=(r["Email"]||"").toLowerCase().trim();
+        const cpf=(r["CPF Comprador"]||"").replace(/[^\d]/g,"");
+        if(em)  buyerTemp["e:"+em]=temp;
+        if(cpf) buyerTemp["c:"+cpf]=temp;
+      }
+      const fbt={frio:[],morno:[],quente:[]};
+      for(const r of S.funilRows){
+        const em=(r["Email"]||"").toLowerCase().trim();
+        const cpf=(r["CPF Comprador"]||"").replace(/[^\d]/g,"");
+        const temp=buyerTemp["e:"+em]||buyerTemp["c:"+cpf];
+        if(temp) fbt[temp].push(r);
+      }
+      S.funilRowsByTemp=fbt;
+    }
     try{ S.funil=buildFunilData(S.funilRows,S.startDate||"",S.endDate||""); }
     catch(fe){ console.error("buildFunilData error:",fe); S.funil={}; }
 
@@ -1734,20 +1757,21 @@ function drawBarVendas(id, data, cssW, cssH, showGap){
     }
     ctx.stroke();ctx.setLineDash([]);
 
-    // Dots + right-margin % labels
-    const lblStep=n<=10?1:n<=20?2:n<=40?3:4;
+    // Dots (no per-point labels)
     for(let i=0;i<n;i++){
       const cx=P.l+slot*i+slot/2;
       const gy=gapY(gapPcts[i]);
       ctx.fillStyle=RED;
       ctx.beginPath();ctx.arc(cx,gy,2.5,0,Math.PI*2);ctx.fill();
-      if(i===n-1||(i%lblStep===0)){
-        const pct=gapPcts[i];
-        const lbl=(pct>=0.5?"+":"")+Math.round(pct)+"%";
-        ctx.fillStyle=RED;ctx.font="bold 8px 'DM Sans',sans-serif";
-        ctx.textAlign="left";
-        ctx.fillText(lbl,P.l+cW+4,gy+3);
-      }
+    }
+    // Fixed Y-scale on right margin: +max%, 0%, -max%
+    const scaleTicks=[maxGap,0,-maxGap];
+    ctx.font="bold 8px 'DM Sans',sans-serif";ctx.textAlign="left";
+    for(const pct of scaleTicks){
+      const gy=gapY(pct);
+      ctx.fillStyle=pct===0?"rgba(248,113,113,0.5)":RED;
+      const lbl=(pct>0?"+":"")+Math.round(pct)+"%";
+      ctx.fillText(lbl,P.l+cW+4,gy+3);
     }
   }
 
@@ -1900,10 +1924,11 @@ function renderPrincipal(){
     drawDual("c-dual",daily,mW,230);
     drawChartWithOverlay("c-roas", daily,"roas",  v=>v.toFixed(2)+"x",META_ROAS,"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
+    if(S.showGapVendas) daily.forEach(d=>{const h=d.vendas||0,g=d.gerenciador||0;d.gapPct=h>0?((g-h)/h)*100:0;});
     drawBarVendas("c-bar-vendas",daily,bW,160,S.showGapVendas);
     setupTip("c-bar-vendas","t-bar-vendas",daily,S.showGapVendas
-      ?[{key:"vendas",color:"#34d399",name:"Hotmart"},{key:"gerenciador",color:"#f87171",name:"Gerenciador"}]
-      :[{key:"vendas",color:"#34d399",name:"Vendas"}]);
+      ?[{key:"vendas",color:"#34d399",name:"Hotmart"},{key:"gerenciador",color:"#f87171",name:"Gerenciador"},{key:"gapPct",color:"#f87171",name:"GAP%",fmt:v=>(v>=0.5?"+":v<=-0.5?"":" ")+Math.round(v)+"%"}]
+      :[{key:"vendas",color:"#34d399",name:"Vendas"}],36);
     setupTip("c-dual","t-dual",daily,[
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
@@ -3112,8 +3137,9 @@ function renderFunil(){
   const el=document.getElementById("page-funil");if(!el)return;
 
   const _dd=D();
+  const _funilRows=S.retoTempFilter==="todos"?_dd.funilRows:(S.funilRowsByTemp[S.retoTempFilter]||[]);
   let fd;
-  try{ fd=buildFunilData(_dd.funilRows,S.startDate||"",S.endDate||""); }
+  try{ fd=buildFunilData(_funilRows,S.startDate||"",S.endDate||""); }
   catch(e){ console.error("renderFunil/buildFunilData:",e); el.innerHTML=`<div style="padding:24px;color:var(--red)">Erro ao calcular funil: ${e.message}</div>`; return; }
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
@@ -3163,7 +3189,7 @@ function renderFunil(){
   let anaContent="";
   if(S.aTab==="tempo"){
     const meses={};
-    for(const r of _dd.funilRows){
+    for(const r of _funilRows){
       if((r["Status da compra"]||"")!=="Paga") continue;
       const d=toISO(r["Data da compra"]||"")||""; if(!d) continue;
       const mes=d.slice(0,7);
