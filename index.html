@@ -387,7 +387,7 @@ const S = {
   metaByAd:{}, metaByAdByDate:{}, metaByAdId:{},
   metaByCamp:{}, metaByCampByDate:{}, metaByCountry:{},
   selectedCountry:"todos",
-  vendasByAd:{}, vendasByAdDate:{},
+  vendasByAd:{}, vendasByAdDate:{}, vendasByTemp:{frio:{},morno:{},quente:{}},
   funilRows:[], funil:{}, updated:null,
   loading:true, error:null, firstLoad:true,
   currentFunil:"reto",   // "reto" | "dist" | "aquec"
@@ -428,7 +428,10 @@ const S = {
   anaStatusFiltro:"all", anaStatusGroup:"produto",
   overlays:{cpc:{inv:false,cpv:false},ctr:{inv:false,cpv:false},cpm:{inv:false,cpv:false},
     txPagChk:{inv:false,cpv:false},txChkVnd:{inv:false,cpv:false},connect:{inv:false,cpv:false}},
+  showGapVendas:false,
   distOverlays:{ctr:{inv:false},cpm:{inv:false},cpc:{inv:false}},
+  retoTempFilter:"todos",
+  metaByTemp:{frio:{},morno:{},quente:{}},
   currentPage:"principal",
 };
 
@@ -600,6 +603,14 @@ function extractAdvCode(name){
 
 // Extrai país do Adset Name.
 // Convenção: "ca01-aberto-{pais}" → país; caso contrário → "México"
+function extractTempFromCamp(name){
+  if(!name) return null;
+  const n=name.toLowerCase();
+  if(n.includes("quente")) return "quente";
+  if(n.includes("morno"))  return "morno";
+  if(n.includes("frio")||n.includes("cold")) return "frio";
+  return null;
+}
 function extractCountryFromAdset(adsetName){
   if(!adsetName) return "México";
   // Padrão ca{N}-{word}-{country}, captura o último segmento após o segundo "-"
@@ -853,6 +864,7 @@ async function loadData(force=false){
   try{
     // ── Meta ──────────────────────────────────────────────────────────────
     const mD={}, mByAd={}, mByAdByDate={}, mByCamp={}, mByCampByDate={}, mByAdId={}, mByCountry={}, mByPlatform={};
+    const mDByTemp={frio:{},morno:{},quente:{}};
     for(const r of parseSheet(mj)){
       const d=toISO(r["Date"]);if(!d)continue;
       if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
@@ -877,6 +889,8 @@ async function loadData(force=false){
       const icV      =parseInt(r["Action Omni Initiated Checkout"]||0)||0;
       const video3sV =parseInt(r["Action Video View"]||0)||0;
       const video15sV=parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
+      const lvV  =parseInt(r["Action Landing Page View"]||0)||0;
+      const chkV =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
       const adStatusR  =r["Ad status"]||"";
       const campStatusR=r["Campaign status"]||"";
       const adsetStatusR=r["Adset status"]||"";
@@ -895,11 +909,13 @@ async function loadData(force=false){
         if(igUrl && !mByAd[advCode].igUrl) mByAd[advCode].igUrl=igUrl;
         if(!mByAd[advCode].adName&&adName) mByAd[advCode].adName=adName;
         if(!mByAdByDate[advCode]) mByAdByDate[advCode]={};
-        if(!mByAdByDate[advCode][d]) mByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,adIds:new Set(),igUrl:""};
+        if(!mByAdByDate[advCode][d]) mByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,adIds:new Set(),igUrl:""};
         mByAdByDate[advCode][d].spend       += spendV;
         mByAdByDate[advCode][d].clicks      += clicksV;
         mByAdByDate[advCode][d].impressions += impressV;
         mByAdByDate[advCode][d].ic       += icV;
+        mByAdByDate[advCode][d].landingViews += lvV;
+        mByAdByDate[advCode][d].checkouts    += chkV;
         mByAdByDate[advCode][d].video3s  += video3sV;
         mByAdByDate[advCode][d].video15s += video15sV;
         if(adId) mByAdByDate[advCode][d].adIds.add(adId);
@@ -908,11 +924,13 @@ async function loadData(force=false){
       // Índice por adId (granularidade máxima — permite filtrar por campanha/país depois)
       if(adId && advCode){
         if(!mByAdId[adId]) mByAdId[adId]={adId,advCode,campName,country,adStatus:"",campStatus:"",adsetStatus:"",lastStatusDate:"",byDate:{}};
-        if(!mByAdId[adId].byDate[d]) mByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,igUrl:""};
+        if(!mByAdId[adId].byDate[d]) mByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,igUrl:""};
         mByAdId[adId].byDate[d].spend       += spendV;
         mByAdId[adId].byDate[d].clicks      += clicksV;
         mByAdId[adId].byDate[d].impressions += impressV;
         mByAdId[adId].byDate[d].ic       += icV;
+        mByAdId[adId].byDate[d].landingViews += lvV;
+        mByAdId[adId].byDate[d].checkouts    += chkV;
         mByAdId[adId].byDate[d].video3s  += video3sV;
         mByAdId[adId].byDate[d].video15s += video15sV;
         if(igUrl && !mByAdId[adId].byDate[d].igUrl) mByAdId[adId].byDate[d].igUrl=igUrl;
@@ -948,18 +966,32 @@ async function loadData(force=false){
         }
         if(adId) mByCamp[campName].adIds.add(adId);
         if(!mByCampByDate[campName]) mByCampByDate[campName]={};
-        if(!mByCampByDate[campName][d]) mByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,ic:0,adIds:new Set()};
+        if(!mByCampByDate[campName][d]) mByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,ic:0,landingViews:0,checkouts:0,adIds:new Set()};
         mByCampByDate[campName][d].spend       += spendV;
         mByCampByDate[campName][d].clicks      += clicksV;
         mByCampByDate[campName][d].impressions += impressV;
         mByCampByDate[campName][d].ic          += icV;
+        mByCampByDate[campName][d].landingViews += lvV;
+        mByCampByDate[campName][d].checkouts    += chkV;
         if(adId) mByCampByDate[campName][d].adIds.add(adId);
+      }
+      // Agrega por temperatura
+      const _temp=extractTempFromCamp(campName);
+      if(_temp){
+        if(!mDByTemp[_temp][d])mDByTemp[_temp][d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+        mDByTemp[_temp][d].spend        += _spendMeta;
+        mDByTemp[_temp][d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
+        mDByTemp[_temp][d].impressions  += parseInt(r["Impressions"]||0)||0;
+        mDByTemp[_temp][d].landingViews += parseInt(r["Action Landing Page View"]||0)||0;
+        mDByTemp[_temp][d].checkouts    += parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
+        mDByTemp[_temp][d].purchases    += parseInt(r["Action Omni Purchase"]||0)||0;
       }
     }
 
     S.meta=mD; S.metaByAd=mByAd; S.metaByAdByDate=mByAdByDate;
     S.metaByCamp=mByCamp; S.metaByCampByDate=mByCampByDate;
     S.metaByAdId=mByAdId; S.metaByCountry=mByCountry; S.metaByPlatform=mByPlatform;
+    S.metaByTemp=mDByTemp;
 
     // ── Vendas Reto ────────────────────────────────────────────────────────
     const retoRows=parseHotmartRows(retoJ);
@@ -997,6 +1029,19 @@ async function loadData(force=false){
     }
     S.vendasByPlatform=vByPlatform; S.vendasByPlacement=vByPlacement;
     S.vendas=vD; S.vendasByAd=vByAd; S.vendasByAdDate=vByAdDate;
+    // Build vendasByTemp: attribute each sale to its campaign temperature via adId→mByAdId
+    const vByTemp={frio:{},morno:{},quente:{}};
+    for(const [adId,byDate] of Object.entries(vByAdDate)){
+      const adData=mByAdId[adId]; if(!adData) continue;
+      const temp=extractTempFromCamp(adData.campName); if(!temp) continue;
+      for(const [d,vv] of Object.entries(byDate)){
+        if(!vByTemp[temp][d]) vByTemp[temp][d]={qtd:0,valor:0,taxa:0};
+        vByTemp[temp][d].qtd   += vv.qtd;
+        vByTemp[temp][d].valor += vv.valor;
+        vByTemp[temp][d].taxa  += vv.taxa||0;
+      }
+    }
+    S.vendasByTemp=vByTemp;
 
     // ── Vendas Cero (upsell 1) ────────────────────────────────────────────
     const ceroRows=parseHotmartRows(ceroJ);
@@ -1233,20 +1278,24 @@ async function loadData(force=false){
 // ── Derived — Principal ────────────────────────────────────────────────────
 function getDaily(start,end){
   const d=D();
-  const all=new Set([...Object.keys(d.meta),...Object.keys(d.vendas)]);
+  const metaA=getMetaActive();
+  const vA=getVendasActive();
+  const all=new Set([...Object.keys(metaA),...Object.keys(vA)]);
   return Array.from(all).sort().filter(dt=>dt>=start&&dt<=end).map(date=>{
-    const m=d.meta[date]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0};
-    const v=d.vendas[date]||{qtd:0,valor:0,taxa:0};
+    const m=metaA[date]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+    const v=vA[date]||{qtd:0,valor:0,taxa:0};
     const lucro=v.valor-v.taxa-(m.spend*TAXA_IMPOSTO);
     return{date,label:fDate(date),spend:m.spend,faturamento:v.valor,vendas:v.qtd,
+      gerenciador:m.purchases||0,
       roas:m.spend>0?v.valor/m.spend:0,cpv:v.qtd>0?m.spend/v.qtd:0,
       ticket:v.qtd>0?v.valor/v.qtd:0,lucro};
   });
 }
 function getTotals(daily){
   const d=D();
+  const vA=getVendasActive();
   const t=daily.reduce((a,dt)=>({spend:a.spend+dt.spend,fat:a.fat+dt.faturamento,vendas:a.vendas+dt.vendas,
-    taxa:a.taxa+(d.vendas[dt.date]?.taxa||0)}),{spend:0,fat:0,vendas:0,taxa:0});
+    taxa:a.taxa+(vA[dt.date]?.taxa||0)}),{spend:0,fat:0,vendas:0,taxa:0});
   return{...t,faturamento:t.fat,
     roas:t.spend>0?t.fat/t.spend:0,cpv:t.vendas>0?t.spend/t.vendas:0,
     ticket:t.vendas>0?t.fat/t.vendas:0,lucro:t.fat-t.taxa-(t.spend*TAXA_IMPOSTO)};
@@ -1256,9 +1305,11 @@ function getTotals(daily){
 // ── Derived — Tráfego ──────────────────────────────────────────────────────
 function getDailyT(start,end){
   const d=D();
-  return Object.keys(d.meta).sort().filter(dt=>dt>=start&&dt<=end).map(date=>{
-    const m=d.meta[date];
-    const v=d.vendas[date]||{qtd:0};
+  const metaA=getMetaActive();
+  const vA=getVendasActive();
+  return Object.keys(metaA).sort().filter(dt=>dt>=start&&dt<=end).map(date=>{
+    const m=metaA[date];
+    const v=vA[date]||{qtd:0};
     const cpc   = m.clicks>0     ? m.spend/m.clicks          : 0;
     const ctr   = m.impressions>0 ? (m.clicks/m.impressions)*100 : 0;
     const cpm   = m.impressions>0 ? (m.spend/m.impressions)*1000 : 0;
@@ -1277,6 +1328,7 @@ function getTotalsT(daily){
     checkouts:a.checkouts+d.checkouts,vendas:a.vendas+d.vendas}),
     {spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,vendas:0});
   return{...t,
+    cpv: t.vendas>0 ? t.spend/t.vendas : 0,
     cpc:   t.clicks>0       ? t.spend/t.clicks              : 0,
     ctr:   t.impressions>0  ? (t.clicks/t.impressions)*100  : 0,
     cpm:   t.impressions>0  ? (t.spend/t.impressions)*1000  : 0,
@@ -1288,9 +1340,8 @@ function getTotalsT(daily){
 
 // Totais de um dia específico
 function getDayMetrics(iso){
-  const d=D();
-  const m=d.meta[iso]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0};
-  const v=d.vendas[iso]||{qtd:0};
+  const m=getMetaActive()[iso]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0};
+  const v=getVendasActive()[iso]||{qtd:0};
   return{
     spend:m.spend,
     cpc:   m.clicks>0       ? m.spend/m.clicks              : 0,
@@ -1598,13 +1649,14 @@ function statusLegend(){
 }
 
 // Gráfico de barras — vendas por dia
-function drawBarVendas(id, data, cssW, cssH){
+function drawBarVendas(id, data, cssW, cssH, showGap){
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
   const P={t:22,r:16,b:26,l:32};
   const cW=cssW-P.l-P.r, cH=cssH-P.t-P.b;
   const n=data.length; if(n===0)return;
   const vals=data.map(d=>d.vendas||0);
-  const maxV=Math.max(...vals,1);
+  const gVals=showGap?data.map(d=>d.gerenciador||0):[];
+  const maxV=Math.max(...vals,...gVals,1);
 
   // Grid horizontal
   const ticks=4;
@@ -1619,7 +1671,7 @@ function drawBarVendas(id, data, cssW, cssH){
     }
   }
 
-  // Barras
+  // Barras Hotmart
   const slot=cW/n;
   const barW=Math.max(3,Math.min(28,slot*0.6));
   const GREEN="#34d399";
@@ -1629,11 +1681,9 @@ function drawBarVendas(id, data, cssW, cssH){
     const cx=P.l+slot*i+slot/2;
     const x=cx-barW/2;
     const y=P.t+cH-bh;
-    // Gradiente verde
     const g=ctx.createLinearGradient(0,y,0,P.t+cH);
     g.addColorStop(0,GREEN+"dd");g.addColorStop(1,GREEN+"55");
     ctx.fillStyle=g;
-    // Barra com cantos arredondados no topo
     const r=Math.min(3,barW/2,bh/2);
     ctx.beginPath();
     ctx.moveTo(x+r,y);ctx.lineTo(x+barW-r,y);
@@ -1641,12 +1691,41 @@ function drawBarVendas(id, data, cssW, cssH){
     ctx.lineTo(x+barW,y+bh);ctx.lineTo(x,y+bh);ctx.lineTo(x,y+r);
     ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
     ctx.fill();
-    // Número acima da barra
     if(v>0){
       ctx.fillStyle="#e8edf6";
       ctx.font=`bold ${Math.max(8,Math.min(11,barW-1))}px 'DM Sans',sans-serif`;
       ctx.textAlign="center";
       ctx.fillText(v,cx,y-4);
+    }
+  }
+
+  // GAP overlay — linha vermelha tracejada com pontos (gerenciador)
+  if(showGap&&gVals.length>0){
+    const RED="#f87171";
+    ctx.strokeStyle=RED;ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<n;i++){
+      const gv=gVals[i];
+      const cx=P.l+slot*i+slot/2;
+      const gy=P.t+cH-(gv/maxV)*cH;
+      if(!started){ctx.moveTo(cx,gy);started=true;}else{ctx.lineTo(cx,gy);}
+    }
+    ctx.stroke();ctx.setLineDash([]);
+    // Pontos e valores gerenciador
+    for(let i=0;i<n;i++){
+      const gv=gVals[i];if(!gv)continue;
+      const hotm=vals[i];
+      const cx=P.l+slot*i+slot/2;
+      const gy=P.t+cH-(gv/maxV)*cH;
+      ctx.fillStyle=RED;
+      ctx.beginPath();ctx.arc(cx,gy,3,0,Math.PI*2);ctx.fill();
+      // Etiqueta: gerenciador (GAP%)
+      const gap=hotm>0?Math.round((gv-hotm)/hotm*100):null;
+      ctx.fillStyle=RED;
+      ctx.font="bold 9px 'DM Sans',sans-serif";ctx.textAlign="center";
+      const lbl=gap!==null?(gv+" ("+(gap>=0?"+":"")+gap+"%)"):String(gv);
+      ctx.fillText(lbl,cx,gy-5);
     }
   }
 
@@ -1781,7 +1860,10 @@ function renderPrincipal(){
     <div class="cc" style="margin-bottom:12px">
       <div class="ch">
         <span class="ct">Vendas do Reto (dia a dia)</span>
-        <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas/dia</span></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas Hotmart</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
+          <button onclick="S.showGapVendas=!S.showGapVendas;render()" style="font-size:10px;font-weight:600;padding:4px 12px;border-radius:8px;border:1px solid ${S.showGapVendas?"#f87171":"var(--border)"};background:${S.showGapVendas?"rgba(248,113,113,.15)":"transparent"};color:${S.showGapVendas?"#f87171":"var(--hint)"};cursor:pointer;font-family:inherit;transition:all .15s">GAP</button>
+        </div>
       </div>
       <canvas id="c-bar-vendas"></canvas>
     </div>
@@ -1794,7 +1876,7 @@ function renderPrincipal(){
     drawDual("c-dual",daily,mW,230);
     drawChartWithOverlay("c-roas", daily,"roas",  v=>v.toFixed(2)+"x",META_ROAS,"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
-    drawBarVendas("c-bar-vendas",daily,bW,160);
+    drawBarVendas("c-bar-vendas",daily,bW,160,S.showGapVendas);
     setupTip("c-dual","t-dual",daily,[
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
@@ -1825,9 +1907,9 @@ function renderTrafego(){
     {key:"cpc",      lbl:"CPC",                    fmt:fBRL,  meta:METAS_T.cpc.val,        higher:false},
     {key:"ctr",      lbl:"CTR",                    fmt:fPct,  meta:METAS_T.ctr.val,        higher:true},
     {key:"cpm",      lbl:"CPM",                    fmt:fBRL,  meta:METAS_T.cpm.val,        higher:false},
+    {key:"connect",  lbl:"Connect Rate",           fmt:fPct,  meta:METAS_T.connect.val,    higher:true},
     {key:"txPagChk", lbl:"Tx Pág → Checkout",      fmt:fPct,  meta:METAS_T.txPagChk.val,  higher:true},
     {key:"txChkVnd", lbl:"Tx Checkout → Venda",    fmt:fPct,  meta:METAS_T.txChkVnd.val,  higher:true},
-    {key:"connect",  lbl:"Connect Rate",           fmt:fPct,  meta:METAS_T.connect.val,    higher:true},
   ];
 
   // Formato da meta para o subtítulo — sempre no formato correto da métrica
@@ -1903,9 +1985,15 @@ function renderTrafego(){
     </div>
 
     <div class="section-lbl">Últimos 3 dias — ${fDateBR(p3Start)} a ${fDateBR(p3End)}</div>
-    <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:16px">
       ${metricsRow(p3Tot)}
     </div>
+
+    ${(()=>{const p7Start=subDays(today,7),p7End=subDays(today,1),p7Tot=getTotalsT(getDailyT(p7Start,p7End));return`
+    <div class="section-lbl">Últimos 7 dias — ${fDateBR(p7Start)} a ${fDateBR(p7End)}</div>
+    <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:20px">
+      ${metricsRow(p7Tot)}
+    </div>`;})()}
 
     <div class="charts-2x3">
       ${CHART_CONFIGS.map(c=>tChart(c)).join("")}
@@ -2124,17 +2212,17 @@ function renderAnuncios(){
       : adIdsPeriod;
     if(adIdsC.size===0) continue;
     // Spend/clicks/impressions — recalcula por adId quando país filtrado
-    let cSpend=0,cClicks=0,cImpr=0,cIc=0;
+    let cSpend=0,cClicks=0,cImpr=0,cIc=0,cLv=0,cChk=0;
     if(countryAllowedIds){
       for(const adId of adIdsC){
         const adData=dd.metaByAdId[adId];if(!adData)continue;
         for(const [d,vals] of Object.entries(adData.byDate)){
-          if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;}
+          if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;cLv+=vals.landingViews||0;cChk+=vals.checkouts||0;}
         }
       }
     } else {
       for(const [d,vals] of Object.entries(byDate)){
-        if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;}
+        if(d>=start&&d<=end){cSpend+=vals.spend;cClicks+=vals.clicks;cImpr+=vals.impressions;cIc+=vals.ic||0;cLv+=vals.landingViews||0;cChk+=vals.checkouts||0;}
       }
     }
     if(cSpend===0) continue;
@@ -2160,6 +2248,9 @@ function renderAnuncios(){
       roas:cSpend>0?campFunilRev/cSpend:0,
       ticket:cQtd>0?campFunilRev/cQtd:0,
       ic:cIc, cpic:cIc>0?cSpend/cIc:0,
+      connect:cClicks>0?(cLv/cClicks)*100:0,
+      txPagChk:cLv>0?(cChk/cLv)*100:0,
+      txChkVnd:cChk>0?(cQtd/cChk)*100:0,
       campStatus:dd.metaByCamp[campName]?.campStatus||'',
       adIds:adIdsC});
   }
@@ -2207,7 +2298,7 @@ function renderAnuncios(){
       if(useIds.size===0) continue;
 
       // Spend / clicks / impressions — calculado a partir dos adIds filtrados
-      let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,igUrl="";
+      let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,landingViews=0,checkouts=0,igUrl="";
       if(allowedAdIds){
         // Usa metaByAdId para precisão por campanha
         for(const adId of useIds){
@@ -2216,6 +2307,7 @@ function renderAnuncios(){
             if(d>=start&&d<=end){
               spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
               ic+=vals.ic||0;video3s+=vals.video3s||0;video15s+=vals.video15s||0;
+              landingViews+=vals.landingViews||0;checkouts+=vals.checkouts||0;
               if(!igUrl&&vals.igUrl) igUrl=vals.igUrl;
             }
           }
@@ -2226,6 +2318,7 @@ function renderAnuncios(){
           if(d>=start&&d<=end){
             spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
             ic+=vals.ic||0;video3s+=vals.video3s||0;video15s+=vals.video15s||0;
+            landingViews+=vals.landingViews||0;checkouts+=vals.checkouts||0;
             if(!igUrl&&vals.igUrl) igUrl=vals.igUrl;
           }
         }
@@ -2269,6 +2362,9 @@ function renderAnuncios(){
         ticketAsc:qtd>0?totalAscensoes/qtd:0,
         roas:spend>0&&totalAscensoes>0?totalAscensoes/spend:0,
         ic, cpic:ic>0?spend/ic:0,
+        connect:clicks>0?(landingViews/clicks)*100:0,
+        txPagChk:landingViews>0?(checkouts/landingViews)*100:0,
+        txChkVnd:checkouts>0?(qtd/checkouts)*100:0,
         hookRate:impressions>0?(video3s/impressions)*100:0,
         holdRate:video3s>0?(video15s/video3s)*100:0,
         isActive, hasStatusData});
@@ -2470,6 +2566,9 @@ function renderAnuncios(){
           ${thC("ctr","CTR","camp")}
           ${thC("cpm","CPM","camp")}
           ${thC("cpc","CPC","camp")}
+          ${thC("connect","Connect Rate","camp")}
+          ${thC("txPagChk","Tx Pág→Chk","camp")}
+          ${thC("txChkVnd","Tx Chk→Vnd","camp")}
         </tr></thead>
         <tbody>
           ${filteredCamps.map(r=>{
@@ -2499,6 +2598,9 @@ function renderAnuncios(){
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)}">${fBRL(r.cpc)}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.connect,METAS_T.connect.val,true)}">${r.connect>0?fPct(r.connect):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txPagChk,METAS_T.txPagChk.val,true)}">${r.txPagChk>0?fPct(r.txPagChk):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,METAS_T.txChkVnd.val,true)}">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
             </tr>`;
           }).join("")}
         </tbody>
@@ -2575,12 +2677,15 @@ function renderAnuncios(){
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
           ${thC("cpc","CPC","ad")}
+          ${thC("connect","Connect Rate","ad")}
+          ${thC("txPagChk","Tx Pág→Chk","ad")}
+          ${thC("txChkVnd","Tx Chk→Vnd","ad")}
           ${thC("hookRate","Hook Rate","ad")}
           ${thC("holdRate","Hold Rate","ad")}
           <th style="padding:10px 12px;border-bottom:1px solid var(--border)"></th>
         </tr></thead>
         <tbody>
-          ${filteredAds.length===0?`<tr><td colspan="17" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
+          ${filteredAds.length===0?`<tr><td colspan="20" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
           ${filteredAds.map(r=>{
             const selAd=S.selectedAds.has(r.advCode);
             const bgAd=selAd?"rgba(16,185,129,.10)":"transparent";
@@ -2610,6 +2715,9 @@ function renderAnuncios(){
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)};font-weight:600">${fBRL(r.cpc)}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.connect,METAS_T.connect.val,true)};font-weight:600">${r.connect>0?fPct(r.connect):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txPagChk,METAS_T.txPagChk.val,true)};font-weight:600">${r.txPagChk>0?fPct(r.txPagChk):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,METAS_T.txChkVnd.val,true)};font-weight:600">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.hookRate>0?r.hookRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.holdRate>0?r.holdRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:8px 12px;text-align:center" onclick="event.stopPropagation()">
@@ -2669,6 +2777,14 @@ function renderAnuncios(){
 
 // ── Helper: dados do funil ativo ──────────────────────────────────────────
 function D(){ return S; }
+function getMetaActive(){
+  if(S.retoTempFilter==="todos") return S.meta;
+  return S.metaByTemp[S.retoTempFilter]||{};
+}
+function getVendasActive(){
+  if(S.retoTempFilter==="todos") return S.vendas;
+  return S.vendasByTemp[S.retoTempFilter]||{};
+}
 
 // ── Funil helpers ──────────────────────────────────────────────────────────
 function classifyProduct(name, funil){
@@ -2916,9 +3032,9 @@ function buildFunilData(rows, start, end, funil){
   }
   const totalTaxa = totalTaxaPaga + totalTaxaReemb;
 
-  // Spend no período (da base Meta do funil ativo)
+  // Spend no período (da base Meta do funil ativo, filtrado por temperatura)
   let totalSpend=0;
-  const _metaD=S.meta;
+  const _metaD=getMetaActive();
   for(const d of Object.keys(_metaD)){
     if(start && d<start) continue;
     if(end   && d>end)   continue;
@@ -3097,6 +3213,7 @@ function renderFunil(){
         <div class="hdr-sub">base: ${retoCount} compradores do Finanzas - Reto 14 Dias · atualizado em: ${_dd.updated||"—"}</div>
       </div>
     </div>
+    ${retoTempFilterBar()}
 
     <div class="g4" style="margin-bottom:14px">
       <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val kc-val-sm">${fBRL(totalSpend)}</div><div class="kc-sub">Meta Ads</div></div>
