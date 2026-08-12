@@ -313,7 +313,8 @@ const _DATA_MAPA  = {"values":[]};
 const IS_FILE = false; // dados embutidos — sem necessidade de servidor
 
 // ── Google Sheets (fonte primária de dados) ────────────────────────────────
-const SHEET_ID = "1saA8fl4L70Fmoxj3YuVB3D29fbGGMPU8i0hQpnoldlE";
+const SHEET_ID     = "1saA8fl4L70Fmoxj3YuVB3D29fbGGMPU8i0hQpnoldlE";
+const FEO_SHEET_ID = "1FFn_-ISWTj7FBsXxoVIRfFjBhlB2GU1kXK2HeUTtD_o";
 const GAPI_KEY  = "AIzaSyDFyD63YrWNWSX2gjZWdVD5Bq8uoazXzbE";
 const SHEET_META = "Base Meta";
 const SHEET_DIST = "Base Distribuição";
@@ -842,13 +843,13 @@ async function fetchCSVSafe(filename){
 }
 
 // ── Sheets API helpers ──────────────────────────────────────────────────────
-async function fetchSheetPaged(tab, lastCol="L", pageSize=5000){
+async function fetchSheetPaged(tab, lastCol="L", pageSize=5000, sheetId=SHEET_ID){
   const allValues=[];
   let startRow=1;
   while(true){
     const endRow=startRow+pageSize-1;
     const range=`${encodeURIComponent(tab)}!A${startRow}:${lastCol}${endRow}`;
-    const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}?key=${GAPI_KEY}`;
+    const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${GAPI_KEY}`;
     const res=await fetch(url);
     if(!res.ok) throw new Error(`Sheets API: HTTP ${res.status} ao buscar aba "${tab}"`);
     const data=await res.json();
@@ -1309,9 +1310,10 @@ async function loadData(force=false){
     S.updated=lastISO?fDateBR(lastISO):"—";
 
     // ── FEO ────────────────────────────────────────────────────────────────
+    const _feoSafe=(tab,col)=>fetchSheetPaged(tab,col,5000,FEO_SHEET_ID).catch(e=>{console.warn(`[feo] "${tab}":`,e.message);return {values:[]};});
     const [feoMetaJ, feoVendasJ] = await Promise.all([
-      fetchCSVSafe("FEO/Base dashboard - FEO - Base meta.csv"),
-      fetchCSVSafe("FEO/Base dashboard - FEO - Base vendas.csv"),
+      _feoSafe("Base meta","V"),
+      _feoSafe("Base vendas","L"),
     ]);
     {
       const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
