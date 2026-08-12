@@ -2110,6 +2110,7 @@ function renderPrincipal(){
 // ── Render Tráfego ─────────────────────────────────────────────────────────
 function renderTrafego(){
   const el=document.getElementById("page-trafego");if(!el)return;
+  const isFeo=S.currentFunil==="feo";
   const today=todayISO();
   const todayM=getDayMetrics(today);
 
@@ -2123,14 +2124,14 @@ function renderTrafego(){
 
   // Definição das métricas: key, label, fmtFn, metaVal, higher, rawKey (para statusColor)
   const METRICS=[
-    {key:"spend",    lbl:"Investimento",          fmt:fBRL,  meta:null,                   higher:null},
-    {key:"cpv",      lbl:"Custo por Venda",        fmt:fBRL,  meta:META_CPV,               higher:false},
-    {key:"cpc",      lbl:"CPC",                    fmt:fBRL,  meta:METAS_T.cpc.val,        higher:false},
-    {key:"ctr",      lbl:"CTR",                    fmt:fPct,  meta:METAS_T.ctr.val,        higher:true},
-    {key:"cpm",      lbl:"CPM",                    fmt:fBRL,  meta:METAS_T.cpm.val,        higher:false},
-    {key:"connect",  lbl:"Connect Rate",           fmt:fPct,  meta:METAS_T.connect.val,    higher:true},
-    {key:"txPagChk", lbl:"Tx Pág → Checkout",      fmt:fPct,  meta:METAS_T.txPagChk.val,  higher:true},
-    {key:"txChkVnd", lbl:"Tx Checkout → Venda",    fmt:fPct,  meta:METAS_T.txChkVnd.val,  higher:true},
+    {key:"spend",    lbl:"Investimento",          fmt:fBRL,  meta:null,                              higher:null},
+    {key:"cpv",      lbl:"Custo por Venda",        fmt:fBRL,  meta:isFeo?null:META_CPV,              higher:false},
+    {key:"cpc",      lbl:"CPC",                    fmt:fBRL,  meta:isFeo?null:METAS_T.cpc.val,       higher:false},
+    {key:"ctr",      lbl:"CTR",                    fmt:fPct,  meta:isFeo?null:METAS_T.ctr.val,       higher:true},
+    {key:"cpm",      lbl:"CPM",                    fmt:fBRL,  meta:isFeo?null:METAS_T.cpm.val,       higher:false},
+    {key:"connect",  lbl:"Connect Rate",           fmt:fPct,  meta:isFeo?null:METAS_T.connect.val,   higher:true},
+    {key:"txPagChk", lbl:"Tx Pág → Checkout",      fmt:fPct,  meta:isFeo?null:METAS_T.txPagChk.val, higher:true},
+    {key:"txChkVnd", lbl:"Tx Checkout → Venda",    fmt:fPct,  meta:isFeo?null:METAS_T.txChkVnd.val, higher:true},
   ];
 
   // Formato da meta para o subtítulo — sempre no formato correto da métrica
@@ -2163,12 +2164,12 @@ function renderTrafego(){
 
   // Gráficos em grade 2×3
   const CHART_CONFIGS=[
-    {key:"ctr",      lbl:"CTR",                    fmt:fPct, meta:METAS_T.ctr.val,        metaLbl:"Meta 2,5%"},
-    {key:"cpm",      lbl:"CPM",                    fmt:fBRL, meta:METAS_T.cpm.val,        metaLbl:"Meta $5,96"},
-    {key:"cpc",      lbl:"CPC",                    fmt:fBRL, meta:METAS_T.cpc.val,        metaLbl:"Meta $0,24"},
-    {key:"txPagChk", lbl:"Tx Pág → Checkout",      fmt:fPct, meta:METAS_T.txPagChk.val,  metaLbl:"Meta 5,3%"},
-    {key:"txChkVnd", lbl:"Tx Checkout → Venda",    fmt:fPct, meta:METAS_T.txChkVnd.val,  metaLbl:"Meta 18,3%"},
-    {key:"connect",  lbl:"Connect Rate",           fmt:fPct, meta:METAS_T.connect.val,    metaLbl:"Meta 70%"},
+    {key:"ctr",      lbl:"CTR",                    fmt:fPct, meta:isFeo?null:METAS_T.ctr.val,       metaLbl:isFeo?"":("Meta 2,5%")},
+    {key:"cpm",      lbl:"CPM",                    fmt:fBRL, meta:isFeo?null:METAS_T.cpm.val,       metaLbl:isFeo?"":("Meta $5,96")},
+    {key:"cpc",      lbl:"CPC",                    fmt:fBRL, meta:isFeo?null:METAS_T.cpc.val,       metaLbl:isFeo?"":("Meta $0,24")},
+    {key:"txPagChk", lbl:"Tx Pág → Checkout",      fmt:fPct, meta:isFeo?null:METAS_T.txPagChk.val, metaLbl:isFeo?"":("Meta 5,3%")},
+    {key:"txChkVnd", lbl:"Tx Checkout → Venda",    fmt:fPct, meta:isFeo?null:METAS_T.txChkVnd.val, metaLbl:isFeo?"":("Meta 18,3%")},
+    {key:"connect",  lbl:"Connect Rate",           fmt:fPct, meta:isFeo?null:METAS_T.connect.val,   metaLbl:isFeo?"":("Meta 70%")},
   ];
 
   function tChart(c){
@@ -2334,6 +2335,7 @@ function renderTrafego(){
 // ── Render Campanhas + Anúncios (aba unificada) ───────────────────────────
 function renderAnuncios(){
   const el=document.getElementById("page-anuncios");if(!el)return;
+  const isFeo=S.currentFunil==="feo";
   const _focusedId=document.activeElement?.id; // preserva foco dos inputs de busca
   const dd=D();
   const start=S.startDate, end=S.endDate;
@@ -2651,7 +2653,8 @@ function renderAnuncios(){
     : sorted;
   S._adOrder=filteredAds.map(r=>r.advCode);
 
-  function sc(v,meta,hi){return statusColor(v,meta,hi);}
+  function sc(v,meta,hi){return (isFeo||meta===null)?"var(--text)":statusColor(v,meta,hi);}
+  function sb(v,meta,hi){return (isFeo||meta===null)?"var(--border)":statusBorder(v,meta,hi);}
 
   function thC(col_,lbl,sortFn){
     const active=(sortFn==="camp"?cCol:col)===col_;
@@ -2678,11 +2681,11 @@ function renderAnuncios(){
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:13px;margin-bottom:20px">
       <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val" style="font-size:18px">${fBRL(tot.spend)}</div></div>
       <div class="kc"><div class="kc-lbl">Vendas</div><div class="kc-val" style="font-size:18px">${tot.qtd}</div></div>
-      <div class="kc" style="border-color:${statusBorder(totCpv,META_CPV,false)}"><div class="kc-lbl">Custo por Venda</div><div class="kc-val" style="color:${sc(totCpv,META_CPV,false)};font-size:18px">${fBRL(totCpv)}</div><div class="kc-sub">meta ${fBRL(META_CPV)}</div></div>
-      <div class="kc" style="border-color:${statusBorder(totTicket,META_TICKET,true)}"><div class="kc-lbl">Ticket Médio Front</div><div class="kc-val" style="color:${sc(totTicket,META_TICKET,true)};font-size:18px">${fBRL(totTicket)}</div><div class="kc-sub">meta ${fBRL(META_TICKET)}</div></div>
+      <div class="kc" style="border-color:${sb(totCpv,isFeo?null:META_CPV,false)}"><div class="kc-lbl">Custo por Venda</div><div class="kc-val" style="color:${sc(totCpv,isFeo?null:META_CPV,false)};font-size:18px">${fBRL(totCpv)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(META_CPV)}</div>`}</div>
+      <div class="kc" style="border-color:${sb(totTicket,isFeo?null:META_TICKET,true)}"><div class="kc-lbl">Ticket Médio Front</div><div class="kc-val" style="color:${sc(totTicket,isFeo?null:META_TICKET,true)};font-size:18px">${fBRL(totTicket)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(META_TICKET)}</div>`}</div>
       <div class="kc"><div class="kc-lbl">Ticket Médio Ascensões</div><div class="kc-val" style="font-size:18px">${fBRL(totTicketAsc)}</div><div class="kc-sub">todos os produtos</div></div>
-      <div class="kc" style="border-color:${statusBorder(totCtr,METAS_T.ctr.val,true)}"><div class="kc-lbl">CTR</div><div class="kc-val" style="color:${sc(totCtr,METAS_T.ctr.val,true)};font-size:18px">${fPct(totCtr)}</div><div class="kc-sub">meta ${fPct(METAS_T.ctr.val)}</div></div>
-      <div class="kc" style="border-color:${statusBorder(totCpm,METAS_T.cpm.val,false)}"><div class="kc-lbl">CPM</div><div class="kc-val" style="color:${sc(totCpm,METAS_T.cpm.val,false)};font-size:18px">${fBRL(totCpm)}</div><div class="kc-sub">meta ${fBRL(METAS_T.cpm.val)}</div></div>
+      <div class="kc" style="border-color:${sb(totCtr,isFeo?null:METAS_T.ctr.val,true)}"><div class="kc-lbl">CTR</div><div class="kc-val" style="color:${sc(totCtr,isFeo?null:METAS_T.ctr.val,true)};font-size:18px">${fPct(totCtr)}</div>${isFeo?"":`<div class="kc-sub">meta ${fPct(METAS_T.ctr.val)}</div>`}</div>
+      <div class="kc" style="border-color:${sb(totCpm,isFeo?null:METAS_T.cpm.val,false)}"><div class="kc-lbl">CPM</div><div class="kc-val" style="color:${sc(totCpm,isFeo?null:METAS_T.cpm.val,false)};font-size:18px">${fBRL(totCpm)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(METAS_T.cpm.val)}</div>`}</div>
     </div>
 
     ${(()=>{
@@ -2809,16 +2812,16 @@ function renderAnuncios(){
                   <span style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.campName}">${r.campName}</span>
                 </div>
               </td>
-              <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus}"></div></td>
+              <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?null:META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)}">${fBRL(r.cpc)}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,isFeo?null:METAS_T.cpc.val,false)}">${fBRL(r.cpc)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.connect,METAS_T.connect.val,true)}">${r.connect>0?fPct(r.connect):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txPagChk,METAS_T.txPagChk.val,true)}">${r.txPagChk>0?fPct(r.txPagChk):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,METAS_T.txChkVnd.val,true)}">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
@@ -2861,8 +2864,8 @@ function renderAnuncios(){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Investimento</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${fBRL(pSpend)}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Vendas</div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">${pQtd}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?statusBorder(pCpv,META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?statusBorder(pRoas,META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?sb(pCpv,isFeo?null:META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,isFeo?null:META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?sb(pRoas,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Ticket Médio</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pTicket):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/IC</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pIc>0?fBRL(pCpic):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CTR</div><div style="font-size:13px;font-weight:700;color:${sc(pCtr,METAS_T.ctr.val,true)}">${fPct(pCtr)}</div></div>
@@ -2928,17 +2931,17 @@ function renderAnuncios(){
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?null:META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,METAS_T.cpc.val,false)};font-weight:600">${fBRL(r.cpc)}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.connect,METAS_T.connect.val,true)};font-weight:600">${r.connect>0?fPct(r.connect):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txPagChk,METAS_T.txPagChk.val,true)};font-weight:600">${r.txPagChk>0?fPct(r.txPagChk):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,METAS_T.txChkVnd.val,true)};font-weight:600">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpc,isFeo?null:METAS_T.cpc.val,false)};font-weight:600">${fBRL(r.cpc)}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.connect,isFeo?null:METAS_T.connect.val,true)};font-weight:600">${r.connect>0?fPct(r.connect):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txPagChk,isFeo?null:METAS_T.txPagChk.val,true)};font-weight:600">${r.txPagChk>0?fPct(r.txPagChk):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,isFeo?null:METAS_T.txChkVnd.val,true)};font-weight:600">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.hookRate>0?r.hookRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.holdRate>0?r.holdRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:8px 12px;text-align:center" onclick="event.stopPropagation()">
@@ -3670,7 +3673,7 @@ CPM:\t${fBRL(m.cpm)}\t${cpmE} $${METAS_T.cpm.val}`
   }
 
   const resumoText =
-`*Finanzas con Proposito - Vendas - Reto*\t\t
+`*${isFeo?"Finanzas con Proposito - Vendas - FEO":"Finanzas con Proposito - Vendas - Reto"}*\t\t
 
 _${dateLabel}_\t\t
 
@@ -3761,7 +3764,7 @@ ${block("Hoje", hoje, false)}`;
       </div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-
+    ${retoTempFilterBar()}
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;max-width:560px;margin-bottom:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap">Hoje — Investimento</span>
       <input id="manual-spend-input"
