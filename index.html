@@ -1325,6 +1325,7 @@ async function loadData(force=false){
         const _raw=parseBRL(r["Spend (Cost, Amount Spent)"]);
         const spendV=_acc==="Conta 2 cartão"?_raw/18:_raw;
         const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
+        const icV       =parseInt(r["Action Inline Link Clicks"]||r["Outbound Clicks"]||0)||0;
         const impressV  =parseInt(r["Impressions"]||0)||0;
         const lvV       =parseInt(r["Action Landing Page View"]||0)||0;
         const chkV      =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
@@ -1356,6 +1357,7 @@ async function loadData(force=false){
         if(advCode){
           if(!fmByAd[advCode])fmByAd[advCode]={advCode,adName,campName,igUrl,spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,adIds:new Set(),dates:new Set()};
           fmByAd[advCode].spend+=spendV;fmByAd[advCode].clicks+=clicksV;fmByAd[advCode].impressions+=impressV;
+          fmByAd[advCode].ic+=icV;
           fmByAd[advCode].video3s+=video3sV;fmByAd[advCode].video15s+=video15sV;
           fmByAd[advCode].landingViews+=lvV;fmByAd[advCode].checkouts+=chkV;
           if(adId)fmByAd[advCode].adIds.add(adId);
@@ -1363,7 +1365,7 @@ async function loadData(force=false){
           if(!fmByAdByDate[advCode])fmByAdByDate[advCode]={};
           if(!fmByAdByDate[advCode][d])fmByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,adIds:new Set(),igUrl:""};
           const ab=fmByAdByDate[advCode][d];
-          ab.spend+=spendV;ab.clicks+=clicksV;ab.impressions+=impressV;
+          ab.spend+=spendV;ab.clicks+=clicksV;ab.impressions+=impressV;ab.ic+=icV;
           ab.video3s+=video3sV;ab.video15s+=video15sV;ab.landingViews+=lvV;ab.checkouts+=chkV;
           if(adId)ab.adIds.add(adId);
           if(igUrl&&!ab.igUrl)ab.igUrl=igUrl;
@@ -1373,7 +1375,7 @@ async function loadData(force=false){
           if(!fmByAdId[adId])fmByAdId[adId]={adId,advCode,campName,adStatus:"",campStatus:"",adsetStatus:"",lastStatusDate:"",byDate:{}};
           if(!fmByAdId[adId].byDate[d])fmByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,igUrl:""};
           const ib=fmByAdId[adId].byDate[d];
-          ib.spend+=spendV;ib.clicks+=clicksV;ib.impressions+=impressV;
+          ib.spend+=spendV;ib.clicks+=clicksV;ib.impressions+=impressV;ib.ic+=icV;
           ib.video3s+=video3sV;ib.video15s+=video15sV;ib.landingViews+=lvV;ib.checkouts+=chkV;
           if(!fmByAdId[adId].lastStatusDate||d>fmByAdId[adId].lastStatusDate){
             fmByAdId[adId].adStatus=adStatusR;fmByAdId[adId].campStatus=campStatusR;
@@ -1384,13 +1386,13 @@ async function loadData(force=false){
         if(campName){
           if(!fmByCamp[campName])fmByCamp[campName]={campName,adIds:new Set(),spend:0,clicks:0,impressions:0,ic:0,landingViews:0,checkouts:0,campStatus:"",lastStatusDate:""};
           const cp=fmByCamp[campName];
-          cp.spend+=spendV;cp.clicks+=clicksV;cp.impressions+=impressV;
+          cp.spend+=spendV;cp.clicks+=clicksV;cp.impressions+=impressV;cp.ic+=icV;
           cp.landingViews+=lvV;cp.checkouts+=chkV;
           if(adId)cp.adIds.add(adId);
           if(!fmByCampByDate[campName])fmByCampByDate[campName]={};
           if(!fmByCampByDate[campName][d])fmByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,ic:0,landingViews:0,checkouts:0,adIds:new Set()};
           const cd=fmByCampByDate[campName][d];
-          cd.spend+=spendV;cd.clicks+=clicksV;cd.impressions+=impressV;
+          cd.spend+=spendV;cd.clicks+=clicksV;cd.impressions+=impressV;cd.ic+=icV;
           cd.landingViews+=lvV;cd.checkouts+=chkV;
           if(adId)cd.adIds.add(adId);
         }
@@ -2364,14 +2366,14 @@ function renderAnuncios(){
     for(const k of ks){if(_identMap.has(k)) return _identMap.get(k);}
     return ks[0]||null;
   }
-  // adBuyersMap: adId → Set<buyerKey> (compradores do Reto atribuídos a cada adId)
-  // Usamos apenas buyerKey (sem data) para que Cero/Mapa com datas diferentes sejam somados corretamente
+  // adBuyersMap: adId → Set<buyerKey> (compradores do front-end atribuídos a cada adId)
+  // Para Reto: só produto "reto". Para FEO: qualquer produto (sem upsells ainda)
   const adBuyersMap=new Map();
   for(const r of dd.funilRows){
     const dt=toISO(r["Data da compra"]||"")||"";
     if(dt<start||dt>end) continue;
     if((r["Status da compra"]||"").trim()!=="Paga") continue;
-    if(classifyProduct(r["Nome do produto"]||"")!=="reto") continue;
+    if(!isFeo && classifyProduct(r["Nome do produto"]||"")!=="reto") continue;
     const adId=extractAdId(r["Ad Id"]||"");if(!adId)continue;
     const key=_getCanonical(r);if(!key)continue;
     if(!adBuyersMap.has(adId)) adBuyersMap.set(adId,new Set());
@@ -3608,10 +3610,10 @@ function renderResumo(){
   function periodMetrics(s,e){
     const daily=getDailyT(s,e);
     const t=getTotalsT(daily);
-    // faturamento (receita) do período
-    const dd=D();
+    // faturamento (receita) do período — usa getVendasActive() para respeitar filtros de temp/preço
+    const vA=getVendasActive();
     let valor=0;
-    for(const d of Object.keys(dd.vendas).filter(d=>d>=s&&d<=e)) valor+=(dd.vendas[d]?.valor||0);
+    for(const d of Object.keys(vA).filter(d=>d>=s&&d<=e)) valor+=(vA[d]?.valor||0);
     t.valor=valor;
     t.roas=t.spend>0?valor/t.spend:0;
     t.cpv=t.vendas>0?t.spend/t.vendas:0;
