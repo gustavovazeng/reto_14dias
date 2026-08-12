@@ -3630,7 +3630,7 @@ function renderResumo(){
 
   // Emoji de status
   function em(val, meta, higher){
-    if(val===0) return "";
+    if(isFeo||!meta||val===0) return "";
     const ratio=higher ? val/meta : meta/val;
     if(ratio>=1)   return "🟢";
     if(ratio>=0.85) return "🟡";
@@ -3645,30 +3645,37 @@ function renderResumo(){
 
   // Bloco de texto formatado para copiar (WhatsApp markdown)
   function block(label, m, isTotal){
-    const cpvE  =em(m.cpv,      META_CPV,          false);
-    const roasE =em(m.roas,     META_ROAS,          true);
+    const cpvE  =em(m.cpv,      META_CPV,             false);
+    const roasE =em(m.roas,     META_ROAS,             true);
     const pcE   =em(m.txPagChk, METAS_T.txPagChk.val, true);
     const cvE   =em(m.txChkVnd, METAS_T.txChkVnd.val, true);
-    const cnE   =em(m.connect,  METAS_T.connect.val,  true);
-    const cpcE  =em(m.cpc,      METAS_T.cpc.val,      false);
-    const ctrE  =em(m.ctr,      METAS_T.ctr.val,      true);
-    const cpmE  =em(m.cpm,      METAS_T.cpm.val,      false);
+    const cnE   =em(m.connect,  METAS_T.connect.val,   true);
+    const cpcE  =em(m.cpc,      METAS_T.cpc.val,       false);
+    const ctrE  =em(m.ctr,      METAS_T.ctr.val,       true);
+    const cpmE  =em(m.cpm,      METAS_T.cpm.val,       false);
     const vLabel=isTotal?"Vendas Mensal":"Vendas";
     const cpvLabel=isTotal?"Custo por venda Mensal":"Custo por venda";
+    const cpvMeta=isFeo?"":` ${cpvE} $${META_CPV}`;
+    const pcMeta =isFeo?"":` ${pcE} ${METAS_T.txPagChk.val}%`;
+    const cvMeta =isFeo?"":` ${cvE} ${METAS_T.txChkVnd.val}%`;
+    const cnMeta =isFeo?"":` ${cnE} ${METAS_T.connect.val}%`;
+    const cpcMeta=isFeo?"":` ${cpcE} $${METAS_T.cpc.val}`;
+    const ctrMeta=isFeo?"":` ${ctrE} ${METAS_T.ctr.val}%`;
+    const cpmMeta=isFeo?"":` ${cpmE} $${METAS_T.cpm.val}`;
     return (
 `*-> ${label}*
 Investimento:\t${fBRL(m.spend)}\t
 ${vLabel}:\t${m.vendas}\t
-${cpvLabel}:\t${fBRL(m.cpv)}\t${cpvE} $${META_CPV}
+${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}
 ROAS:\t${m.roas.toFixed(2)}\t
 
-Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%\t${pcE} ${METAS_T.txPagChk.val}%
-Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%\t${cvE} ${METAS_T.txChkVnd.val}%
-Connect Rate:\t${m.connect.toFixed(2)}%\t${cnE} ${METAS_T.connect.val}%
+Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%${pcMeta}
+Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%${cvMeta}
+Connect Rate:\t${m.connect.toFixed(2)}%${cnMeta}
 
-CPC:\t${fBRL(m.cpc)}\t${cpcE} $${METAS_T.cpc.val}
-CTR:\t${m.ctr.toFixed(2)}%\t${ctrE} ${METAS_T.ctr.val}%
-CPM:\t${fBRL(m.cpm)}\t${cpmE} $${METAS_T.cpm.val}`
+CPC:\t${fBRL(m.cpc)}${cpcMeta}
+CTR:\t${m.ctr.toFixed(2)}%${ctrMeta}
+CPM:\t${fBRL(m.cpm)}${cpmMeta}`
     );
   }
 
@@ -3726,16 +3733,16 @@ ${block("Hoje", hoje, false)}`;
       <div style="font-size:13px;font-weight:700;color:var(--text-strong);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">→ ${label}</div>
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
-      ${row(cpvLabel, fBRL(m.cpv), `meta $${META_CPV}`, cpvE)}
-      ${row("ROAS", m.roas.toFixed(2), `meta ${META_ROAS}x`, roasE)}
+      ${row(cpvLabel, fBRL(m.cpv), isFeo?"":(`meta $${META_CPV}`), cpvE)}
+      ${row("ROAS", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
-      ${row("Tx conv PgV-Checkout", m.txPagChk.toFixed(1)+"%", `meta ${METAS_T.txPagChk.val}%`, pcE)}
-      ${row("Tx conv Checkout-Vendas", m.txChkVnd.toFixed(1)+"%", `meta ${METAS_T.txChkVnd.val}%`, cvE)}
-      ${row("Connect Rate", m.connect.toFixed(2)+"%", `meta ${METAS_T.connect.val}%`, cnE)}
+      ${row("Tx conv PgV-Checkout", m.txPagChk.toFixed(1)+"%", isFeo?"":(`meta ${METAS_T.txPagChk.val}%`), pcE)}
+      ${row("Tx conv Checkout-Vendas", m.txChkVnd.toFixed(1)+"%", isFeo?"":(`meta ${METAS_T.txChkVnd.val}%`), cvE)}
+      ${row("Connect Rate", m.connect.toFixed(2)+"%", isFeo?"":(`meta ${METAS_T.connect.val}%`), cnE)}
       <div style="height:10px"></div>
-      ${row("CPC", fBRL(m.cpc), `meta $${METAS_T.cpc.val}`, cpcE)}
-      ${row("CTR", m.ctr.toFixed(2)+"%", `meta ${METAS_T.ctr.val}%`, ctrE)}
-      ${row("CPM", fBRL(m.cpm), `meta $${METAS_T.cpm.val}`, cpmE)}
+      ${row("CPC", fBRL(m.cpc), isFeo?"":(`meta $${METAS_T.cpc.val}`), cpcE)}
+      ${row("CTR", m.ctr.toFixed(2)+"%", isFeo?"":(`meta ${METAS_T.ctr.val}%`), ctrE)}
+      ${row("CPM", fBRL(m.cpm), isFeo?"":(`meta $${METAS_T.cpm.val}`), cpmE)}
     </div>`;
   }
 
