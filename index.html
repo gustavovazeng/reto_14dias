@@ -257,6 +257,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer;fi
       <div class="funil-opt fopt-active" id="fopt-reto" onclick="selectFunil('reto')"><span class="fopt-dot"></span>Finanzas - Reto 14 Dias</div>
       <div class="funil-opt" id="fopt-dist" onclick="selectFunil('dist')"><span class="fopt-dot"></span>Finanzas - Distribuição conteúdo</div>
       <div class="funil-opt" id="fopt-aquec" onclick="selectFunil('aquec')"><span class="fopt-dot"></span>Finanzas - Aquecimento Base</div>
+      <div class="funil-opt" id="fopt-feo" onclick="selectFunil('feo')"><span class="fopt-dot"></span>Finanzas - FEO</div>
     </div>
   </div>
 
@@ -433,6 +434,16 @@ const S = {
   retoTempFilter:"todos",
   metaByTemp:{frio:{},morno:{},quente:{}},
   funilRowsByTemp:{frio:[],morno:[],quente:[]},
+  // ── FEO data ──
+  feoMeta:{}, feoVendas:{},
+  feoMetaByAd:{}, feoMetaByAdByDate:{}, feoMetaByAdId:{},
+  feoMetaByCamp:{}, feoMetaByCampByDate:{},
+  feoVendasByAd:{}, feoVendasByAdDate:{},
+  feoVendasByTemp:{frio:{},morno:{},quente:{}},
+  feoMetaByTemp:{frio:{},morno:{},quente:{}},
+  feoFunilRows:[], feoFunilRowsByTemp:{frio:[],morno:[],quente:[]},
+  feoTempFilter:"todos",
+  feoPriceFilter:"todos",
   currentPage:"principal",
 };
 
@@ -607,9 +618,17 @@ function extractAdvCode(name){
 function extractTempFromCamp(name){
   if(!name) return null;
   const n=name.toLowerCase();
-  if(n.includes("quente")) return "quente";
-  if(n.includes("morno"))  return "morno";
   if(n.includes("frio")||n.includes("cold")) return "frio";
+  if(n.includes("morno"))  return "morno";
+  if(n.includes("quente")) return "quente";
+  return null;
+}
+function extractPriceFromCamp(name){
+  if(!name) return null;
+  const n=name.toLowerCase();
+  if(n.includes("220peso")) return "220pesos";
+  if(n.includes("170peso")) return "170pesos";
+  if(n.includes("85peso"))  return "85pesos";
   return null;
 }
 function extractCountryFromAdset(adsetName){
@@ -1289,6 +1308,147 @@ async function loadData(force=false){
     S.aquecSeg=asD; S.aquecSegByAd=asByAd; S.aquecSegByCamp=asByCamp;
     S.updated=lastISO?fDateBR(lastISO):"—";
 
+    // ── FEO ────────────────────────────────────────────────────────────────
+    const [feoMetaJ, feoVendasJ] = await Promise.all([
+      fetchCSVSafe("FEO/Base dashboard - FEO - Base meta.csv"),
+      fetchCSVSafe("FEO/Base dashboard - FEO - Base vendas.csv"),
+    ]);
+    {
+      const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
+      const fmByTemp={frio:{},morno:{},quente:{}};
+      for(const r of parseSheet(feoMetaJ)){
+        const d=toISO(r["Date"]);if(!d)continue;
+        const _acc=(r["Account Name"]||r["Account name"]||"").trim();
+        const _raw=parseBRL(r["Spend (Cost, Amount Spent)"]);
+        const spendV=_acc==="Conta 2 cartão"?_raw/18:_raw;
+        const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
+        const impressV  =parseInt(r["Impressions"]||0)||0;
+        const lvV       =parseInt(r["Action Landing Page View"]||0)||0;
+        const chkV      =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
+        const purchV    =parseInt(r["Action Omni Purchase"]||0)||0;
+        const video3sV  =parseInt(r["Action Video View"]||0)||0;
+        const video15sV =parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
+        const adId      =(r["Ad ID"]||r["Ad Id"]||"").trim();
+        const adName    =(r["Ad Name"]||"").trim();
+        const adsetName =(r["Adset Name"]||"").trim();
+        const campName  =(r["Campaign Name"]||"").trim();
+        const igUrl     =r["Instagram Permalink URL"]||"";
+        const adStatusR =(r["Ad Status"]||"").trim();
+        const campStatusR=(r["Campaign Status"]||"").trim();
+        const adsetStatusR=(r["Adset Status"]||"").trim();
+        const advCode   =adName||adId;
+        // daily totals
+        if(!fmD[d])fmD[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+        fmD[d].spend+=spendV;fmD[d].clicks+=clicksV;fmD[d].impressions+=impressV;
+        fmD[d].landingViews+=lvV;fmD[d].checkouts+=chkV;fmD[d].purchases+=purchV;
+        // by temp
+        const _t=extractTempFromCamp(campName);
+        if(_t){
+          if(!fmByTemp[_t][d])fmByTemp[_t][d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+          const td=fmByTemp[_t][d];
+          td.spend+=spendV;td.clicks+=clicksV;td.impressions+=impressV;
+          td.landingViews+=lvV;td.checkouts+=chkV;td.purchases+=purchV;
+        }
+        // by ad
+        if(advCode){
+          if(!fmByAd[advCode])fmByAd[advCode]={advCode,adName,campName,igUrl,spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,adIds:new Set(),dates:new Set()};
+          fmByAd[advCode].spend+=spendV;fmByAd[advCode].clicks+=clicksV;fmByAd[advCode].impressions+=impressV;
+          fmByAd[advCode].video3s+=video3sV;fmByAd[advCode].video15s+=video15sV;
+          fmByAd[advCode].landingViews+=lvV;fmByAd[advCode].checkouts+=chkV;
+          if(adId)fmByAd[advCode].adIds.add(adId);
+          fmByAd[advCode].dates.add(d);
+          if(!fmByAdByDate[advCode])fmByAdByDate[advCode]={};
+          if(!fmByAdByDate[advCode][d])fmByAdByDate[advCode][d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,adIds:new Set(),igUrl:""};
+          const ab=fmByAdByDate[advCode][d];
+          ab.spend+=spendV;ab.clicks+=clicksV;ab.impressions+=impressV;
+          ab.video3s+=video3sV;ab.video15s+=video15sV;ab.landingViews+=lvV;ab.checkouts+=chkV;
+          if(adId)ab.adIds.add(adId);
+          if(igUrl&&!ab.igUrl)ab.igUrl=igUrl;
+        }
+        // by adId
+        if(adId&&advCode){
+          if(!fmByAdId[adId])fmByAdId[adId]={adId,advCode,campName,adStatus:"",campStatus:"",adsetStatus:"",lastStatusDate:"",byDate:{}};
+          if(!fmByAdId[adId].byDate[d])fmByAdId[adId].byDate[d]={spend:0,clicks:0,impressions:0,ic:0,video3s:0,video15s:0,landingViews:0,checkouts:0,igUrl:""};
+          const ib=fmByAdId[adId].byDate[d];
+          ib.spend+=spendV;ib.clicks+=clicksV;ib.impressions+=impressV;
+          ib.video3s+=video3sV;ib.video15s+=video15sV;ib.landingViews+=lvV;ib.checkouts+=chkV;
+          if(!fmByAdId[adId].lastStatusDate||d>fmByAdId[adId].lastStatusDate){
+            fmByAdId[adId].adStatus=adStatusR;fmByAdId[adId].campStatus=campStatusR;
+            fmByAdId[adId].adsetStatus=adsetStatusR;fmByAdId[adId].lastStatusDate=d;
+          }
+        }
+        // by camp
+        if(campName){
+          if(!fmByCamp[campName])fmByCamp[campName]={campName,adIds:new Set(),spend:0,clicks:0,impressions:0,ic:0,landingViews:0,checkouts:0,campStatus:"",lastStatusDate:""};
+          const cp=fmByCamp[campName];
+          cp.spend+=spendV;cp.clicks+=clicksV;cp.impressions+=impressV;
+          cp.landingViews+=lvV;cp.checkouts+=chkV;
+          if(adId)cp.adIds.add(adId);
+          if(!fmByCampByDate[campName])fmByCampByDate[campName]={};
+          if(!fmByCampByDate[campName][d])fmByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,ic:0,landingViews:0,checkouts:0,adIds:new Set()};
+          const cd=fmByCampByDate[campName][d];
+          cd.spend+=spendV;cd.clicks+=clicksV;cd.impressions+=impressV;
+          cd.landingViews+=lvV;cd.checkouts+=chkV;
+          if(adId)cd.adIds.add(adId);
+        }
+      }
+      S.feoMeta=fmD; S.feoMetaByAd=fmByAd; S.feoMetaByAdByDate=fmByAdByDate;
+      S.feoMetaByAdId=fmByAdId; S.feoMetaByCamp=fmByCamp; S.feoMetaByCampByDate=fmByCampByDate;
+      S.feoMetaByTemp=fmByTemp;
+
+      // FEO vendas
+      const feoRows=parseHotmartRows(feoVendasJ);
+      const fvD={}, fvByAd={}, fvByAdDate={};
+      const fvByTemp={frio:{},morno:{},quente:{}};
+      for(const r of feoRows){
+        if(r["Status da compra"]!=="Paga") continue;
+        const d=r["Data da compra"];if(!d)continue;
+        const valor=parseFloat(r["Valor do produto"])||0;
+        if(!fvD[d])fvD[d]={qtd:0,valor:0,taxa:0};
+        fvD[d].qtd+=1;fvD[d].valor+=valor;
+        const adId=r["Ad Id"];
+        if(adId){
+          if(!fvByAd[adId])fvByAd[adId]={qtd:0,valor:0,taxa:0};
+          fvByAd[adId].qtd+=1;fvByAd[adId].valor+=valor;
+          if(!fvByAdDate[adId])fvByAdDate[adId]={};
+          if(!fvByAdDate[adId][d])fvByAdDate[adId][d]={qtd:0,valor:0,taxa:0};
+          fvByAdDate[adId][d].qtd+=1;fvByAdDate[adId][d].valor+=valor;
+        }
+      }
+      // feoVendasByTemp via adId→campName→temp
+      for(const [adId,byDate] of Object.entries(fvByAdDate)){
+        const adData=fmByAdId[adId];if(!adData)continue;
+        const temp=extractTempFromCamp(adData.campName);if(!temp)continue;
+        for(const [d,vv] of Object.entries(byDate)){
+          if(!fvByTemp[temp][d])fvByTemp[temp][d]={qtd:0,valor:0,taxa:0};
+          fvByTemp[temp][d].qtd+=vv.qtd;fvByTemp[temp][d].valor+=vv.valor;
+        }
+      }
+      S.feoVendas=fvD;S.feoVendasByAd=fvByAd;S.feoVendasByAdDate=fvByAdDate;
+      S.feoVendasByTemp=fvByTemp;
+
+      // FEO funil rows + by temp
+      S.feoFunilRows=feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Orden"}));
+      {
+        const fbuyerTemp={};
+        for(const r of feoRows){
+          if(r["Status da compra"]!=="Paga")continue;
+          const adId=r["Ad Id"];if(!adId)continue;
+          const adData=fmByAdId[adId];if(!adData)continue;
+          const temp=extractTempFromCamp(adData.campName);if(!temp)continue;
+          const em=(r["Email"]||"").toLowerCase().trim();
+          if(em)fbuyerTemp["e:"+em]=temp;
+        }
+        const ffbt={frio:[],morno:[],quente:[]};
+        for(const r of S.feoFunilRows){
+          const em=(r["Email"]||"").toLowerCase().trim();
+          const temp=fbuyerTemp["e:"+em];
+          if(temp)ffbt[temp].push(r);
+        }
+        S.feoFunilRowsByTemp=ffbt;
+      }
+    }
+
     S.firstLoad=false;
   }catch(e){
     S.error="Erro ao processar dados: "+e.message;
@@ -1389,7 +1549,8 @@ function switchFunil(id){
   const distPages=["principal","anuncios","resumo"];
   const aquecPages=["principal","anuncios","resumo"];
   const retoPages=["principal","trafego","funil","anuncios","resumo"];
-  const valid=id==="dist"?distPages:id==="aquec"?aquecPages:retoPages;
+  const feoPages=["principal","trafego","funil","anuncios","resumo"];
+  const valid=id==="dist"?distPages:id==="aquec"?aquecPages:id==="feo"?feoPages:retoPages;
   if(!valid.includes(S.currentPage)) S.currentPage="principal";
   navTo(S.currentPage);
 }
@@ -2833,6 +2994,108 @@ function getMetaActive(){
   if(S.retoTempFilter==="todos") return S.meta;
   return S.metaByTemp[S.retoTempFilter]||{};
 }
+function getFeoMetaActive(){
+  const tF=S.feoTempFilter, pF=S.feoPriceFilter;
+  if(tF==="todos"&&pF==="todos") return S.feoMeta;
+  // Filter dynamically from campByDate, applying both filters
+  const res={};
+  for(const [camp,byDate] of Object.entries(S.feoMetaByCampByDate)){
+    if(tF!=="todos"&&extractTempFromCamp(camp)!==tF) continue;
+    if(pF!=="todos"&&extractPriceFromCamp(camp)!==pF) continue;
+    for(const [d,m] of Object.entries(byDate)){
+      if(!res[d])res[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+      res[d].spend+=m.spend;res[d].clicks+=m.clicks;res[d].impressions+=m.impressions;
+      res[d].landingViews+=m.landingViews||0;res[d].checkouts+=m.checkouts||0;
+    }
+  }
+  return res;
+}
+function getFeoVendasActive(){
+  const tF=S.feoTempFilter, pF=S.feoPriceFilter;
+  if(tF==="todos"&&pF==="todos") return S.feoVendas;
+  const res={};
+  for(const [adId,byDate] of Object.entries(S.feoVendasByAdDate)){
+    const ad=S.feoMetaByAdId[adId]; if(!ad) continue;
+    if(tF!=="todos"&&extractTempFromCamp(ad.campName)!==tF) continue;
+    if(pF!=="todos"&&extractPriceFromCamp(ad.campName)!==pF) continue;
+    for(const [d,vv] of Object.entries(byDate)){
+      if(!res[d])res[d]={qtd:0,valor:0,taxa:0};
+      res[d].qtd+=vv.qtd;res[d].valor+=vv.valor;
+    }
+  }
+  return res;
+}
+function getFeoFunilRows(){
+  const tF=S.feoTempFilter, pF=S.feoPriceFilter;
+  let rows=tF==="todos"?S.feoFunilRows:(S.feoFunilRowsByTemp[tF]||[]);
+  if(pF!=="todos") rows=rows.filter(r=>{
+    const ad=S.feoMetaByAdId[r["Ad Id"]];
+    return ad&&extractPriceFromCamp(ad.campName)===pF;
+  });
+  return rows;
+}
+function getFeoDaily(start,end){
+  const metaA=getFeoMetaActive(), vA=getFeoVendasActive();
+  const all=new Set([...Object.keys(metaA),...Object.keys(vA)]);
+  return Array.from(all).sort().filter(dt=>dt>=start&&dt<=end).map(date=>{
+    const m=metaA[date]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
+    const v=vA[date]||{qtd:0,valor:0,taxa:0};
+    return{date,label:fDate(date),spend:m.spend,faturamento:v.valor,vendas:v.qtd,
+      gerenciador:m.purchases||0,
+      roas:m.spend>0?v.valor/m.spend:0,cpv:v.qtd>0?m.spend/v.qtd:0,
+      ticket:v.qtd>0?v.valor/v.qtd:0,lucro:v.valor-(m.spend*TAXA_IMPOSTO)};
+  });
+}
+function getFeoTotals(daily){
+  const vA=getFeoVendasActive();
+  const t=daily.reduce((a,dt)=>({spend:a.spend+dt.spend,fat:a.fat+dt.faturamento,vendas:a.vendas+dt.vendas,
+    taxa:a.taxa+(vA[dt.date]?.taxa||0)}),{spend:0,fat:0,vendas:0,taxa:0});
+  return{...t,faturamento:t.fat,
+    roas:t.spend>0?t.fat/t.spend:0,cpv:t.vendas>0?t.spend/t.vendas:0,
+    ticket:t.vendas>0?t.fat/t.vendas:0,lucro:t.fat-t.taxa-(t.spend*TAXA_IMPOSTO)};
+}
+function getFeoDailyT(start,end){
+  const metaA=getFeoMetaActive(), vA=getFeoVendasActive();
+  return Object.keys(metaA).sort().filter(dt=>dt>=start&&dt<=end).map(date=>{
+    const m=metaA[date];
+    const v=vA[date]||{qtd:0};
+    return{date,label:fDate(date),spend:m.spend,cpv:v.qtd>0?m.spend/v.qtd:0,
+      cpc:m.clicks>0?m.spend/m.clicks:0,ctr:m.impressions>0?(m.clicks/m.impressions)*100:0,
+      cpm:m.impressions>0?(m.spend/m.impressions)*1000:0,
+      txPagChk:m.landingViews>0?(m.checkouts/m.landingViews)*100:0,
+      txChkVnd:m.checkouts>0?(v.qtd/m.checkouts)*100:0,
+      connect:m.clicks>0?(m.landingViews/m.clicks)*100:0,
+      clicks:m.clicks,impressions:m.impressions,landingViews:m.landingViews,
+      checkouts:m.checkouts,vendas:v.qtd};
+  });
+}
+function getFeoTotalsT(daily){ return getTotalsT(daily); }
+function getFeoDayMetrics(iso){
+  const m=getFeoMetaActive()[iso]||{spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0};
+  const v=getFeoVendasActive()[iso]||{qtd:0};
+  return{spend:m.spend,vendas:v.qtd,
+    cpc:m.clicks>0?m.spend/m.clicks:0,ctr:m.impressions>0?(m.clicks/m.impressions)*100:0,
+    cpm:m.impressions>0?(m.spend/m.impressions)*1000:0,
+    txPagChk:m.landingViews>0?(m.checkouts/m.landingViews)*100:0,
+    txChkVnd:m.checkouts>0?(v.qtd/m.checkouts)*100:0,
+    connect:m.clicks>0?(m.landingViews/m.clicks)*100:0,
+    cpv:v.qtd>0?m.spend/v.qtd:0};
+}
+function feoTempFilterBar(){
+  const opts=[{k:"todos",l:"Todos"},{k:"frio",l:"🧊 Frio"},{k:"morno",l:"🔥 Morno"},{k:"quente",l:"⚡ Quente"}];
+  return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--hint);margin-right:2px">Temperatura:</span>
+    ${opts.map(o=>`<button class="btn-q${S.feoTempFilter===o.k?" on":""}" onclick="S.feoTempFilter='${o.k}';render()">${o.l}</button>`).join("")}
+  </div>`;
+}
+function feoPriceFilterBar(){
+  const opts=[{k:"todos",l:"Todos"},{k:"85pesos",l:"$85"},{k:"170pesos",l:"$170"},{k:"220pesos",l:"$220"}];
+  return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--hint);margin-right:2px">Preço:</span>
+    ${opts.map(o=>`<button class="btn-q${S.feoPriceFilter===o.k?" on":""}" onclick="S.feoPriceFilter='${o.k}';render()">${o.l}</button>`).join("")}
+  </div>`;
+}
+function feoFiltersBar(){ return feoTempFilterBar()+feoPriceFilterBar(); }
 function getVendasActive(){
   if(S.retoTempFilter==="todos") return S.vendas;
   return S.vendasByTemp[S.retoTempFilter]||{};
@@ -3543,6 +3806,12 @@ function render(){
     if(S.currentPage==="principal") renderAquecPrincipal();
     else if(S.currentPage==="anuncios") renderAquecAnuncios();
     else if(S.currentPage==="resumo") renderAquecResumo();
+  } else if(S.currentFunil==="feo"){
+    if(S.currentPage==="principal") renderFeoPrincipal();
+    else if(S.currentPage==="trafego") renderFeoTrafego();
+    else if(S.currentPage==="anuncios") renderFeoAnuncios();
+    else if(S.currentPage==="funil") renderFeoFunil();
+    else if(S.currentPage==="resumo") renderFeoResumo();
   } else {
     if(S.currentPage==="principal") renderPrincipal();
     else if(S.currentPage==="trafego") renderTrafego();
@@ -4102,6 +4371,358 @@ function distCopyResumo(){
     const b=document.getElementById("dist-copy-btn");
     if(b){const o=b.innerHTML;b.innerHTML="✓ Copiado!";b.style.color="#4ade80";setTimeout(()=>{b.innerHTML=o;b.style.color="";},1800);}
   }).catch(()=>alert("Selecione o texto manualmente."));
+}
+
+// ── FEO render functions ──────────────────────────────────────────────────
+function renderFeoPrincipal(){
+  const el=document.getElementById("page-principal");if(!el)return;
+  const daily=getFeoDaily(S.startDate,S.endDate);
+  const tot=getFeoTotals(daily);
+
+  el.innerHTML=`
+    <div class="hdr" style="margin-bottom:6px">
+      <div>
+        <div class="hdr-title">Finanzas - FEO (Planilla Finanzas en Orden)</div>
+        <div class="hdr-sub">atualizado em: ${D().updated||"—"}${daily.length>0?` · ${daily.length} dias`:""}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
+    </div>
+    ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${feoFiltersBar()}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
+      ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
+      ${kpiCard("ROAS",tot.roas>0?tot.roas.toFixed(2)+"x":"—",`sem meta definida`,"var(--text-strong)")}
+      ${kpiCard("Faturamento",fBRL(tot.faturamento),"Planilla Finanzas en Orden","var(--text-strong)")}
+      ${kpiCard("Custo por Venda",tot.cpv>0?fBRL(tot.cpv):"—",`sem meta definida`,"var(--text-strong)")}
+    </div>
+    <div class="cc" style="margin-bottom:12px;position:relative">
+      <div class="ch">
+        <span class="ct">Investimento × Custo por Venda</span>
+        <div class="lg">
+          <span class="li"><span class="ll" style="background:${CHART_INV}"></span>Invest. (esq.)</span>
+          <span class="li"><span class="ll" style="background:${CHART_CPV}"></span>CPV (dir.)</span>
+        </div>
+      </div>
+      <div style="position:relative"><canvas id="c-feo-dual"></canvas><div class="tip" id="t-feo-dual"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="cc" style="position:relative">
+        <div class="ch"><span class="ct">ROAS diário</span></div>
+        <div style="position:relative"><canvas id="c-feo-roas"></canvas><div class="tip" id="t-feo-roas"></div></div>
+      </div>
+      <div class="cc" style="position:relative">
+        <div class="ch"><span class="ct">Faturamento (FEO)</span></div>
+        <div style="position:relative"><canvas id="c-feo-fat"></canvas><div class="tip" id="t-feo-fat"></div></div>
+      </div>
+    </div>
+    <div class="cc" style="margin-bottom:12px">
+      <div class="ch">
+        <span class="ct">Vendas FEO (dia a dia)</span>
+        <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas</span></div>
+      </div>
+      <div style="position:relative"><canvas id="c-feo-bar"></canvas><div class="tip" id="t-feo-bar"></div></div>
+    </div>
+    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
+    <p class="foot">FEO/Base dashboard - FEO - Base meta.csv + Base vendas.csv</p>`;
+
+  requestAnimationFrame(()=>{
+    const mW=document.getElementById("c-feo-dual")?.parentElement?.offsetWidth||720;
+    const sW=document.getElementById("c-feo-roas")?.parentElement?.offsetWidth||340;
+    const bW=document.getElementById("c-feo-bar")?.parentElement?.offsetWidth||720;
+    drawDual("c-feo-dual",daily,mW,230);
+    drawChartWithOverlay("c-feo-roas",daily,"roas",v=>v.toFixed(2)+"x",null,null,false,false,sW,170);
+    drawChartWithOverlay("c-feo-fat",daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
+    drawBarVendas("c-feo-bar",daily,bW,160,false);
+    setupTip("c-feo-bar","t-feo-bar",daily,[{key:"vendas",color:"#34d399",name:"Vendas"}],36);
+    setupTip("c-feo-dual","t-feo-dual",daily,[
+      {key:"spend",color:CHART_INV,name:"Investimento"},
+      {key:"cpv",color:CHART_CPV,name:"CPV"},
+    ]);
+    setupTip("c-feo-roas","t-feo-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
+    setupTip("c-feo-fat","t-feo-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
+  });
+}
+
+function renderFeoTrafego(){
+  const el=document.getElementById("page-trafego");if(!el)return;
+  const today=todayISO();
+  const todayM=getFeoDayMetrics(today);
+  const p3Start=subDays(today,3), p3End=subDays(today,1);
+  const p3Daily=getFeoDailyT(p3Start,p3End);
+  const p3Tot=getFeoTotalsT(p3Daily);
+  const p7Start=subDays(today,7), p7End=subDays(today,1);
+  const p7Daily=getFeoDailyT(p7Start,p7End);
+  const p7Tot=getFeoTotalsT(p7Daily);
+  const daily=getFeoDailyT(S.startDate,S.endDate);
+  const totT=getFeoTotalsT(daily);
+
+  const METRICS=[
+    {key:"cpm",   label:"CPM",             fmt:fBRL,   pct:false},
+    {key:"connect",label:"Connect Rate",    fmt:v=>v.toFixed(1)+"%",pct:false},
+    {key:"txPagChk",label:"Tx Pág→Chk",    fmt:v=>v.toFixed(1)+"%",pct:false},
+    {key:"txChkVnd",label:"Tx Chk→Vnd",    fmt:v=>v.toFixed(1)+"%",pct:false},
+    {key:"cpc",   label:"CPC",             fmt:fBRL,   pct:false},
+    {key:"ctr",   label:"CTR",             fmt:v=>v.toFixed(2)+"%",pct:false},
+    {key:"cpv",   label:"CPV",             fmt:fBRL,   pct:false},
+  ];
+
+  const rows=[
+    {label:"Hoje",   d:todayM},
+    {label:"Últ. 3 dias",d:p3Tot},
+    {label:"Últ. 7 dias",d:p7Tot},
+    {label:"Período",d:totT},
+  ];
+
+  el.innerHTML=`
+    <div class="hdr">
+      <div>
+        <div class="hdr-title">Métricas de Tráfego — FEO</div>
+        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div>
+      </div>
+    </div>
+    ${feoFiltersBar()}
+    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
+          <th style="padding:8px 10px;text-align:left;font-weight:600">Período</th>
+          ${METRICS.map(m=>`<th style="padding:8px 10px;text-align:right;font-weight:600">${m.label}</th>`).join("")}
+        </tr></thead>
+        <tbody>
+          ${rows.map(row=>`<tr style="border-top:1px solid var(--border)">
+            <td style="padding:10px 10px;font-weight:600;color:var(--text)">${row.label}</td>
+            ${METRICS.map(m=>`<td style="padding:10px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-strong)">${m.fmt(row.d[m.key]||0)}</td>`).join("")}
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+      ${METRICS.filter(m=>["cpm","cpc","ctr","cpv","connect","txPagChk","txChkVnd"].includes(m.key)).map(m=>`
+      <div class="cc" style="position:relative">
+        <div class="ch"><span class="ct">${m.label}</span></div>
+        <div style="position:relative"><canvas id="tc-feo-${m.key}"></canvas><div class="tip" id="tt-feo-${m.key}"></div></div>
+      </div>`).join("")}
+    </div>
+    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
+    <p class="foot">FEO - Base meta.csv</p>`;
+
+  requestAnimationFrame(()=>{
+    METRICS.forEach(m=>{
+      const sW=document.getElementById(`tc-feo-${m.key}`)?.parentElement?.offsetWidth||340;
+      drawChartWithOverlay(`tc-feo-${m.key}`,daily,m.key,m.fmt,null,null,false,false,sW,140);
+      setupTip(`tc-feo-${m.key}`,`tt-feo-${m.key}`,daily,[{key:m.key,color:CHART_COLOR,name:m.label,fmt:m.fmt}],52,12);
+    });
+  });
+}
+
+function renderFeoAnuncios(){
+  const el=document.getElementById("page-anuncios");if(!el)return;
+  const start=S.startDate, end=S.endDate;
+
+  // Build camp rows from feoMetaByCamp + feoMetaByCampByDate + feoVendasByAdDate
+  const campRows=[];
+  for(const [campName,cp] of Object.entries(S.feoMetaByCamp)){
+    let cSpend=0,cClicks=0,cImp=0,cLv=0,cChk=0,cQtd=0,cFat=0;
+    const byDate=S.feoMetaByCampByDate[campName]||{};
+    for(const [d,m] of Object.entries(byDate)){
+      if(d<start||d>end)continue;
+      cSpend+=m.spend;cClicks+=m.clicks;cImp+=m.impressions;cLv+=m.landingViews;cChk+=m.checkouts;
+    }
+    for(const adId of (cp.adIds||new Set())){
+      const vByDate=S.feoVendasByAdDate[adId]||{};
+      for(const [d,vv] of Object.entries(vByDate)){
+        if(d<start||d>end)continue;
+        cQtd+=vv.qtd;cFat+=vv.valor;
+      }
+    }
+    const temp=extractTempFromCamp(campName);
+    const price=extractPriceFromCamp(campName);
+    if(S.feoTempFilter!=="todos"&&temp!==S.feoTempFilter) continue;
+    if(S.feoPriceFilter!=="todos"&&price!==S.feoPriceFilter) continue;
+    campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImp,
+      ctr:cImp>0?(cClicks/cImp)*100:0,cpm:cImp>0?(cSpend/cImp)*1000:0,cpc:cClicks>0?cSpend/cClicks:0,
+      connect:cClicks>0?(cLv/cClicks)*100:0,txPagChk:cLv>0?(cChk/cLv)*100:0,txChkVnd:cChk>0?(cQtd/cChk)*100:0,
+      vendas:cQtd,faturamento:cFat,roas:cSpend>0?cFat/cSpend:0,cpv:cQtd>0?cSpend/cQtd:0});
+  }
+  campRows.sort((a,b)=>b[S.cSort.col]-a[S.cSort.col]*(S.cSort.dir==="asc"?-1:1));
+
+  // Build ad rows from feoMetaByAd + feoVendasByAdDate
+  const adRows=[];
+  for(const [advCode,ad] of Object.entries(S.feoMetaByAd)){
+    let aSpend=0,aClicks=0,aImp=0,aLv=0,aChk=0,aQtd=0,aFat=0;
+    const byDate=S.feoMetaByAdByDate[advCode]||{};
+    for(const [d,m] of Object.entries(byDate)){
+      if(d<start||d>end)continue;
+      aSpend+=m.spend;aClicks+=m.clicks;aImp+=m.impressions;aLv+=m.landingViews;aChk+=m.checkouts;
+    }
+    // adIds for this advCode
+    for(const adId of (ad.adIds||new Set())){
+      const vByDate=S.feoVendasByAdDate[adId]||{};
+      for(const [d,vv] of Object.entries(vByDate)){
+        if(d<start||d>end)continue;
+        aQtd+=vv.qtd;aFat+=vv.valor;
+      }
+    }
+    const temp=extractTempFromCamp(ad.campName||"");
+    const price=extractPriceFromCamp(ad.campName||"");
+    if(S.feoTempFilter!=="todos"&&temp!==S.feoTempFilter) continue;
+    if(S.feoPriceFilter!=="todos"&&price!==S.feoPriceFilter) continue;
+    adRows.push({advCode,adName:ad.adName,campName:ad.campName,igUrl:ad.igUrl,
+      spend:aSpend,clicks:aClicks,impressions:aImp,
+      ctr:aImp>0?(aClicks/aImp)*100:0,cpm:aImp>0?(aSpend/aImp)*1000:0,cpc:aClicks>0?aSpend/aClicks:0,
+      connect:aClicks>0?(aLv/aClicks)*100:0,txPagChk:aLv>0?(aChk/aLv)*100:0,txChkVnd:aChk>0?(aQtd/aChk)*100:0,
+      vendas:aQtd,faturamento:aFat,roas:aSpend>0?aFat/aSpend:0,cpv:aQtd>0?aSpend/aQtd:0});
+  }
+  adRows.sort((a,b)=>b[S.aSort.col]-a[S.aSort.col]*(S.aSort.dir==="asc"?-1:1));
+
+  const thC=(col,lbl,ns)=>`<th onclick="if('${ns}'==='camp')sortCampanhas('${col}');else sortAnuncios('${col}')" style="padding:8px 10px;cursor:pointer;text-align:right;white-space:nowrap">${lbl}${S.cSort.col===col&&ns==="camp"?(" "+(S.cSort.dir==="asc"?"↑":"↓")):(S.aSort.col===col&&ns==="ad"?(" "+(S.aSort.dir==="asc"?"↑":"↓")):"")} </th>`;
+  const fmtCell=(v,fmt)=>`<td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-strong)">${fmt(v)}</td>`;
+
+  el.innerHTML=`
+    <div class="hdr">
+      <div><div class="hdr-title">Anúncios — FEO</div>
+        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div></div>
+    </div>
+    ${feoFiltersBar()}
+    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
+
+    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
+      <div class="ch"><span class="ct">Campanhas (${campRows.length})</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
+        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">
+          <th style="padding:8px 10px;text-align:left">Campanha</th>
+          ${thC("spend","Invest.","camp")}${thC("cpm","CPM","camp")}${thC("cpc","CPC","camp")}
+          ${thC("ctr","CTR","camp")}${thC("connect","Connect","camp")}
+          ${thC("txPagChk","Tx P→C","camp")}${thC("txChkVnd","Tx C→V","camp")}
+          ${thC("vendas","Vendas","camp")}${thC("roas","ROAS","camp")}${thC("cpv","CPV","camp")}
+        </tr></thead>
+        <tbody>${campRows.map(r=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:8px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${r.campName}</td>
+          ${fmtCell(r.spend,fBRL)}${fmtCell(r.cpm,fBRL)}${fmtCell(r.cpc,fBRL)}
+          ${fmtCell(r.ctr,v=>v.toFixed(2)+"%")}${fmtCell(r.connect,v=>v.toFixed(1)+"%")}
+          ${fmtCell(r.txPagChk,v=>v.toFixed(1)+"%")}${fmtCell(r.txChkVnd,v=>v.toFixed(1)+"%")}
+          ${fmtCell(r.vendas,v=>v.toFixed(0))}${fmtCell(r.roas,v=>v>0?v.toFixed(2)+"x":"—")}${fmtCell(r.cpv,v=>v>0?fBRL(v):"—")}
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+
+    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
+      <div class="ch"><span class="ct">Anúncios (${adRows.length})</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
+        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">
+          <th style="padding:8px 10px;text-align:left">Anúncio</th>
+          ${thC("spend","Invest.","ad")}${thC("cpm","CPM","ad")}${thC("cpc","CPC","ad")}
+          ${thC("ctr","CTR","ad")}${thC("connect","Connect","ad")}
+          ${thC("txPagChk","Tx P→C","ad")}${thC("txChkVnd","Tx C→V","ad")}
+          ${thC("vendas","Vendas","ad")}${thC("roas","ROAS","ad")}${thC("cpv","CPV","ad")}
+        </tr></thead>
+        <tbody>${adRows.map(r=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:8px 10px;max-width:220px;font-size:11px">
+            ${r.igUrl?`<a href="${r.igUrl}" target="_blank" style="color:var(--accent);text-decoration:none">${r.adName||r.advCode}</a>`:r.adName||r.advCode}
+          </td>
+          ${fmtCell(r.spend,fBRL)}${fmtCell(r.cpm,fBRL)}${fmtCell(r.cpc,fBRL)}
+          ${fmtCell(r.ctr,v=>v.toFixed(2)+"%")}${fmtCell(r.connect,v=>v.toFixed(1)+"%")}
+          ${fmtCell(r.txPagChk,v=>v.toFixed(1)+"%")}${fmtCell(r.txChkVnd,v=>v.toFixed(1)+"%")}
+          ${fmtCell(r.vendas,v=>v.toFixed(0))}${fmtCell(r.roas,v=>v>0?v.toFixed(2)+"x":"—")}${fmtCell(r.cpv,v=>v>0?fBRL(v):"—")}
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+    <p class="foot">FEO - Base meta.csv</p>`;
+}
+
+function renderFeoFunil(){
+  const el=document.getElementById("page-funil");if(!el)return;
+  const _rows=getFeoFunilRows();
+  const start=S.startDate||"", end=S.endDate||"";
+  let qtd=0,fat=0,totalSpend=0;
+  for(const r of _rows){
+    if(r["Status da compra"]!=="Paga")continue;
+    const d=r["Data da compra"]||"";if(d<start||d>end)continue;
+    qtd+=1;fat+=parseFloat(r["Valor do produto"])||0;
+  }
+  const metaD=getFeoMetaActive();
+  for(const [d,m] of Object.entries(metaD)){
+    if(start&&d<start)continue;if(end&&d>end)continue;
+    totalSpend+=m.spend||0;
+  }
+  const roas=totalSpend>0?fat/totalSpend:0;
+  const cpv=qtd>0?totalSpend/qtd:0;
+  const ticket=qtd>0?fat/qtd:0;
+
+  el.innerHTML=`
+    <div class="hdr">
+      <div>
+        <div class="hdr-title">Métricas do Funil — FEO</div>
+        <div class="hdr-sub">${qtd} compradores · atualizado em: ${D().updated||"—"}</div>
+      </div>
+    </div>
+    ${feoFiltersBar()}
+    <div class="g4" style="margin-bottom:14px">
+      <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val kc-val-sm">${fBRL(totalSpend)}</div><div class="kc-sub">Meta Ads</div></div>
+      <div class="kc"><div class="kc-lbl">Faturamento</div><div class="kc-val kc-val-sm">${fBRL(fat)}</div><div class="kc-sub">FEO</div></div>
+      <div class="kc"><div class="kc-lbl">ROAS</div><div class="kc-val kc-val-sm">${roas>0?roas.toFixed(2)+"x":"—"}</div></div>
+      <div class="kc"><div class="kc-lbl">CPV</div><div class="kc-val kc-val-sm">${cpv>0?fBRL(cpv):"—"}</div></div>
+    </div>
+    <div class="g4" style="margin-bottom:20px">
+      <div class="kc"><div class="kc-lbl">Vendas</div><div class="kc-val kc-val-sm">${qtd}</div><div class="kc-sub">compradores únicos</div></div>
+      <div class="kc"><div class="kc-lbl">Ticket médio</div><div class="kc-val kc-val-sm">${ticket>0?fBRL(ticket):"—"}</div></div>
+      <div class="kc"><div class="kc-lbl">Ascensões</div><div class="kc-val kc-val-sm" style="color:var(--hint)">Em breve</div><div class="kc-sub">upsells ainda não disponíveis</div></div>
+      <div class="kc"><div class="kc-lbl">Tx ascensão</div><div class="kc-val kc-val-sm" style="color:var(--hint)">—</div></div>
+    </div>
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:12px;padding:20px 24px;max-width:520px;margin:0 auto 20px">
+      <div style="font-size:12px;color:var(--hint);text-align:center;margin-bottom:16px;letter-spacing:.05em;text-transform:uppercase">Funil FEO</div>
+      <div style="background:rgba(29,78,216,.7);border-radius:10px;padding:18px 24px;text-align:center;margin-bottom:8px">
+        <div style="font-size:10px;color:#dbeafe;opacity:.65;margin-bottom:4px">Entrada</div>
+        <div style="font-size:16px;font-weight:700;color:#dbeafe">Planilla Finanzas en Orden</div>
+        <div style="font-size:12px;color:#dbeafe;opacity:.9;margin-top:4px">${qtd} compras · ${fBRL(fat)}</div>
+      </div>
+      <div style="text-align:center;padding:12px;color:var(--hint);font-size:12px;border:1px dashed var(--border);border-radius:8px">
+        Ascensões serão adicionadas quando disponíveis
+      </div>
+    </div>
+    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
+    <p class="foot">FEO - Base vendas.csv</p>`;
+}
+
+function renderFeoResumo(){
+  const el=document.getElementById("page-resumo");if(!el)return;
+  const daily=getFeoDaily(S.startDate,S.endDate);
+  const tot=getFeoTotals(daily);
+
+  el.innerHTML=`
+    <div class="hdr">
+      <div><div class="hdr-title">Resumo Diário — FEO</div>
+        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div></div>
+    </div>
+    ${feoFiltersBar()}
+    <div class="g4" style="margin-bottom:14px">
+      ${kpiCard("Investimento total",fBRL(tot.spend),`${tot.vendas} vendas`,"var(--text-strong)")}
+      ${kpiCard("Faturamento total",fBRL(tot.faturamento),"Planilla Finanzas en Orden","var(--text-strong)")}
+      ${kpiCard("ROAS acum.",tot.roas>0?tot.roas.toFixed(2)+"x":"—","período selecionado","var(--text-strong)")}
+      ${kpiCard("CPV médio",tot.cpv>0?fBRL(tot.cpv):"—","custo por venda","var(--text-strong)")}
+    </div>
+    <div class="cc" style="overflow-x:auto">
+      <div class="ch"><span class="ct">Dia a dia</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
+          <th style="padding:8px 10px;text-align:left">Data</th>
+          <th style="padding:8px 10px;text-align:right">Invest.</th>
+          <th style="padding:8px 10px;text-align:right">Vendas</th>
+          <th style="padding:8px 10px;text-align:right">Faturamento</th>
+          <th style="padding:8px 10px;text-align:right">ROAS</th>
+          <th style="padding:8px 10px;text-align:right">CPV</th>
+        </tr></thead>
+        <tbody>${[...daily].reverse().map(d=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:8px 10px;color:var(--text)">${d.label}</td>
+          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${fBRL(d.spend)}</td>
+          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${d.vendas}</td>
+          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${fBRL(d.faturamento)}</td>
+          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:${d.roas>=1?"#22c55e":d.roas>0?"#f59e0b":"var(--hint)"}">${d.roas>0?d.roas.toFixed(2)+"x":"—"}</td>
+          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${d.cpv>0?fBRL(d.cpv):"—"}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
+    <p class="foot">FEO - Base meta.csv + Base vendas.csv</p>`;
 }
 
 render();
