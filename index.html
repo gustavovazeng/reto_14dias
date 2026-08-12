@@ -500,12 +500,13 @@ function renderHeader(){
   const p=S.currentPage;
   const isDist=S.currentFunil==="dist";
   const isAquec=S.currentFunil==="aquec";
+  const isFeo=S.currentFunil==="feo";
   // Funil selector label
   const fn=document.getElementById("funil-name");
-  if(fn) fn.textContent=isDist?"Finanzas - Distribuição conteúdo":isAquec?"Finanzas - Aquecimento Base":"Finanzas - Reto 14 Dias";
+  if(fn) fn.textContent=isDist?"Finanzas - Distribuição conteúdo":isAquec?"Finanzas - Aquecimento Base":isFeo?"Planilla Finanzas en Orden":"Finanzas - Reto 14 Dias";
   const fs=document.getElementById("funil-status"); if(fs) fs.textContent="ativo";
   // Funil dropdown active state
-  ["reto","dist","aquec"].forEach(f=>{
+  ["reto","dist","aquec","feo"].forEach(f=>{
     const el=document.getElementById("fopt-"+f);
     if(el) el.classList.toggle("fopt-active", S.currentFunil===f);
   });
@@ -1835,6 +1836,7 @@ function statusLegend(){
 }
 
 function retoTempFilterBar(){
+  if(S.currentFunil==="feo") return feoFiltersBar();
   const opts=[{k:"todos",l:"Todos"},{k:"frio",l:"🧊 Frio"},{k:"morno",l:"🔥 Morno"},{k:"quente",l:"⚡ Quente"}];
   return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
     <span style="font-size:11px;color:var(--hint);margin-right:2px">Temperatura:</span>
@@ -2026,15 +2028,19 @@ function drawDistBar(id, data, key, color, fmtFn, cssW, cssH){
 // ── Render Principal ───────────────────────────────────────────────────────
 function renderPrincipal(){
   const el=document.getElementById("page-principal");if(!el)return;
+  const isFeo=S.currentFunil==="feo";
+  const funilTitle=isFeo?"Planilla Finanzas en Orden":"Finanzas - Reto 14 Dias";
   const daily=getDaily(S.startDate,S.endDate);
   const tot=getTotals(daily);
-  const roasC=statusColor(tot.roas,META_ROAS,true);
-  const cpvC=statusColor(tot.cpv,META_CPV,false);
+  const roasC=isFeo?"var(--text-strong)":statusColor(tot.roas,META_ROAS,true);
+  const cpvC=isFeo?"var(--text-strong)":statusColor(tot.cpv,META_CPV,false);
+  const roasSub=isFeo?"":(`meta ${META_ROAS.toFixed(2)}x`);
+  const cpvSub=isFeo?"":(`meta ${fBRL(META_CPV)}`);
 
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
       <div>
-        <div class="hdr-title">Finanzas - Reto 14 Dias</div>
+        <div class="hdr-title">${funilTitle}</div>
         <div class="hdr-sub">atualizado em: ${D().updated||"—"}${daily.length>0?` · ${daily.length} dias`:""}</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
@@ -2043,9 +2049,9 @@ function renderPrincipal(){
     ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",`meta ${META_ROAS.toFixed(2)}x`,roasC,false,tot.roas,true)}
-      ${kpiCard("Faturamento",fBRL(tot.faturamento),"Finanzas - Reto 14 Dias","var(--text-strong)")}
-      ${kpiCard("Custo por Venda",fBRL(tot.cpv),`meta ${fBRL(META_CPV)}`,cpvC,false,tot.cpv,false)}
+      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
+      ${kpiCard("Faturamento",fBRL(tot.faturamento),funilTitle,"var(--text-strong)")}
+      ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,isFeo?null:tot.cpv,false)}
     </div>
     <div class="cc" style="margin-bottom:12px;position:relative">
       <div class="ch">
@@ -2063,13 +2069,13 @@ function renderPrincipal(){
         <div style="position:relative"><canvas id="c-roas"></canvas><div class="tip" id="t-roas"></div></div>
       </div>
       <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">Faturamento (Finanzas - Reto 14 Dias)</span></div>
+        <div class="ch"><span class="ct">Faturamento (${funilTitle})</span></div>
         <div style="position:relative"><canvas id="c-fat"></canvas><div class="tip" id="t-fat"></div></div>
       </div>
     </div>
     <div class="cc" style="margin-bottom:12px">
       <div class="ch">
-        <span class="ct">Vendas do Reto (dia a dia)</span>
+        <span class="ct">Vendas (dia a dia)</span>
         <div style="display:flex;align-items:center;gap:10px">
           <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas Hotmart</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
           <button onclick="S.showGapVendas=!S.showGapVendas;render()" style="font-size:10px;font-weight:600;padding:4px 12px;border-radius:8px;border:1px solid ${S.showGapVendas?"#f87171":"var(--border)"};background:${S.showGapVendas?"rgba(248,113,113,.15)":"transparent"};color:${S.showGapVendas?"#f87171":"var(--hint)"};cursor:pointer;font-family:inherit;transition:all .15s">GAP</button>
@@ -2085,7 +2091,7 @@ function renderPrincipal(){
     const sW=document.getElementById("c-roas")?.parentElement?.offsetWidth||340;
     const bW=document.getElementById("c-bar-vendas")?.parentElement?.offsetWidth||720;
     drawDual("c-dual",daily,mW,230);
-    drawChartWithOverlay("c-roas", daily,"roas",  v=>v.toFixed(2)+"x",META_ROAS,"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
+    drawChartWithOverlay("c-roas", daily,"roas", v=>v.toFixed(2)+"x",isFeo?null:META_ROAS,isFeo?null:"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
     if(S.showGapVendas) daily.forEach(d=>{const h=d.vendas||0,g=d.gerenciador||0;d.gapPct=h>0?((g-h)/h)*100:0;});
     drawBarVendas("c-bar-vendas",daily,bW,160,S.showGapVendas);
@@ -2991,8 +2997,20 @@ function renderAnuncios(){
 
 
 // ── Helper: dados do funil ativo ──────────────────────────────────────────
-function D(){ return S; }
+function D(){
+  if(S.currentFunil==="feo") return {
+    ...S,
+    meta:S.feoMeta, vendas:S.feoVendas,
+    vendasByAd:S.feoVendasByAd, vendasByAdDate:S.feoVendasByAdDate,
+    metaByAd:S.feoMetaByAd, metaByAdByDate:S.feoMetaByAdByDate,
+    metaByAdId:S.feoMetaByAdId, metaByCamp:S.feoMetaByCamp,
+    metaByCampByDate:S.feoMetaByCampByDate, metaByCountry:{},
+    funilRows:S.feoFunilRows, funilRowsByTemp:S.feoFunilRowsByTemp,
+  };
+  return S;
+}
 function getMetaActive(){
+  if(S.currentFunil==="feo") return getFeoMetaActive();
   if(S.retoTempFilter==="todos") return S.meta;
   return S.metaByTemp[S.retoTempFilter]||{};
 }
@@ -3099,6 +3117,7 @@ function feoPriceFilterBar(){
 }
 function feoFiltersBar(){ return feoTempFilterBar()+feoPriceFilterBar(); }
 function getVendasActive(){
+  if(S.currentFunil==="feo") return getFeoVendasActive();
   if(S.retoTempFilter==="todos") return S.vendas;
   return S.vendasByTemp[S.retoTempFilter]||{};
 }
@@ -3576,6 +3595,8 @@ function renderFunil(){
 // ── Render Resumo Diário ───────────────────────────────────────────────────
 function renderResumo(){
   const el=document.getElementById("page-resumo");if(!el)return;
+  const isFeo=S.currentFunil==="feo";
+  const funilTitle=isFeo?"Planilla Finanzas en Orden":"Finanzas - Reto 14 Dias";
   const _resumoFocus=document.activeElement?.id;
   const today=todayISO(), yest=yesterdayISO();
   const start=S.startDate||today, end=S.endDate||today;
@@ -3731,7 +3752,7 @@ ${block("Hoje", hoje, false)}`;
     <div class="hdr" style="margin-bottom:16px">
       <div>
         <div class="hdr-title">Resumo diário</div>
-        <div class="hdr-sub">período: ${dateLabel} · ontem: ${fDM(yest)} · hoje: ${fDM(today)} · somente Finanzas - Reto 14 Dias</div>
+        <div class="hdr-sub">período: ${dateLabel} · ontem: ${fDM(yest)} · hoje: ${fDM(today)} · somente ${funilTitle}</div>
       </div>
       <div>
         <button onclick="copyResumo()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:rgba(59,130,246,.18);border:1px solid rgba(96,165,250,.35);color:#93c5fd;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(59,130,246,.28)'" onmouseout="this.style.background='rgba(59,130,246,.18)'">
@@ -3809,11 +3830,11 @@ function render(){
     else if(S.currentPage==="anuncios") renderAquecAnuncios();
     else if(S.currentPage==="resumo") renderAquecResumo();
   } else if(S.currentFunil==="feo"){
-    if(S.currentPage==="principal") renderFeoPrincipal();
-    else if(S.currentPage==="trafego") renderFeoTrafego();
-    else if(S.currentPage==="anuncios") renderFeoAnuncios();
+    if(S.currentPage==="principal") renderPrincipal();
+    else if(S.currentPage==="trafego") renderTrafego();
+    else if(S.currentPage==="anuncios") renderAnuncios();
     else if(S.currentPage==="funil") renderFeoFunil();
-    else if(S.currentPage==="resumo") renderFeoResumo();
+    else if(S.currentPage==="resumo") renderResumo();
   } else {
     if(S.currentPage==="principal") renderPrincipal();
     else if(S.currentPage==="trafego") renderTrafego();
@@ -4375,262 +4396,6 @@ function distCopyResumo(){
   }).catch(()=>alert("Selecione o texto manualmente."));
 }
 
-// ── FEO render functions ──────────────────────────────────────────────────
-function renderFeoPrincipal(){
-  const el=document.getElementById("page-principal");if(!el)return;
-  const daily=getFeoDaily(S.startDate,S.endDate);
-  const tot=getFeoTotals(daily);
-
-  el.innerHTML=`
-    <div class="hdr" style="margin-bottom:6px">
-      <div>
-        <div class="hdr-title">Finanzas - FEO (Planilla Finanzas en Orden)</div>
-        <div class="hdr-sub">atualizado em: ${D().updated||"—"}${daily.length>0?` · ${daily.length} dias`:""}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
-    </div>
-    ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-    ${feoFiltersBar()}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
-      ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS",tot.roas>0?tot.roas.toFixed(2)+"x":"—",`sem meta definida`,"var(--text-strong)")}
-      ${kpiCard("Faturamento",fBRL(tot.faturamento),"Planilla Finanzas en Orden","var(--text-strong)")}
-      ${kpiCard("Custo por Venda",tot.cpv>0?fBRL(tot.cpv):"—",`sem meta definida`,"var(--text-strong)")}
-    </div>
-    <div class="cc" style="margin-bottom:12px;position:relative">
-      <div class="ch">
-        <span class="ct">Investimento × Custo por Venda</span>
-        <div class="lg">
-          <span class="li"><span class="ll" style="background:${CHART_INV}"></span>Invest. (esq.)</span>
-          <span class="li"><span class="ll" style="background:${CHART_CPV}"></span>CPV (dir.)</span>
-        </div>
-      </div>
-      <div style="position:relative"><canvas id="c-feo-dual"></canvas><div class="tip" id="t-feo-dual"></div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">ROAS diário</span></div>
-        <div style="position:relative"><canvas id="c-feo-roas"></canvas><div class="tip" id="t-feo-roas"></div></div>
-      </div>
-      <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">Faturamento (FEO)</span></div>
-        <div style="position:relative"><canvas id="c-feo-fat"></canvas><div class="tip" id="t-feo-fat"></div></div>
-      </div>
-    </div>
-    <div class="cc" style="margin-bottom:12px">
-      <div class="ch">
-        <span class="ct">Vendas FEO (dia a dia)</span>
-        <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas</span></div>
-      </div>
-      <div style="position:relative"><canvas id="c-feo-bar"></canvas><div class="tip" id="t-feo-bar"></div></div>
-    </div>
-    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
-    <p class="foot">FEO/Base dashboard - FEO - Base meta.csv + Base vendas.csv</p>`;
-
-  requestAnimationFrame(()=>{
-    const mW=document.getElementById("c-feo-dual")?.parentElement?.offsetWidth||720;
-    const sW=document.getElementById("c-feo-roas")?.parentElement?.offsetWidth||340;
-    const bW=document.getElementById("c-feo-bar")?.parentElement?.offsetWidth||720;
-    drawDual("c-feo-dual",daily,mW,230);
-    drawChartWithOverlay("c-feo-roas",daily,"roas",v=>v.toFixed(2)+"x",null,null,false,false,sW,170);
-    drawChartWithOverlay("c-feo-fat",daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
-    drawBarVendas("c-feo-bar",daily,bW,160,false);
-    setupTip("c-feo-bar","t-feo-bar",daily,[{key:"vendas",color:"#34d399",name:"Vendas"}],36);
-    setupTip("c-feo-dual","t-feo-dual",daily,[
-      {key:"spend",color:CHART_INV,name:"Investimento"},
-      {key:"cpv",color:CHART_CPV,name:"CPV"},
-    ]);
-    setupTip("c-feo-roas","t-feo-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
-    setupTip("c-feo-fat","t-feo-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
-  });
-}
-
-function renderFeoTrafego(){
-  const el=document.getElementById("page-trafego");if(!el)return;
-  const today=todayISO();
-  const todayM=getFeoDayMetrics(today);
-  const p3Start=subDays(today,3), p3End=subDays(today,1);
-  const p3Daily=getFeoDailyT(p3Start,p3End);
-  const p3Tot=getFeoTotalsT(p3Daily);
-  const p7Start=subDays(today,7), p7End=subDays(today,1);
-  const p7Daily=getFeoDailyT(p7Start,p7End);
-  const p7Tot=getFeoTotalsT(p7Daily);
-  const daily=getFeoDailyT(S.startDate,S.endDate);
-  const totT=getFeoTotalsT(daily);
-
-  const METRICS=[
-    {key:"cpm",   label:"CPM",             fmt:fBRL,   pct:false},
-    {key:"connect",label:"Connect Rate",    fmt:v=>v.toFixed(1)+"%",pct:false},
-    {key:"txPagChk",label:"Tx Pág→Chk",    fmt:v=>v.toFixed(1)+"%",pct:false},
-    {key:"txChkVnd",label:"Tx Chk→Vnd",    fmt:v=>v.toFixed(1)+"%",pct:false},
-    {key:"cpc",   label:"CPC",             fmt:fBRL,   pct:false},
-    {key:"ctr",   label:"CTR",             fmt:v=>v.toFixed(2)+"%",pct:false},
-    {key:"cpv",   label:"CPV",             fmt:fBRL,   pct:false},
-  ];
-
-  const rows=[
-    {label:"Hoje",   d:todayM},
-    {label:"Últ. 3 dias",d:p3Tot},
-    {label:"Últ. 7 dias",d:p7Tot},
-    {label:"Período",d:totT},
-  ];
-
-  el.innerHTML=`
-    <div class="hdr">
-      <div>
-        <div class="hdr-title">Métricas de Tráfego — FEO</div>
-        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div>
-      </div>
-    </div>
-    ${feoFiltersBar()}
-    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
-          <th style="padding:8px 10px;text-align:left;font-weight:600">Período</th>
-          ${METRICS.map(m=>`<th style="padding:8px 10px;text-align:right;font-weight:600">${m.label}</th>`).join("")}
-        </tr></thead>
-        <tbody>
-          ${rows.map(row=>`<tr style="border-top:1px solid var(--border)">
-            <td style="padding:10px 10px;font-weight:600;color:var(--text)">${row.label}</td>
-            ${METRICS.map(m=>`<td style="padding:10px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-strong)">${m.fmt(row.d[m.key]||0)}</td>`).join("")}
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
-      ${METRICS.filter(m=>["cpm","cpc","ctr","cpv","connect","txPagChk","txChkVnd"].includes(m.key)).map(m=>`
-      <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">${m.label}</span></div>
-        <div style="position:relative"><canvas id="tc-feo-${m.key}"></canvas><div class="tip" id="tt-feo-${m.key}"></div></div>
-      </div>`).join("")}
-    </div>
-    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
-    <p class="foot">FEO - Base meta.csv</p>`;
-
-  requestAnimationFrame(()=>{
-    METRICS.forEach(m=>{
-      const sW=document.getElementById(`tc-feo-${m.key}`)?.parentElement?.offsetWidth||340;
-      drawChartWithOverlay(`tc-feo-${m.key}`,daily,m.key,m.fmt,null,null,false,false,sW,140);
-      setupTip(`tc-feo-${m.key}`,`tt-feo-${m.key}`,daily,[{key:m.key,color:CHART_COLOR,name:m.label,fmt:m.fmt}],52,12);
-    });
-  });
-}
-
-function renderFeoAnuncios(){
-  const el=document.getElementById("page-anuncios");if(!el)return;
-  const start=S.startDate, end=S.endDate;
-
-  // Build camp rows from feoMetaByCamp + feoMetaByCampByDate + feoVendasByAdDate
-  const campRows=[];
-  for(const [campName,cp] of Object.entries(S.feoMetaByCamp)){
-    let cSpend=0,cClicks=0,cImp=0,cLv=0,cChk=0,cQtd=0,cFat=0;
-    const byDate=S.feoMetaByCampByDate[campName]||{};
-    for(const [d,m] of Object.entries(byDate)){
-      if(d<start||d>end)continue;
-      cSpend+=m.spend;cClicks+=m.clicks;cImp+=m.impressions;cLv+=m.landingViews;cChk+=m.checkouts;
-    }
-    for(const adId of (cp.adIds||new Set())){
-      const vByDate=S.feoVendasByAdDate[adId]||{};
-      for(const [d,vv] of Object.entries(vByDate)){
-        if(d<start||d>end)continue;
-        cQtd+=vv.qtd;cFat+=vv.valor;
-      }
-    }
-    const temp=extractTempFromCamp(campName);
-    const price=extractPriceFromCamp(campName);
-    if(S.feoTempFilter!=="todos"&&temp!==S.feoTempFilter) continue;
-    if(S.feoPriceFilter!=="todos"&&price!==S.feoPriceFilter) continue;
-    campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImp,
-      ctr:cImp>0?(cClicks/cImp)*100:0,cpm:cImp>0?(cSpend/cImp)*1000:0,cpc:cClicks>0?cSpend/cClicks:0,
-      connect:cClicks>0?(cLv/cClicks)*100:0,txPagChk:cLv>0?(cChk/cLv)*100:0,txChkVnd:cChk>0?(cQtd/cChk)*100:0,
-      vendas:cQtd,faturamento:cFat,roas:cSpend>0?cFat/cSpend:0,cpv:cQtd>0?cSpend/cQtd:0});
-  }
-  campRows.sort((a,b)=>b[S.cSort.col]-a[S.cSort.col]*(S.cSort.dir==="asc"?-1:1));
-
-  // Build ad rows from feoMetaByAd + feoVendasByAdDate
-  const adRows=[];
-  for(const [advCode,ad] of Object.entries(S.feoMetaByAd)){
-    let aSpend=0,aClicks=0,aImp=0,aLv=0,aChk=0,aQtd=0,aFat=0;
-    const byDate=S.feoMetaByAdByDate[advCode]||{};
-    for(const [d,m] of Object.entries(byDate)){
-      if(d<start||d>end)continue;
-      aSpend+=m.spend;aClicks+=m.clicks;aImp+=m.impressions;aLv+=m.landingViews;aChk+=m.checkouts;
-    }
-    // adIds for this advCode
-    for(const adId of (ad.adIds||new Set())){
-      const vByDate=S.feoVendasByAdDate[adId]||{};
-      for(const [d,vv] of Object.entries(vByDate)){
-        if(d<start||d>end)continue;
-        aQtd+=vv.qtd;aFat+=vv.valor;
-      }
-    }
-    const temp=extractTempFromCamp(ad.campName||"");
-    const price=extractPriceFromCamp(ad.campName||"");
-    if(S.feoTempFilter!=="todos"&&temp!==S.feoTempFilter) continue;
-    if(S.feoPriceFilter!=="todos"&&price!==S.feoPriceFilter) continue;
-    adRows.push({advCode,adName:ad.adName,campName:ad.campName,igUrl:ad.igUrl,
-      spend:aSpend,clicks:aClicks,impressions:aImp,
-      ctr:aImp>0?(aClicks/aImp)*100:0,cpm:aImp>0?(aSpend/aImp)*1000:0,cpc:aClicks>0?aSpend/aClicks:0,
-      connect:aClicks>0?(aLv/aClicks)*100:0,txPagChk:aLv>0?(aChk/aLv)*100:0,txChkVnd:aChk>0?(aQtd/aChk)*100:0,
-      vendas:aQtd,faturamento:aFat,roas:aSpend>0?aFat/aSpend:0,cpv:aQtd>0?aSpend/aQtd:0});
-  }
-  adRows.sort((a,b)=>b[S.aSort.col]-a[S.aSort.col]*(S.aSort.dir==="asc"?-1:1));
-
-  const thC=(col,lbl,ns)=>`<th onclick="if('${ns}'==='camp')sortCampanhas('${col}');else sortAnuncios('${col}')" style="padding:8px 10px;cursor:pointer;text-align:right;white-space:nowrap">${lbl}${S.cSort.col===col&&ns==="camp"?(" "+(S.cSort.dir==="asc"?"↑":"↓")):(S.aSort.col===col&&ns==="ad"?(" "+(S.aSort.dir==="asc"?"↑":"↓")):"")} </th>`;
-  const fmtCell=(v,fmt)=>`<td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-strong)">${fmt(v)}</td>`;
-
-  el.innerHTML=`
-    <div class="hdr">
-      <div><div class="hdr-title">Anúncios — FEO</div>
-        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div></div>
-    </div>
-    ${feoFiltersBar()}
-    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
-
-    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
-      <div class="ch"><span class="ct">Campanhas (${campRows.length})</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
-        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">
-          <th style="padding:8px 10px;text-align:left">Campanha</th>
-          ${thC("spend","Invest.","camp")}${thC("cpm","CPM","camp")}${thC("cpc","CPC","camp")}
-          ${thC("ctr","CTR","camp")}${thC("connect","Connect","camp")}
-          ${thC("txPagChk","Tx P→C","camp")}${thC("txChkVnd","Tx C→V","camp")}
-          ${thC("vendas","Vendas","camp")}${thC("roas","ROAS","camp")}${thC("cpv","CPV","camp")}
-        </tr></thead>
-        <tbody>${campRows.map(r=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:8px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${r.campName}</td>
-          ${fmtCell(r.spend,fBRL)}${fmtCell(r.cpm,fBRL)}${fmtCell(r.cpc,fBRL)}
-          ${fmtCell(r.ctr,v=>v.toFixed(2)+"%")}${fmtCell(r.connect,v=>v.toFixed(1)+"%")}
-          ${fmtCell(r.txPagChk,v=>v.toFixed(1)+"%")}${fmtCell(r.txChkVnd,v=>v.toFixed(1)+"%")}
-          ${fmtCell(r.vendas,v=>v.toFixed(0))}${fmtCell(r.roas,v=>v>0?v.toFixed(2)+"x":"—")}${fmtCell(r.cpv,v=>v>0?fBRL(v):"—")}
-        </tr>`).join("")}</tbody>
-      </table>
-    </div>
-
-    <div class="cc" style="margin-bottom:14px;overflow-x:auto">
-      <div class="ch"><span class="ct">Anúncios (${adRows.length})</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
-        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">
-          <th style="padding:8px 10px;text-align:left">Anúncio</th>
-          ${thC("spend","Invest.","ad")}${thC("cpm","CPM","ad")}${thC("cpc","CPC","ad")}
-          ${thC("ctr","CTR","ad")}${thC("connect","Connect","ad")}
-          ${thC("txPagChk","Tx P→C","ad")}${thC("txChkVnd","Tx C→V","ad")}
-          ${thC("vendas","Vendas","ad")}${thC("roas","ROAS","ad")}${thC("cpv","CPV","ad")}
-        </tr></thead>
-        <tbody>${adRows.map(r=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:8px 10px;max-width:220px;font-size:11px">
-            ${r.igUrl?`<a href="${r.igUrl}" target="_blank" style="color:var(--accent);text-decoration:none">${r.adName||r.advCode}</a>`:r.adName||r.advCode}
-          </td>
-          ${fmtCell(r.spend,fBRL)}${fmtCell(r.cpm,fBRL)}${fmtCell(r.cpc,fBRL)}
-          ${fmtCell(r.ctr,v=>v.toFixed(2)+"%")}${fmtCell(r.connect,v=>v.toFixed(1)+"%")}
-          ${fmtCell(r.txPagChk,v=>v.toFixed(1)+"%")}${fmtCell(r.txChkVnd,v=>v.toFixed(1)+"%")}
-          ${fmtCell(r.vendas,v=>v.toFixed(0))}${fmtCell(r.roas,v=>v>0?v.toFixed(2)+"x":"—")}${fmtCell(r.cpv,v=>v>0?fBRL(v):"—")}
-        </tr>`).join("")}</tbody>
-      </table>
-    </div>
-    <p class="foot">FEO - Base meta.csv</p>`;
-}
-
 function renderFeoFunil(){
   const el=document.getElementById("page-funil");if(!el)return;
   const _rows=getFeoFunilRows();
@@ -4684,49 +4449,6 @@ function renderFeoFunil(){
     ${periodBar(S.startDate,S.endDate,S.activeQuick)}
     <p class="foot">FEO - Base vendas.csv</p>`;
 }
-
-function renderFeoResumo(){
-  const el=document.getElementById("page-resumo");if(!el)return;
-  const daily=getFeoDaily(S.startDate,S.endDate);
-  const tot=getFeoTotals(daily);
-
-  el.innerHTML=`
-    <div class="hdr">
-      <div><div class="hdr-title">Resumo Diário — FEO</div>
-        <div class="hdr-sub">atualizado em: ${D().updated||"—"}</div></div>
-    </div>
-    ${feoFiltersBar()}
-    <div class="g4" style="margin-bottom:14px">
-      ${kpiCard("Investimento total",fBRL(tot.spend),`${tot.vendas} vendas`,"var(--text-strong)")}
-      ${kpiCard("Faturamento total",fBRL(tot.faturamento),"Planilla Finanzas en Orden","var(--text-strong)")}
-      ${kpiCard("ROAS acum.",tot.roas>0?tot.roas.toFixed(2)+"x":"—","período selecionado","var(--text-strong)")}
-      ${kpiCard("CPV médio",tot.cpv>0?fBRL(tot.cpv):"—","custo por venda","var(--text-strong)")}
-    </div>
-    <div class="cc" style="overflow-x:auto">
-      <div class="ch"><span class="ct">Dia a dia</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
-          <th style="padding:8px 10px;text-align:left">Data</th>
-          <th style="padding:8px 10px;text-align:right">Invest.</th>
-          <th style="padding:8px 10px;text-align:right">Vendas</th>
-          <th style="padding:8px 10px;text-align:right">Faturamento</th>
-          <th style="padding:8px 10px;text-align:right">ROAS</th>
-          <th style="padding:8px 10px;text-align:right">CPV</th>
-        </tr></thead>
-        <tbody>${[...daily].reverse().map(d=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:8px 10px;color:var(--text)">${d.label}</td>
-          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${fBRL(d.spend)}</td>
-          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${d.vendas}</td>
-          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${fBRL(d.faturamento)}</td>
-          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:${d.roas>=1?"#22c55e":d.roas>0?"#f59e0b":"var(--hint)"}">${d.roas>0?d.roas.toFixed(2)+"x":"—"}</td>
-          <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace">${d.cpv>0?fBRL(d.cpv):"—"}</td>
-        </tr>`).join("")}</tbody>
-      </table>
-    </div>
-    ${periodBar(S.startDate,S.endDate,S.activeQuick)}
-    <p class="foot">FEO - Base meta.csv + Base vendas.csv</p>`;
-}
-
 render();
 loadData();
 // ══════════════════════════════════════════════════════════════════════════
