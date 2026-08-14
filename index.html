@@ -3681,8 +3681,10 @@ CPM:\t${fBRL(m.cpm)}${cpmMeta}`
     );
   }
 
+  const _feoPrice=isFeo&&S.feoPriceFilter!=="todos"?" "+S.feoPriceFilter.replace("pesos"," pesos"):"";
+  const _resumoTitle=isFeo?`Finanzas con Proposito - Vendas - FEO${_feoPrice}`:"Finanzas con Proposito - Vendas - Reto";
   const resumoText =
-`*${isFeo?"Finanzas con Proposito - Vendas - FEO":"Finanzas con Proposito - Vendas - Reto"}*\t\t
+`*${_resumoTitle}*\t\t
 
 _${dateLabel}_\t\t
 
