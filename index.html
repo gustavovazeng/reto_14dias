@@ -2889,6 +2889,7 @@ function renderAnuncios(){
       ${S.adSearch?`<button onclick="setAdSearch('')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--hint);cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>`:""}
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
+      <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           <th style="padding:10px 12px;border-bottom:1px solid var(--border);width:36px"></th>
@@ -2909,6 +2910,7 @@ function renderAnuncios(){
           ${thC("txChkVnd","Tx Chk→Vnd","ad")}
           ${thC("hookRate","Hook Rate","ad")}
           ${thC("holdRate","Hold Rate","ad")}
+          <th style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;position:sticky;right:0;background:var(--card);z-index:2;white-space:nowrap">Ver</th>
         </tr></thead>
         <tbody>
           ${filteredAds.length===0?`<tr><td colspan="20" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
@@ -2928,10 +2930,7 @@ function renderAnuncios(){
               </div>
             </td>
             <td style="padding:10px 14px;text-align:left">
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace" title="${r.adName}">${r.adName||r.advCode}</span>
-                ${r.igUrl?`<a href="${r.igUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;color:var(--accent);font-size:11px;text-decoration:none;flex-shrink:0;opacity:.7" title="Ver anúncio no Instagram">↗</a>`:""}
-              </div>
+              <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace" title="${r.adName}">${r.adName||r.advCode}</span>
             </td>
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
@@ -2949,10 +2948,14 @@ function renderAnuncios(){
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.txChkVnd,isFeo?null:METAS_T.txChkVnd.val,true)};font-weight:600">${r.txChkVnd>0?fPct(r.txChkVnd):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.hookRate>0?r.hookRate.toFixed(1)+"%":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.holdRate>0?r.holdRate.toFixed(1)+"%":"—"}</td>
+            <td style="padding:8px 12px;text-align:center;position:sticky;right:0;background:var(--card);z-index:1" onclick="event.stopPropagation()">
+              ${r.igUrl?`<a href="${r.igUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;color:#60a5fa;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">Ver ↗</a>`:"—"}
+            </td>
           </tr>`;
           }).join("")}
         </tbody>
       </table>
+      </div>
     </div>
 
     ${(()=>{
