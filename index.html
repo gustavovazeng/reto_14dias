@@ -892,7 +892,7 @@ async function loadData(force=false){
       const d=toISO(r["Date"]);if(!d)continue;
       if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
       const _accMeta=(r["Account Name"]||r["Account name"]||r[""]||"").trim();
-      const _rawSpendMeta=_accMeta==="CA03"?parseUSD(r["Spend (Cost, Amount Spent)"]):parseBRL(r["Spend (Cost, Amount Spent)"]);
+      const _rawSpendMeta=parseBRL(r["Spend (Cost, Amount Spent)"]);
       const _spendMeta=_accMeta==="Conta 2 cartão"?_rawSpendMeta/18:_rawSpendMeta;
       mD[d].spend        += _spendMeta;
       mD[d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
@@ -1115,8 +1115,8 @@ async function loadData(force=false){
       const d=r["Date"]||""; if(!d||d==="Date")continue;
       const _acc=(r["Account Name"]||"").trim();
       const _rawSpend=parseBRL(r["Spend (Cost, Amount Spent)"]);
-      // CA 03 = USD; all others = Mexican Peso, divide by 18
-      const spendV=_acc==="CA 03"?_rawSpend:_rawSpend/18;
+      // CA03 (ou "CA 03") = USD; demais = Peso Mexicano, divide por 18
+      const spendV=(_acc==="CA03"||_acc==="CA 03")?_rawSpend:_rawSpend/18;
       const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
       const impressV  =parseInt(r["Impressions"]||0)||0;
       const video3sV  =parseInt(r["Action 3s Video Views"]||0)||0;
@@ -1323,7 +1323,7 @@ async function loadData(force=false){
       for(const r of parseSheet(feoMetaJ)){
         const d=toISO(r["Date"]);if(!d)continue;
         const _acc=(r["Account Name"]||r["Account name"]||"").trim();
-        const _raw=_acc==="CA03"?parseUSD(r["Spend (Cost, Amount Spent)"]):parseBRL(r["Spend (Cost, Amount Spent)"]);
+        const _raw=parseBRL(r["Spend (Cost, Amount Spent)"]);
         const spendV=_acc==="Conta 2 cartão"?_raw/18:_raw;
         const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
         const icV       =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
