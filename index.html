@@ -558,6 +558,7 @@ function subDays(iso,n){ return addDays(iso,-n); }
 // ── Format helpers ─────────────────────────────────────────────────────────
 function parseBRL(s){ if(!s||s==="-"||s==="0")return 0;return parseFloat(String(s).replace(/R\$\s*/g,"").replace(/\./g,"").replace(",",".").trim())||0; }
 function parseBRLAbs(s){ return Math.abs(parseBRL(s)); }
+function parseUSD(s){ if(!s||s==="-"||s==="0")return 0;return parseFloat(String(s).replace(/[$\s,]/g,"").trim())||0; }
 
 // Normaliza status numérico da Eduzz para texto
 function normalizeStatus(s){
@@ -627,7 +628,7 @@ function extractTempFromCamp(name){
 }
 function extractPriceFromCamp(name){
   if(!name) return null;
-  const n=name.toLowerCase();
+  const n=name.toLowerCase().replace(/[-_\s]+/g,""); // normalize spaces/dashes/underscores
   if(n.includes("220peso")) return "220pesos";
   if(n.includes("170peso")) return "170pesos";
   if(n.includes("85peso"))  return "85pesos";
@@ -891,7 +892,7 @@ async function loadData(force=false){
       const d=toISO(r["Date"]);if(!d)continue;
       if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
       const _accMeta=(r["Account Name"]||r["Account name"]||r[""]||"").trim();
-      const _rawSpendMeta=parseBRL(r["Spend (Cost, Amount Spent)"]);
+      const _rawSpendMeta=_accMeta==="CA03"?parseUSD(r["Spend (Cost, Amount Spent)"]):parseBRL(r["Spend (Cost, Amount Spent)"]);
       const _spendMeta=_accMeta==="Conta 2 cartão"?_rawSpendMeta/18:_rawSpendMeta;
       mD[d].spend        += _spendMeta;
       mD[d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
@@ -1322,10 +1323,10 @@ async function loadData(force=false){
       for(const r of parseSheet(feoMetaJ)){
         const d=toISO(r["Date"]);if(!d)continue;
         const _acc=(r["Account Name"]||r["Account name"]||"").trim();
-        const _raw=parseBRL(r["Spend (Cost, Amount Spent)"]);
+        const _raw=_acc==="CA03"?parseUSD(r["Spend (Cost, Amount Spent)"]):parseBRL(r["Spend (Cost, Amount Spent)"]);
         const spendV=_acc==="Conta 2 cartão"?_raw/18:_raw;
         const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
-        const icV       =parseInt(r["Action Inline Link Clicks"]||r["Outbound Clicks"]||0)||0;
+        const icV       =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
         const impressV  =parseInt(r["Impressions"]||0)||0;
         const lvV       =parseInt(r["Action Landing Page View"]||0)||0;
         const chkV      =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
@@ -1747,14 +1748,14 @@ function drawChartWithOverlay(id, data, key, fmtY, refVal, refLabel, overlayInv,
 }
 
 // Gráfico dual-axis (investimento x CPV)
-function drawDual(id,data,cssW,cssH){
+function drawDual(id,data,cssW,cssH,metaCpv){
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
   const P={t:14,r:52,b:28,l:58};
   const cW=cssW-P.l-P.r,cH=cssH-P.t-P.b;
   const lVals=data.map(d=>d.spend||0);
   const rVals=data.map(d=>d.cpv||0);
   const lMax=Math.max(...lVals,0.01)*1.15;
-  const rMax=Math.max(...rVals,META_CPV,0.01)*1.4;
+  const rMax=Math.max(...rVals,metaCpv||0,0.01)*1.4;
   const xP=i=>P.l+(data.length>1?i/(data.length-1):0.5)*cW;
   const yPL=v=>P.t+cH-((v-0)/(lMax-0))*cH;
   const yPR=v=>P.t+cH-((v-0)/(rMax-0))*cH;
@@ -1765,14 +1766,16 @@ function drawDual(id,data,cssW,cssH){
     ctx.beginPath();ctx.moveTo(P.l,y);ctx.lineTo(P.l+cW,y);ctx.stroke();
     ctx.fillStyle=TICK_C;ctx.font="10px 'DM Mono',monospace";
     ctx.textAlign="right";ctx.fillText(fBRLShort(lMax-(i/4)*lMax),P.l-5,y+3.5);
-    ctx.textAlign="left";ctx.fillText("MX$"+(rMax-(i/4)*rMax).toFixed(0),P.l+cW+5,y+3.5);
+    ctx.textAlign="left";ctx.fillText("$"+(rMax-(i/4)*rMax).toFixed(0),P.l+cW+5,y+3.5);
   }
-  const mY=yPR(META_CPV);
-  ctx.strokeStyle=CHART_CPV+"55";ctx.lineWidth=1;ctx.setLineDash([4,3]);
-  ctx.beginPath();ctx.moveTo(P.l,mY);ctx.lineTo(P.l+cW,mY);ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle=CHART_CPV;ctx.font="9px 'Inter',sans-serif";ctx.textAlign="left";
-  ctx.fillText("Meta $"+META_CPV,P.l+cW+4,mY-3);
+  if(metaCpv){
+    const mY=yPR(metaCpv);
+    ctx.strokeStyle=CHART_CPV+"55";ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(P.l,mY);ctx.lineTo(P.l+cW,mY);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=CHART_CPV;ctx.font="9px 'Inter',sans-serif";ctx.textAlign="left";
+    ctx.fillText("Meta $"+metaCpv,P.l+cW+4,mY-3);
+  }
   drawLineArea(ctx,xP,yPL,lVals,CHART_INV,true);
   drawLineArea(ctx,xP,yPR,rVals,CHART_CPV,false);
   const step=data.length>60?7:data.length>30?3:data.length>14?2:1;
@@ -2094,7 +2097,7 @@ function renderPrincipal(){
     const mW=document.getElementById("c-dual")?.parentElement?.offsetWidth||720;
     const sW=document.getElementById("c-roas")?.parentElement?.offsetWidth||340;
     const bW=document.getElementById("c-bar-vendas")?.parentElement?.offsetWidth||720;
-    drawDual("c-dual",daily,mW,230);
+    drawDual("c-dual",daily,mW,230,isFeo?getFeoMetaCPV():META_CPV);
     drawChartWithOverlay("c-roas", daily,"roas", v=>v.toFixed(2)+"x",isFeo?null:META_ROAS,isFeo?null:"Meta "+META_ROAS.toFixed(2)+"x",false,false,sW,170);
     drawChartWithOverlay("c-fat",  daily,"faturamento",fBRLShort,null,null,false,false,sW,170);
     if(S.showGapVendas) daily.forEach(d=>{const h=d.vendas||0,g=d.gerenciador||0;d.gapPct=h>0?((g-h)/h)*100:0;});
@@ -2580,7 +2583,7 @@ function renderAnuncios(){
           totalAscensoes+=(buyerTotalSpent.get(eventKey)||0);
         }
       }
-      rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,spend,clicks,impressions,qtd,valor,igUrl,
+      rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
         cpc:clicks>0?spend/clicks:0,
         ctr:impressions>0?(clicks/impressions)*100:0,
         cpm:impressions>0?(spend/impressions)*1000:0,
@@ -2685,7 +2688,7 @@ function renderAnuncios(){
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:13px;margin-bottom:20px">
       <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val" style="font-size:18px">${fBRL(tot.spend)}</div></div>
       <div class="kc"><div class="kc-lbl">Vendas</div><div class="kc-val" style="font-size:18px">${tot.qtd}</div></div>
-      ${(()=>{const _m=isFeo?getFeoMetaCPV():META_CPV;return `<div class="kc" style="border-color:${sb(totCpv,_m,false)}"><div class="kc-lbl">Custo por Venda</div><div class="kc-val" style="color:${sc(totCpv,_m,false)};font-size:18px">${fBRL(totCpv)}</div>${_m?`<div class="kc-sub">meta ${fBRL(_m)}</div>`:""}</div>`;})()}
+      ${(()=>{const _m=isFeo?null:META_CPV;return `<div class="kc" style="border-color:${sb(totCpv,_m,false)}"><div class="kc-lbl">Custo por Venda</div><div class="kc-val" style="color:${sc(totCpv,_m,false)};font-size:18px">${fBRL(totCpv)}</div>${_m?`<div class="kc-sub">meta ${fBRL(_m)}</div>`:""}</div>`;})()}
       <div class="kc" style="border-color:${sb(totTicket,isFeo?null:META_TICKET,true)}"><div class="kc-lbl">Ticket Médio Front</div><div class="kc-val" style="color:${sc(totTicket,isFeo?null:META_TICKET,true)};font-size:18px">${fBRL(totTicket)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(META_TICKET)}</div>`}</div>
       <div class="kc"><div class="kc-lbl">Ticket Médio Ascensões</div><div class="kc-val" style="font-size:18px">${fBRL(totTicketAsc)}</div><div class="kc-sub">todos os produtos</div></div>
       <div class="kc" style="border-color:${sb(totCtr,isFeo?null:METAS_T.ctr.val,true)}"><div class="kc-lbl">CTR</div><div class="kc-val" style="color:${sc(totCtr,isFeo?null:METAS_T.ctr.val,true)};font-size:18px">${fPct(totCtr)}</div>${isFeo?"":`<div class="kc-sub">meta ${fPct(METAS_T.ctr.val)}</div>`}</div>
@@ -2819,7 +2822,7 @@ function renderAnuncios(){
               <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getFeoMetaCPV():META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
@@ -2868,7 +2871,7 @@ function renderAnuncios(){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Investimento</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${fBRL(pSpend)}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Vendas</div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">${pQtd}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?sb(pCpv,isFeo?getFeoMetaCPV():META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,isFeo?getFeoMetaCPV():META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?sb(pCpv,isFeo?null:META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,isFeo?null:META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?sb(pRoas,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Ticket Médio</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pTicket):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/IC</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pIc>0?fBRL(pCpic):"—"}</div></div>
@@ -2936,7 +2939,7 @@ function renderAnuncios(){
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getFeoMetaCPV():META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
@@ -3129,6 +3132,13 @@ function getFeoMetaCPV(){
   if(S.feoPriceFilter==="85pesos")  return 4.74;
   if(S.feoPriceFilter==="170pesos") return 9.44;
   if(S.feoPriceFilter==="220pesos") return 12.22;
+  return null;
+}
+function getCpvMetaFromCamp(campName){
+  const p=extractPriceFromCamp(campName||"");
+  if(p==="85pesos")  return 4.74;
+  if(p==="170pesos") return 9.44;
+  if(p==="220pesos") return 12.22;
   return null;
 }
 function getVendasActive(){
