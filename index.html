@@ -1319,8 +1319,8 @@ async function loadData(force=false){
     const _feoSafe=(tab,col)=>fetchSheetPaged(tab,col,5000,FEO_SHEET_ID).catch(e=>{console.warn(`[feo] "${tab}":`,e.message);return {values:[]};});
     const [feoMetaJ, feoVendasJ, feoRetoJ] = await Promise.all([
       _feoSafe("Base meta","V"),
-      _feoSafe("Base vendas","L"),
-      _feoSafe("Base vendas - Reto","L"),
+      _feoSafe("Base vendas","Z"),
+      _feoSafe("Base vendas - Reto","Z"),
     ]);
     {
       const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
@@ -3492,7 +3492,7 @@ function renderFunil(){
   // Escolhe as linhas do funil conforme o produto ativo
   let _funilRows;
   if(isFeoFunil){
-    _funilRows=S.feoTempFilter==="todos"?(S.feoFunilRows||[]):(S.feoFunilRowsByTemp?.[S.feoTempFilter]||[]);
+    _funilRows=getFeoFunilRows(); // aplica temp + price filter
   } else {
     _funilRows=S.retoTempFilter==="todos"?_dd.funilRows:(S.funilRowsByTemp[S.retoTempFilter]||[]);
   }
