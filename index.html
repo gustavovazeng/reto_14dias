@@ -634,6 +634,18 @@ function extractPriceFromCamp(name){
   if(n.includes("85peso"))  return "85pesos";
   return null;
 }
+// Fallback: infere price tier pelo valor da compra quando não há UTM
+// Recebe valor já convertido para USD (hotmartPriceUSD):
+//   ~5 USD  = 79 MXN  → 85pesos
+//   ~14 USD = 204 MXN → 220pesos
+//   ~16 USD = 234 MXN → 220pesos
+//   <1 USD              → teste, ignorar
+function inferPriceTierFromValue(valUSD){
+  const v=parseFloat(String(valUSD||"0").replace(",","."))||0;
+  if(v<1) return null; // transação de teste (ex: 1 BRL ≈ 0.2 USD)
+  if(v<10) return "85pesos";
+  return "220pesos";
+}
 function extractCountryFromAdset(adsetName){
   if(!adsetName) return "México";
   // Padrão ca{N}-{word}-{country}, captura o último segmento após o segundo "-"
@@ -1441,31 +1453,10 @@ async function loadData(force=false){
           fvByAdDate[adId][d].qtd+=1;fvByAdDate[adId][d].valor+=valor;
         }
       }
-      // Mapeia email → adId FEO original (para atribuir upsell Reto ao anúncio correto)
-      // Necessário porque o Reto é order bump: xcod vem vazio no webhook do bump.
-      const emailToFeoAdId={};
-      for(const r of feoRows){
-        if(r["Status da compra"]!=="Paga") continue;
-        const em=(r["Email"]||"").toLowerCase().trim(); if(!em) continue;
-        const adId=r["Ad Id"]; if(!adId) continue;
-        emailToFeoAdId[em]=adId;
-      }
-      // Atribui receita do upsell Reto ao adId FEO que originou a compra
-      // Prioridade: adId do próprio row (xcod) → adId do comprador FEO (email match)
-      // Não incrementa qtd — CPV continua sendo custo por venda FEO
-      for(const r of feoRetoRows){
-        if(r["Status da compra"]!=="Paga") continue;
-        const d=r["Data da compra"];if(!d)continue;
-        const valorUp=parseFloat(r["Valor do produto"])||0;
-        const em2=(r["Email"]||"").toLowerCase().trim();
-        const adId=r["Ad Id"]||emailToFeoAdId[em2]||"";if(!adId)continue;
-        if(!fvByAd[adId])fvByAd[adId]={qtd:0,valor:0,taxa:0};
-        fvByAd[adId].valor+=valorUp;
-        if(!fvByAdDate[adId])fvByAdDate[adId]={};
-        if(!fvByAdDate[adId][d])fvByAdDate[adId][d]={qtd:0,valor:0,taxa:0};
-        fvByAdDate[adId][d].valor+=valorUp;
-      }
-      // feoVendasByTemp via adId→campName→temp (valor já inclui upsell)
+      // feoVendas/feoVendasByAdDate = produto FEO principal apenas (sem upsell)
+      // A aba Principal e Anúncios mostram só o produto primário.
+      // O funil total (FEO + Reto upsell) é calculado por buildFunilData via feoFunilRows.
+      // feoVendasByTemp via adId→campName→temp (FEO principal apenas)
       for(const [adId,byDate] of Object.entries(fvByAdDate)){
         const adData=fmByAdId[adId];if(!adData)continue;
         const temp=extractTempFromCamp(adData.campName);if(!temp)continue;
@@ -1479,17 +1470,27 @@ async function loadData(force=false){
 
       // FEO funil rows + by temp
       // Mapeia email → priceTier a partir das compras FEO (para taggear rows do Reto upsell)
+      // Prioridade: UTM (adId→campName) → valor da compra
       const emailToPriceTier={};
       for(const r of feoRows){
         if(r["Status da compra"]!=="Paga") continue;
         const em=(r["Email"]||"").toLowerCase().trim(); if(!em) continue;
-        const adId=r["Ad Id"]; if(!adId) continue;
-        const adData=fmByAdId[adId]; if(!adData) continue;
-        const pt=extractPriceFromCamp(adData.campName); if(!pt) continue;
+        const adId=r["Ad Id"];
+        const adData=adId?fmByAdId[adId]:null;
+        const pt=extractPriceFromCamp(adData?.campName)
+              ||inferPriceTierFromValue(r["Valor do produto"]);
+        if(!pt) continue;
         emailToPriceTier[em]=pt;
       }
       S.feoFunilRows=[
-        ...feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem"})),
+        ...feoRows.map(r=>{
+          // Garante _priceTier nas rows FEO também (usado em getFeoFunilRows para filtro de preço)
+          const adId=r["Ad Id"];
+          const adData=adId?fmByAdId[adId]:null;
+          const _priceTier=extractPriceFromCamp(adData?.campName)
+                          ||inferPriceTierFromValue(r["Valor do produto"]);
+          return {...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem",_priceTier};
+        }),
         ...feoRetoRows.map(r=>({
           ...r,
           _priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null,
@@ -2430,14 +2431,15 @@ function renderAnuncios(){
     for(const k of ks){if(_identMap.has(k)) return _identMap.get(k);}
     return ks[0]||null;
   }
-  // adBuyersMap: adId → Set<buyerKey> (compradores do front-end atribuídos a cada adId)
-  // Para Reto: só produto "reto". Para FEO: qualquer produto (sem upsells ainda)
+  // adBuyersMap: adId → Set<buyerKey> (compradores do produto PRINCIPAL atribuídos a cada adId)
+  // Reto funnel: só "reto"; FEO funnel: só "feo" (Reto upsell não conta como comprador do front-end)
+  const primaryProdId=isFeo?"feo":"reto";
   const adBuyersMap=new Map();
   for(const r of dd.funilRows){
     const dt=toISO(r["Data da compra"]||"")||"";
     if(dt<start||dt>end) continue;
     if((r["Status da compra"]||"").trim()!=="Paga") continue;
-    if(!isFeo && classifyProduct(r["Nome do produto"]||"")!=="reto") continue;
+    if(classifyProduct(r["Nome do produto"]||"",isFeo?"feo":"reto")!==primaryProdId) continue;
     const adId=extractAdId(r["Ad Id"]||"");if(!adId)continue;
     const key=_getCanonical(r);if(!key)continue;
     if(!adBuyersMap.has(adId)) adBuyersMap.set(adId,new Set());
@@ -3120,15 +3122,9 @@ function getFeoFunilRows(){
   const tF=S.feoTempFilter, pF=S.feoPriceFilter;
   let rows=tF==="todos"?S.feoFunilRows:(S.feoFunilRowsByTemp[tF]||[]);
   if(pF!=="todos") rows=rows.filter(r=>{
-    const prodId=classifyProduct(r["Nome do produto"]||"","feo");
-    if(prodId==="reto"){
-      // Reto upsell: usa _priceTier (atribuído por email match com comprador FEO)
-      // Se _priceTier desconhecido, inclui (buyer matching em buildFunilData garante correção)
-      return !r._priceTier || r._priceTier===pF;
-    }
-    // FEO primary: filtra por preço via ad → campName
-    const ad=S.feoMetaByAdId[r["Ad Id"]];
-    return ad&&extractPriceFromCamp(ad.campName)===pF;
+    // Todos os rows agora têm _priceTier: UTM primeiro, fallback por valor
+    // Se _priceTier desconhecido, inclui (buyer matching em buildFunilData garante correção)
+    return !r._priceTier || r._priceTier===pF;
   });
   return rows;
 }
