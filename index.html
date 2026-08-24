@@ -3430,7 +3430,10 @@ function buildFunilData(rows, start, end, funil){
     const mainDate = mainPurchases[0].date;
     const others = paid.filter(p=>{
       if(OB_FAT_IDS.has(p.id)) return false; // OBs já contados acima
-      if(p.date < mainDate) return false;
+      // Tolerância de 1 dia: order bumps são simultâneos mas Hotmart pode gravar
+      // o upsell como data local do comprador (ex: México GMT-6) e o principal como UTC,
+      // resultando em 1 dia de diferença aparente.
+      if(p.date < subDays(mainDate,1)) return false;
       if(start && p.date < start) return false;
       if(end   && p.date > end)   return false;
       return true;
