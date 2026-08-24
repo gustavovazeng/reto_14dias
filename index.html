@@ -759,7 +759,11 @@ function parseHotmartRows(sheetJ){
     const d=tsToISO(ts);
     const st=normalizeHotmartStatus(r["data.purchase.status"]||"");
     const xcod=r["data.purchase.origin.xcod"]||"";
-    const adId=extractAdIdFromXcod(xcod)||"";
+    const sck=r["data.purchase.origin.sck"]||"";
+    let adId=extractAdIdFromXcod(xcod)||"";
+    // Fallback: sck pode carregar as UTMs quando xcod está vazio (ex: order bump)
+    // Formato sck: funnel|platform|adsetName|adsetId|adName|adId|campName|campId|placement
+    if(!adId&&sck){const sp=sck.split("|");if(sp.length>=6)adId=sp[5]||"";}
     const {platform:_plat,placement:_plac}=extractXcodMeta(xcod);
     const priceRaw=String(r["data.purchase.price.value"]||"0").replace(",",".");
     const currency=r["data.purchase.price.currency_value"]||"USD";
@@ -1437,13 +1441,24 @@ async function loadData(force=false){
           fvByAdDate[adId][d].qtd+=1;fvByAdDate[adId][d].valor+=valor;
         }
       }
-      // Atribui receita do upsell Reto ao adId FEO que originou a compra (via xcod)
+      // Mapeia email → adId FEO original (para atribuir upsell Reto ao anúncio correto)
+      // Necessário porque o Reto é order bump: xcod vem vazio no webhook do bump.
+      const emailToFeoAdId={};
+      for(const r of feoRows){
+        if(r["Status da compra"]!=="Paga") continue;
+        const em=(r["Email"]||"").toLowerCase().trim(); if(!em) continue;
+        const adId=r["Ad Id"]; if(!adId) continue;
+        emailToFeoAdId[em]=adId;
+      }
+      // Atribui receita do upsell Reto ao adId FEO que originou a compra
+      // Prioridade: adId do próprio row (xcod) → adId do comprador FEO (email match)
       // Não incrementa qtd — CPV continua sendo custo por venda FEO
       for(const r of feoRetoRows){
         if(r["Status da compra"]!=="Paga") continue;
         const d=r["Data da compra"];if(!d)continue;
         const valorUp=parseFloat(r["Valor do produto"])||0;
-        const adId=r["Ad Id"];if(!adId)continue;
+        const em2=(r["Email"]||"").toLowerCase().trim();
+        const adId=r["Ad Id"]||emailToFeoAdId[em2]||"";if(!adId)continue;
         if(!fvByAd[adId])fvByAd[adId]={qtd:0,valor:0,taxa:0};
         fvByAd[adId].valor+=valorUp;
         if(!fvByAdDate[adId])fvByAdDate[adId]={};
