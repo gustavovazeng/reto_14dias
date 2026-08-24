@@ -788,6 +788,7 @@ function parseHotmartRows(sheetJ){
       platform:_plat,
       placement:_plac,
       _orderDate:r["data.purchase.order_date"]||"",
+      offerCode:(r["data.purchase.offer.code"]||"").trim(),
     };
   }).filter(r=>r["Data da compra"])
     // Dedup por order_date: mesma compra pode gerar 2 webhooks; prefere o que tem email real
@@ -1017,7 +1018,10 @@ async function loadData(force=false){
     S.metaByTemp=mDByTemp;
 
     // ── Vendas Reto ────────────────────────────────────────────────────────
-    const retoRows=parseHotmartRows(retoJ);
+    // Filtro de oferta: a partir de 24/08/2026 o campo offerCode passou a ser preenchido.
+    // Só considerar linhas sem código (dados antigos) ou com código "gsi35uek".
+    const RETO_OFFER="gsi35uek";
+    const retoRows=parseHotmartRows(retoJ).filter(r=>!r.offerCode||r.offerCode===RETO_OFFER);
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
@@ -1313,9 +1317,10 @@ async function loadData(force=false){
 
     // ── FEO ────────────────────────────────────────────────────────────────
     const _feoSafe=(tab,col)=>fetchSheetPaged(tab,col,5000,FEO_SHEET_ID).catch(e=>{console.warn(`[feo] "${tab}":`,e.message);return {values:[]};});
-    const [feoMetaJ, feoVendasJ] = await Promise.all([
+    const [feoMetaJ, feoVendasJ, feoRetoJ] = await Promise.all([
       _feoSafe("Base meta","V"),
       _feoSafe("Base vendas","L"),
+      _feoSafe("Base vendas - Reto","L"),
     ]);
     {
       const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
@@ -1405,6 +1410,9 @@ async function loadData(force=false){
 
       // FEO vendas
       const feoRows=parseHotmartRows(feoVendasJ);
+      // Reto upsell: só oferta 2fhj5a20 — parse antecipado para atribuição por campanha
+      const FEO_RETO_OFFER="2fhj5a20";
+      const feoRetoRows=parseHotmartRows(feoRetoJ).filter(r=>r.offerCode===FEO_RETO_OFFER);
       const fvD={}, fvByAd={}, fvByAdDate={};
       const fvByTemp={frio:{},morno:{},quente:{}};
       for(const r of feoRows){
@@ -1422,7 +1430,20 @@ async function loadData(force=false){
           fvByAdDate[adId][d].qtd+=1;fvByAdDate[adId][d].valor+=valor;
         }
       }
-      // feoVendasByTemp via adId→campName→temp
+      // Atribui receita do upsell Reto ao adId FEO que originou a compra (via xcod)
+      // Não incrementa qtd — CPV continua sendo custo por venda FEO
+      for(const r of feoRetoRows){
+        if(r["Status da compra"]!=="Paga") continue;
+        const d=r["Data da compra"];if(!d)continue;
+        const valorUp=parseFloat(r["Valor do produto"])||0;
+        const adId=r["Ad Id"];if(!adId)continue;
+        if(!fvByAd[adId])fvByAd[adId]={qtd:0,valor:0,taxa:0};
+        fvByAd[adId].valor+=valorUp;
+        if(!fvByAdDate[adId])fvByAdDate[adId]={};
+        if(!fvByAdDate[adId][d])fvByAdDate[adId][d]={qtd:0,valor:0,taxa:0};
+        fvByAdDate[adId][d].valor+=valorUp;
+      }
+      // feoVendasByTemp via adId→campName→temp (valor já inclui upsell)
       for(const [adId,byDate] of Object.entries(fvByAdDate)){
         const adData=fmByAdId[adId];if(!adData)continue;
         const temp=extractTempFromCamp(adData.campName);if(!temp)continue;
@@ -1435,7 +1456,10 @@ async function loadData(force=false){
       S.feoVendasByTemp=fvByTemp;
 
       // FEO funil rows + by temp
-      S.feoFunilRows=feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Orden"}));
+      S.feoFunilRows=[
+        ...feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Orden"})),
+        ...feoRetoRows,
+      ];
       {
         const fbuyerTemp={};
         for(const r of feoRows){
@@ -3151,6 +3175,11 @@ function getVendasActive(){
 function classifyProduct(name, funil){
   if(!name) return null;
   const n=name.toUpperCase();
+  if(funil==="feo"){
+    if(n.includes("FEO")||n.includes("FINANZ")) return "feo";
+    if(n.includes("RETO")) return "reto";
+    return null;
+  }
   if(n.includes("RETO")) return "reto";
   if(n.includes("CERO")) return "cero";
   if(n.includes("MAPA")) return "mapa";
@@ -3158,10 +3187,14 @@ function classifyProduct(name, funil){
 }
 
 function getFunilSteps(funil){
+  if(funil==="feo") return [
+    {id:"feo",  label:"Planilla Finanzas en Orden", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
+    {id:"reto", label:"Finanzas - Reto 14 Dias",    step:"Upsell",             fill:"#92400e", text:"#fef3c7"},
+  ];
   return [
-    {id:"reto", label:"Finanzas - Reto 14 Dias",      step:"Entrada (Front-end)"},
-    {id:"cero", label:"Cero",              step:"Upsell 1"},
-    {id:"mapa", label:"Mapa del Inversor", step:"Upsell 2"},
+    {id:"reto", label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
+    {id:"cero", label:"Cero",                    step:"Upsell 1",            fill:"#92400e", text:"#fef3c7"},
+    {id:"mapa", label:"Mapa del Inversor",        step:"Upsell 2",           fill:"#065f46", text:"#d1fae5"},
   ];
 }
 
@@ -3228,7 +3261,7 @@ function deduplicateFunilRows(rows){
 
 function buildFunilData(rows, start, end, funil){
   const f=funil||"reto";
-  const primaryId="reto"; // produto de entrada do funil
+  const primaryId=getFunilSteps(f)[0].id; // produto de entrada do funil
   // filtered: só para análise de status/perdas — respeita período
   const filtered = rows.filter(r=>{
     if(!start && !end) return true;
@@ -3317,7 +3350,7 @@ function buildFunilData(rows, start, end, funil){
 
   // Funil: só Paga, dentro do período
   // OBs de faturamento (produto principal + OBs diretos)
-  const OB_FAT_IDS = new Set(["reto"]);
+  const OB_FAT_IDS = new Set([primaryId]);
 
   // Passo 1: agrupa por comprador+data para calcular faturamento do produto principal
   // (evita duplicatas entre webhook e histórica)
@@ -3408,34 +3441,38 @@ function buildFunilData(rows, start, end, funil){
     ltv:  totalFat/manualCount,
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
-      if(!manualCount) return 0;
+      const _upsell1Id=getFunilSteps(f)[1]?.id;
+      if(!manualCount||!_upsell1Id) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do Reto deve estar dentro do período filtrado
+        // compra do produto principal deve estar dentro do período filtrado
         const mp=paid.filter(p=>p.id===primaryId
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        const ascendeu=paid.some(p=>p.id==="cero"&&p.date>=mp.date);
+        const ascendeu=paid.some(p=>p.id===_upsell1Id&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      const ceroCount=counts["cero"]||0; if(!ceroCount) return 0;
+      const _upsell1Id=getFunilSteps(f)[1]?.id;
+      const _upsell2Id=getFunilSteps(f)[2]?.id;
+      const upsell1Count=counts[_upsell1Id||""]||0;
+      if(!_upsell2Id||!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do Cero deve estar dentro do período filtrado
-        const cp=paid.filter(p=>p.id==="cero"
+        // compra do upsell1 deve estar dentro do período filtrado
+        const cp=paid.filter(p=>p.id===_upsell1Id
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        const comprou=paid.some(p=>p.id==="mapa"&&p.date>=cp.date);
+        const comprou=paid.some(p=>p.id===_upsell2Id&&p.date>=cp.date);
         if(comprou) cnt++;
       }
-      return (cnt/ceroCount)*100;
+      return (cnt/upsell1Count)*100;
     })(),
     statusCounts, statusVals, statusByProd, buyers,
   };
@@ -3444,19 +3481,31 @@ function buildFunilData(rows, start, end, funil){
 // ── Render Funil ───────────────────────────────────────────────────────────
 function renderFunil(){
   const el=document.getElementById("page-funil");if(!el)return;
-
+  const isFeoFunil=S.currentFunil==="feo";
+  const funil=isFeoFunil?"feo":"reto";
   const _dd=D();
-  const _funilRows=S.retoTempFilter==="todos"?_dd.funilRows:(S.funilRowsByTemp[S.retoTempFilter]||[]);
+
+  // Escolhe as linhas do funil conforme o produto ativo
+  let _funilRows;
+  if(isFeoFunil){
+    _funilRows=S.feoTempFilter==="todos"?(S.feoFunilRows||[]):(S.feoFunilRowsByTemp?.[S.feoTempFilter]||[]);
+  } else {
+    _funilRows=S.retoTempFilter==="todos"?_dd.funilRows:(S.funilRowsByTemp[S.retoTempFilter]||[]);
+  }
+
   let fd;
-  try{ fd=buildFunilData(_funilRows,S.startDate||"",S.endDate||""); }
+  try{ fd=buildFunilData(_funilRows,S.startDate||"",S.endDate||"",funil); }
   catch(e){ console.error("renderFunil/buildFunilData:",e); el.innerHTML=`<div style="padding:24px;color:var(--red)">Erro ao calcular funil: ${e.message}</div>`; return; }
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
-  const retoCount=counts["reto"]||0;
-  const ceroCount=counts["cero"]||0;
-  const mapaCount=counts["mapa"]||0;
-  const pctCero=retoCount>0?(ceroCount/retoCount)*100:0;
-  const pctMapa=ceroCount>0?(mapaCount/ceroCount)*100:0;
+  const steps=getFunilSteps(funil);
+  const [s0,s1,s2]=steps;
+  const cnt0=counts[s0.id]||0;
+  const cnt1=s1?counts[s1.id]||0:0;
+  const cnt2=s2?counts[s2.id]||0:0;
+  const pct1=cnt0>0?(cnt1/cnt0)*100:0;
+  const pct2=cnt1>0?(cnt2/cnt1)*100:0;
+
   const roasC=statusColor(roas,META_ROAS,true);
   const lucroC=lucro>=0?"var(--green)":"var(--red)";
 
@@ -3469,14 +3518,13 @@ function renderFunil(){
 
   // Funil SVG — dark theme
   const SW=520,BH=90,GAP=12;
-  const steps=[
-    {id:"reto",label:"Finanzas - Reto 14 Dias",step:"Entrada (Front-end)",count:retoCount,fat:fat["reto"]||0,fill:"#1d4ed8",text:"#dbeafe",w:SW,pct:"100%"},
-    {id:"cero",label:"Cero",step:"Upsell 1",count:ceroCount,fat:fat["cero"]||0,fill:"#92400e",text:"#fef3c7",w:Math.max(SW*(pctCero/100),40),pct:pctCero.toFixed(1)+"% dos compradores Reto"},
-    {id:"mapa",label:"Mapa del Inversor",step:"Upsell 2",count:mapaCount,fat:fat["mapa"]||0,fill:"#065f46",text:"#d1fae5",w:Math.max(SW*(pctMapa/100)*(pctCero/100),30),pct:pctMapa.toFixed(1)+"% dos compradores Cero"},
-  ];
-  const SH=steps.length*(BH+GAP)-GAP;
+  const svgSteps=[];
+  svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
+  if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
+  if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
+  const SH=svgSteps.length*(BH+GAP)-GAP;
   let svgBlocks="";
-  steps.forEach((s,i)=>{
+  svgSteps.forEach((s,i)=>{
     const y=i*(BH+GAP);
     const x=(SW-s.w)/2;
     svgBlocks+=`
@@ -3485,8 +3533,8 @@ function renderFunil(){
       <text x="${SW/2}" y="${y+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s.text}">${s.label}</text>
       <text x="${SW/2}" y="${y+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s.text}" opacity="0.9">${s.count} compras · ${fBRLShort(s.fat)}</text>
       <text x="${SW/2}" y="${y+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${s.pct}</text>`;
-    if(i<steps.length-1){
-      const ns=steps[i+1];
+    if(i<svgSteps.length-1){
+      const ns=svgSteps[i+1];
       const x1=x,x2=x+s.w,x3=(SW-ns.w)/2+ns.w,x4=(SW-ns.w)/2;
       svgBlocks+=`<polygon points="${x1},${y+BH} ${x2},${y+BH} ${x3},${y+BH+GAP} ${x4},${y+BH+GAP}" fill="rgba(255,255,255,0.04)"/>`;
     }
@@ -3495,6 +3543,7 @@ function renderFunil(){
   // Analytics
   window.setAnaTab=t=>{S.aTab=t;renderFunil();};
   const tabs=[{k:"tempo",l:"Evolução mensal"},{k:"status",l:"Status / Perdas"}];
+  const upsellColors=["#f59e0b","#34d399","#a78bfa"];
   let anaContent="";
   if(S.aTab==="tempo"){
     const meses={};
@@ -3502,8 +3551,8 @@ function renderFunil(){
       if((r["Status da compra"]||"")!=="Paga") continue;
       const d=toISO(r["Data da compra"]||"")||""; if(!d) continue;
       const mes=d.slice(0,7);
-      const pid=classifyProduct(r["Nome do produto"]||""); if(!pid) continue;
-      if(!meses[mes])meses[mes]={reto:0,cero:0,mapa:0,fat:0};
+      const pid=classifyProduct(r["Nome do produto"]||"",funil); if(!pid) continue;
+      if(!meses[mes]){meses[mes]={fat:0};steps.forEach(s=>{meses[mes][s.id]=0;});}
       meses[mes][pid]=(meses[mes][pid]||0)+1;
       meses[mes].fat+=(parseFloat(r["Valor do produto"])||0);
     }
@@ -3511,37 +3560,39 @@ function renderFunil(){
     if(!mList.length){
       anaContent=`<p style="color:var(--muted);font-size:13px;padding:20px 0">Sem dados no período.</p>`;
     } else {
-      const maxR=Math.max(...mList.map(m=>meses[m].reto),1);
+      const maxPrimary=Math.max(...mList.map(m=>meses[m][s0.id]||0),1);
+      const stepLabel=s=>s.id==="feo"?"FEO":s.id==="reto"?"Reto":s.id==="cero"?"Cero":s.id==="mapa"?"Mapa":s.label;
       anaContent=`<table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
           <th style="text-align:left;padding:7px 10px;font-weight:700">Mês</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">Reto</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">Cero</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">Mapa</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">Take Cero</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">Take Mapa</th>
+          ${steps.map(s=>`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s)}</th>`).join("")}
+          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
+          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
           <th style="text-align:right;padding:7px 10px;font-weight:700">Faturamento</th>
         </tr></thead><tbody>
         ${mList.map(m=>{
           const d=meses[m];
-          const tr2=d.reto>0?(d.cero/d.reto*100):0;
-          const trM=d.cero>0?(d.mapa/d.cero*100):0;
-          const bw=Math.round((d.reto/maxR)*72);
+          const n0=d[s0.id]||0;
+          const n1=s1?d[s1.id]||0:0;
+          const n2=s2?d[s2.id]||0:0;
+          const tr1=n0>0?(n1/n0*100):0;
+          const tr2=n1>0?(n2/n1*100):0;
+          const bw=Math.round((n0/maxPrimary)*72);
           const [y2,mo]=m.split("-");
-          const trC=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
-          const trMC=trM>=30?"var(--green)":trM>=15?"var(--amber)":"var(--muted)";
+          const tr1C=tr1>=30?"var(--green)":tr1>=15?"var(--amber)":"var(--muted)";
+          const tr2C=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
           return `<tr style="border-top:1px solid var(--border)">
             <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
             <td style="padding:8px 10px">
               <div style="display:flex;align-items:center;gap:7px;justify-content:center">
                 <div style="width:${bw}px;height:5px;background:#3b82f6;border-radius:3px;min-width:2px;opacity:.8"></div>
-                <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${d.reto}</span>
+                <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${n0}</span>
               </div>
             </td>
-            <td style="padding:8px 10px;text-align:center;color:#f59e0b;font-weight:600;font-family:'JetBrains Mono',monospace">${d.cero}</td>
-            <td style="padding:8px 10px;text-align:center;color:#34d399;font-weight:600;font-family:'JetBrains Mono',monospace">${d.mapa||0}</td>
-            <td style="padding:8px 10px;text-align:center;color:${trC};font-weight:600">${tr2.toFixed(1)}%</td>
-            <td style="padding:8px 10px;text-align:center;color:${trMC};font-weight:600">${trM.toFixed(1)}%</td>
+            ${s1?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[0]};font-weight:600;font-family:'JetBrains Mono',monospace">${n1}</td>`:""}
+            ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
+            ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
+            ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
             <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(d.fat)}</td>
           </tr>`;
         }).join("")}
@@ -3570,28 +3621,38 @@ function renderFunil(){
       </tbody></table>`;
   }
 
+  // KPI cards de contagem — um por step
+  const kpiCountCards=svgSteps.map((s,i)=>{
+    const col=i===0?"var(--text)":upsellColors[i-1];
+    const pct=i===0?"":i===1?`${pct1.toFixed(1)}% do ${s0.label.split(" ")[0]}`:i===2?`${pct2.toFixed(1)}% do ${s1?.label.split(" ")[0]||""}`:"";;
+    return `<div class="kc"><div class="kc-lbl">Compradores ${s.label}</div><div class="kc-val" style="color:${col}">${s.count}</div><div class="kc-sub">${pct}</div></div>`;
+  }).join("");
+
+  // Tickets — um por step
+  const ticketCards=svgSteps.map(s=>`<div class="kc"><div class="kc-lbl">Ticket ${s.label.split(" ")[0]}</div><div class="kc-val kc-val-sm">${fBRL(s.count>0?(fat[s.id]||0)/s.count:0)}</div></div>`).join("");
+
+  const gridCols=2+steps.length;
+
   el.innerHTML=`
     <div class="hdr">
       <div>
         <div class="hdr-title">Métricas do Funil</div>
-        <div class="hdr-sub">base: ${retoCount} compradores do Finanzas - Reto 14 Dias · atualizado em: ${_dd.updated||"—"}</div>
+        <div class="hdr-sub">base: ${cnt0} compradores do ${s0.label} · atualizado em: ${_dd.updated||"—"}</div>
       </div>
     </div>
     ${retoTempFilterBar()}
 
     <div class="g4" style="margin-bottom:14px">
       <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val kc-val-sm">${fBRL(totalSpend)}</div><div class="kc-sub">Meta Ads</div></div>
-      <div class="kc"><div class="kc-lbl">Faturamento total</div><div class="kc-val kc-val-sm">${fBRL(totalFat)}</div><div class="kc-sub">Reto + Cero + Mapa</div></div>
+      <div class="kc"><div class="kc-lbl">Faturamento total</div><div class="kc-val kc-val-sm">${fBRL(totalFat)}</div><div class="kc-sub">${steps.map(s=>s.label.split(" ")[0]).join(" + ")}</div></div>
       <div class="kc"><div class="kc-lbl">ROAS funil</div><div class="kc-val kc-val-sm" style="color:${roasC}">${roas.toFixed(2)}x</div></div>
       <div class="kc"><div class="kc-lbl">Lucro bruto</div><div class="kc-val kc-val-sm" style="color:${lucroC}">${fBRL(lucro)}</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px">
-      <div class="kc"><div class="kc-lbl">LTV médio</div><div class="kc-val kc-val-sm">${fBRL(ltv)}</div><div class="kc-sub">por comprador Reto</div></div>
-      <div class="kc"><div class="kc-lbl">Take rate Cero</div><div class="kc-val kc-val-sm">${taxaAscensao.toFixed(1)}%</div><div class="kc-sub">${ceroCount} de ${retoCount} compraram</div></div>
-      <div class="kc"><div class="kc-lbl">Take rate Mapa</div><div class="kc-val kc-val-sm" style="color:#34d399">${(taxaMapa||0).toFixed(1)}%</div><div class="kc-sub">${mapaCount} de ${ceroCount} compraram</div></div>
-      <div class="kc"><div class="kc-lbl">Ticket Reto</div><div class="kc-val kc-val-sm">${fBRL(retoCount>0?(fat["reto"]||0)/retoCount:0)}</div></div>
-      <div class="kc"><div class="kc-lbl">Ticket Cero</div><div class="kc-val kc-val-sm">${fBRL(ceroCount>0?(fat["cero"]||0)/ceroCount:0)}</div></div>
-      <div class="kc"><div class="kc-lbl">Ticket Mapa</div><div class="kc-val kc-val-sm" style="color:#34d399">${fBRL(mapaCount>0?(fat["mapa"]||0)/mapaCount:0)}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:10px;margin-bottom:20px">
+      <div class="kc"><div class="kc-lbl">LTV médio</div><div class="kc-val kc-val-sm">${fBRL(ltv)}</div><div class="kc-sub">por comprador ${s0.label.split(" ")[0]}</div></div>
+      ${s1?`<div class="kc"><div class="kc-lbl">Take rate ${s1.label.split(" ")[0]}</div><div class="kc-val kc-val-sm">${taxaAscensao.toFixed(1)}%</div><div class="kc-sub">${cnt1} de ${cnt0} compraram</div></div>`:""}
+      ${s2?`<div class="kc"><div class="kc-lbl">Take rate ${s2.label.split(" ")[0]}</div><div class="kc-val kc-val-sm" style="color:#34d399">${(taxaMapa||0).toFixed(1)}%</div><div class="kc-sub">${cnt2} de ${cnt1} compraram</div></div>`:""}
+      ${ticketCards}
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;margin-bottom:20px;align-items:start">
@@ -3600,9 +3661,7 @@ function renderFunil(){
         <svg viewBox="0 0 ${SW} ${SH}" style="width:100%;max-width:${SW}px;display:block;margin:0 auto">${svgBlocks}</svg>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="kc"><div class="kc-lbl">Compradores Reto</div><div class="kc-val">${retoCount}</div><div class="kc-sub">aprovados</div></div>
-        <div class="kc"><div class="kc-lbl">Compradores Cero</div><div class="kc-val" style="color:#f59e0b">${ceroCount}</div><div class="kc-sub">${pctCero.toFixed(1)}% do Reto</div></div>
-        <div class="kc"><div class="kc-lbl">Compradores Mapa</div><div class="kc-val" style="color:#34d399">${mapaCount}</div><div class="kc-sub">${pctMapa.toFixed(1)}% do Cero</div></div>
+        ${kpiCountCards}
         ${qtdReemb>0?`<div class="kc"><div class="kc-lbl" style="color:var(--red)">Reembolsos</div><div class="kc-val kc-val-sm" style="color:var(--red)">${qtdReemb} · ${fBRLShort(valReemb)}</div><div class="kc-sub">${pctReemb.toFixed(1)}% do fat.</div></div>`:""}
         ${qtdAbrt>0?`<div class="kc"><div class="kc-lbl" style="color:var(--amber)">Em aberto</div><div class="kc-val kc-val-sm" style="color:var(--amber)">${qtdAbrt} · ${fBRLShort(valAbrt)}</div><div class="kc-sub">${pctAbrt.toFixed(1)}% do fat.</div></div>`:""}
       </div>
@@ -3614,7 +3673,7 @@ function renderFunil(){
       </div>
       ${anaContent}
     </div>
-    <p style="font-size:10px;color:var(--hint);text-align:center;font-family:'JetBrains Mono',monospace">Finanzas - Reto 14 Dias · Base Vendas (Hotmart) + Base Meta (Meta Ads via Stract)</p>`;
+    <p style="font-size:10px;color:var(--hint);text-align:center;font-family:'JetBrains Mono',monospace">${s0.label} · Base Vendas (Hotmart) + Base Meta (Meta Ads via Stract)</p>`;
 }
 
 // ── Render Resumo Diário ───────────────────────────────────────────────────
