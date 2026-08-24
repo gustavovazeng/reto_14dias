@@ -3556,6 +3556,12 @@ function renderFunil(){
       meses[mes][pid]=(meses[mes][pid]||0)+1;
       meses[mes].fat+=(parseFloat(r["Valor do produto"])||0);
     }
+    // Spend mensal a partir do meta ativo (respeita filtros de temp/preço)
+    const mesSpend={};
+    for(const [d,v] of Object.entries(getMetaActive())){
+      const mes=d.slice(0,7);
+      mesSpend[mes]=(mesSpend[mes]||0)+(v.spend||0);
+    }
     const mList=Object.keys(meses).sort();
     if(!mList.length){
       anaContent=`<p style="color:var(--muted);font-size:13px;padding:20px 0">Sem dados no período.</p>`;
@@ -3568,7 +3574,9 @@ function renderFunil(){
           ${steps.map(s=>`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s)}</th>`).join("")}
           ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
           ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
-          <th style="text-align:right;padding:7px 10px;font-weight:700">Faturamento</th>
+          <th style="text-align:right;padding:7px 10px;font-weight:700">Investimento</th>
+          <th style="text-align:right;padding:7px 10px;font-weight:700">CPV</th>
+          <th style="text-align:right;padding:7px 10px;font-weight:700">ROAS</th>
         </tr></thead><tbody>
         ${mList.map(m=>{
           const d=meses[m];
@@ -3581,6 +3589,10 @@ function renderFunil(){
           const [y2,mo]=m.split("-");
           const tr1C=tr1>=30?"var(--green)":tr1>=15?"var(--amber)":"var(--muted)";
           const tr2C=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
+          const invest=mesSpend[m]||0;
+          const cpv=n0>0?invest/n0:0;
+          const roas=invest>0?d.fat/invest:0;
+          const roasC=roas>=META_ROAS?"var(--green)":roas>=(META_ROAS*0.85)?"var(--amber)":"var(--red)";
           return `<tr style="border-top:1px solid var(--border)">
             <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
             <td style="padding:8px 10px">
@@ -3593,7 +3605,9 @@ function renderFunil(){
             ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
             ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
             ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
-            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(d.fat)}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--muted)">${cpv>0?fBRL(cpv):"—"}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:600;color:${invest>0?roasC:"var(--muted)"}">${invest>0?roas.toFixed(2)+"x":"—"}</td>
           </tr>`;
         }).join("")}
         </tbody></table>`;
