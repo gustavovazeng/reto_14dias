@@ -792,12 +792,19 @@ function parseHotmartRows(sheetJ){
     };
   }).filter(r=>r["Data da compra"])
     // Dedup por order_date: mesma compra pode gerar 2 webhooks; prefere o que tem email real
+    // Fallback: se não há order_date (timestamp ms), usa email+data para não deduplicar
+    // compradores diferentes que compraram no mesmo dia
     .reduce((acc,r)=>{
-      const key=r._orderDate||r["Data da compra"];
-      const i=acc.findIndex(x=>(x._orderDate||x["Data da compra"])===key);
+      const em=r["Email"]&&r["Email"].includes("@")?r["Email"]:"";
+      const key=r._orderDate||(em?em+"|"+r["Data da compra"]:r["Data da compra"]);
+      const i=acc.findIndex(x=>{
+        const xe=x["Email"]&&x["Email"].includes("@")?x["Email"]:"";
+        const xk=x._orderDate||(xe?xe+"|"+x["Data da compra"]:x["Data da compra"]);
+        return xk===key;
+      });
       if(i<0){ acc.push(r); }
       else{
-        const hasEmail=r["Email"]&&r["Email"].includes("@");
+        const hasEmail=!!em;
         const existingEmail=acc[i]["Email"]&&acc[i]["Email"].includes("@");
         if(!existingEmail&&hasEmail) acc[i]=r; // substitui pela linha com email real
       }
@@ -1456,9 +1463,22 @@ async function loadData(force=false){
       S.feoVendasByTemp=fvByTemp;
 
       // FEO funil rows + by temp
+      // Mapeia email → priceTier a partir das compras FEO (para taggear rows do Reto upsell)
+      const emailToPriceTier={};
+      for(const r of feoRows){
+        if(r["Status da compra"]!=="Paga") continue;
+        const em=(r["Email"]||"").toLowerCase().trim(); if(!em) continue;
+        const adId=r["Ad Id"]; if(!adId) continue;
+        const adData=fmByAdId[adId]; if(!adData) continue;
+        const pt=extractPriceFromCamp(adData.campName); if(!pt) continue;
+        emailToPriceTier[em]=pt;
+      }
       S.feoFunilRows=[
-        ...feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Orden"})),
-        ...feoRetoRows,
+        ...feoRows.map(r=>({...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem"})),
+        ...feoRetoRows.map(r=>({
+          ...r,
+          _priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null,
+        })),
       ];
       {
         const fbuyerTemp={};
@@ -3085,6 +3105,13 @@ function getFeoFunilRows(){
   const tF=S.feoTempFilter, pF=S.feoPriceFilter;
   let rows=tF==="todos"?S.feoFunilRows:(S.feoFunilRowsByTemp[tF]||[]);
   if(pF!=="todos") rows=rows.filter(r=>{
+    const prodId=classifyProduct(r["Nome do produto"]||"","feo");
+    if(prodId==="reto"){
+      // Reto upsell: usa _priceTier (atribuído por email match com comprador FEO)
+      // Se _priceTier desconhecido, inclui (buyer matching em buildFunilData garante correção)
+      return !r._priceTier || r._priceTier===pF;
+    }
+    // FEO primary: filtra por preço via ad → campName
     const ad=S.feoMetaByAdId[r["Ad Id"]];
     return ad&&extractPriceFromCamp(ad.campName)===pF;
   });
@@ -3575,11 +3602,14 @@ function renderFunil(){
       anaContent=`<table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
           <th style="text-align:left;padding:7px 10px;font-weight:700">Mês</th>
-          ${steps.map(s=>`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s)}</th>`).join("")}
-          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
-          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
           <th style="text-align:right;padding:7px 10px;font-weight:700">Investimento</th>
+          <th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s0)}</th>
           <th style="text-align:right;padding:7px 10px;font-weight:700">CPV</th>
+          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s1)}</th>`:""}
+          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
+          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s2)}</th>`:""}
+          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
+          <th style="text-align:right;padding:7px 10px;font-weight:700">Faturamento</th>
           <th style="text-align:right;padding:7px 10px;font-weight:700">ROAS</th>
         </tr></thead><tbody>
         ${mList.map(m=>{
@@ -3595,22 +3625,24 @@ function renderFunil(){
           const tr2C=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
           const invest=mesSpend[m]||0;
           const cpv=n0>0?invest/n0:0;
-          const roas=invest>0?d.fat/invest:0;
+          const fat=d.fat||0;
+          const roas=invest>0?fat/invest:0;
           const roasC=roas>=META_ROAS?"var(--green)":roas>=(META_ROAS*0.85)?"var(--amber)":"var(--red)";
           return `<tr style="border-top:1px solid var(--border)">
             <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
             <td style="padding:8px 10px">
               <div style="display:flex;align-items:center;gap:7px;justify-content:center">
                 <div style="width:${bw}px;height:5px;background:#3b82f6;border-radius:3px;min-width:2px;opacity:.8"></div>
                 <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${n0}</span>
               </div>
             </td>
-            ${s1?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[0]};font-weight:600;font-family:'JetBrains Mono',monospace">${n1}</td>`:""}
-            ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
-            ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
-            ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
-            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
             <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--muted)">${cpv>0?fBRL(cpv):"—"}</td>
+            ${s1?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[0]};font-weight:600;font-family:'JetBrains Mono',monospace">${n1}</td>`:""}
+            ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
+            ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
+            ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
+            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fat>0?fBRL(fat):"—"}</td>
             <td style="padding:8px 10px;text-align:right;font-weight:600;color:${invest>0?roasC:"var(--muted)"}">${invest>0?roas.toFixed(2)+"x":"—"}</td>
           </tr>`;
         }).join("")}
