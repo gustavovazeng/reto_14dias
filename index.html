@@ -3596,11 +3596,28 @@ function renderFunil(){
   let anaContent="";
   if(S.aTab==="tempo"){
     const meses={};
+    const _start=S.startDate||"", _end=S.endDate||"";
+    // Só conta upsells se o comprador tiver o produto principal (mesma lógica do buildFunilData)
+    const primaryId=getFunilSteps(funil)[0].id;
+    const validBuyerKeys=new Set();
+    for(const [,buyer] of fd.buyers){
+      if(!buyer.products.some(p=>p.id===primaryId&&p.status==="Paga")) continue;
+      for(const k of buyer.keys) validBuyerKeys.add(k);
+    }
     for(const r of _funilRows){
       if((r["Status da compra"]||"")!=="Paga") continue;
       const d=toISO(r["Data da compra"]||"")||""; if(!d) continue;
+      if(_start && d<_start) continue;
+      if(_end   && d>_end)   continue;
       const mes=d.slice(0,7);
       const pid=classifyProduct(r["Nome do produto"]||"",funil); if(!pid) continue;
+      // Upsell: só conta se comprador tem o produto principal
+      if(pid!==primaryId){
+        const em=(r["Email"]||"").toLowerCase().trim();
+        const tel=(r["Telefone"]||"").replace(/\D/g,"");
+        const ok=(em&&validBuyerKeys.has("e:"+em))||(tel&&validBuyerKeys.has("t:"+tel));
+        if(!ok) continue;
+      }
       if(!meses[mes]){meses[mes]={fat:0};steps.forEach(s=>{meses[mes][s.id]=0;});}
       meses[mes][pid]=(meses[mes][pid]||0)+1;
       meses[mes].fat+=(parseFloat(r["Valor do produto"])||0);
