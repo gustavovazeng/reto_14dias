@@ -873,7 +873,7 @@ async function loadData(force=false){
   let mj, retoJ, ceroJ, mapaJ, distJ, segJ, segNovaJ, aquecMornoJ, aquecSegJ;
   [mj, retoJ, ceroJ, mapaJ, distJ, segJ, segNovaJ, aquecMornoJ, aquecSegJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
-    _fetchSafe(SHEET_RETO,"L",5000),
+    _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
     _fetchSafe(SHEET_MAPA,"Z",5000),
     _fetchSafe(SHEET_DIST,"T",5000),
@@ -3366,8 +3366,12 @@ function buildFunilData(rows, start, end, funil){
       const em=(r["Email"]||"").toLowerCase().trim();
       const cpf=(r["CPF Comprador"]||"").replace(/[^\d]/g,"");
       const tel=(r["Telefone"]||"").replace(/[^\d]/g,"");
-      const identity=em||cpf||tel; if(!identity) continue;
-      const key=identity+"|"+d;
+      const identity=em||cpf||tel;
+      // Fallback: se não há identity (sheet sem data.buyer.email/tel), usa order_date como chave única
+      // (parseHotmartRows já deduplica por order_date, então não conta duplicatas)
+      const orderKey=r._orderDate||"";
+      const key=identity?identity+"|"+d:(orderKey?"_ord_"+orderKey:null);
+      if(!key) continue;
       if(!grupos.has(key)) grupos.set(key,{st,d,valor:0,taxa:0,hasPrimary:false,obCounts:{}});
       const g=grupos.get(key);
       if((ST_PRI[st]||0)>(ST_PRI[g.st]||0)) g.st=st;
