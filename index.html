@@ -3596,7 +3596,6 @@ function renderFunil(){
   let anaContent="";
   if(S.aTab==="tempo"){
     const meses={};
-    const _start=S.startDate||"", _end=S.endDate||"";
     // Só conta upsells se o comprador tiver o produto principal (mesma lógica do buildFunilData)
     const primaryId=getFunilSteps(funil)[0].id;
     const validBuyerKeys=new Set();
@@ -3607,8 +3606,6 @@ function renderFunil(){
     for(const r of _funilRows){
       if((r["Status da compra"]||"")!=="Paga") continue;
       const d=toISO(r["Data da compra"]||"")||""; if(!d) continue;
-      if(_start && d<_start) continue;
-      if(_end   && d>_end)   continue;
       const mes=d.slice(0,7);
       const pid=classifyProduct(r["Nome do produto"]||"",funil); if(!pid) continue;
       // Upsell: só conta se comprador tem o produto principal
