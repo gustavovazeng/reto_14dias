@@ -559,6 +559,18 @@ function subDays(iso,n){ return addDays(iso,-n); }
 function parseBRL(s){ if(!s||s==="-"||s==="0")return 0;return parseFloat(String(s).replace(/R\$\s*/g,"").replace(/\./g,"").replace(",",".").trim())||0; }
 function parseBRLAbs(s){ return Math.abs(parseBRL(s)); }
 function parseUSD(s){ if(!s||s==="-"||s==="0")return 0;return parseFloat(String(s).replace(/[$\s,]/g,"").trim())||0; }
+// Converte gasto de anúncio (campo "Spend") para USD a partir do nome da conta.
+// Prioridade: novo formato "(MXN)"/"(USD)" no nome → legado por nome exato → default MXN
+function metaSpendToUSD(rawSpend, accountName){
+  const acc=(accountName||"").toUpperCase();
+  if(acc.includes("(MXN)")) return rawSpend/18;
+  if(acc.includes("(USD)")) return rawSpend;
+  // Nomes legados — manter comportamento anterior
+  if(acc==="CONTA 2 CARTÃO"||acc==="CONTA 2") return rawSpend/18;  // MXN
+  if(acc==="CA03"||acc==="CA 03"||acc==="CA04"||acc==="CA 04") return rawSpend; // USD
+  if(acc==="CONTA G") return rawSpend; // USD
+  return rawSpend/18; // default: MXN
+}
 
 // Normaliza status numérico da Eduzz para texto
 function normalizeStatus(s){
@@ -916,8 +928,7 @@ async function loadData(force=false){
       const d=toISO(r["Date"]);if(!d)continue;
       if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
       const _accMeta=(r["Account Name"]||r["Account name"]||r[""]||"").trim();
-      const _rawSpendMeta=parseBRL(r["Spend (Cost, Amount Spent)"]);
-      const _spendMeta=_accMeta==="Conta 2 cartão"?_rawSpendMeta/18:_rawSpendMeta;
+      const _spendMeta=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_accMeta);
       mD[d].spend        += _spendMeta;
       mD[d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
       mD[d].impressions  += parseInt(r["Impressions"]||0)||0;
@@ -1141,9 +1152,7 @@ async function loadData(force=false){
     for(const r of parseSheet(distJ)){
       const d=r["Date"]||""; if(!d||d==="Date")continue;
       const _acc=(r["Account Name"]||"").trim();
-      const _rawSpend=parseBRL(r["Spend (Cost, Amount Spent)"]);
-      // CA03 (ou "CA 03") = USD; demais = Peso Mexicano, divide por 18
-      const spendV=(_acc==="CA03"||_acc==="CA 03")?_rawSpend:_rawSpend/18;
+      const spendV=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_acc);
       const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
       const impressV  =parseInt(r["Impressions"]||0)||0;
       const video3sV  =parseInt(r["Action 3s Video Views"]||0)||0;
@@ -1274,8 +1283,7 @@ async function loadData(force=false){
     for(const r of parseSheet(aquecMornoJ)){
       const d=r["Date"]||""; if(!d||d==="Date")continue;
       const _acc=(r["Account Name"]||"").trim();
-      const _rawSpend=parseBRL(r["Spend (Cost, Amount Spent)"]);
-      const spendV=_acc==="CA 04"?_rawSpend:_rawSpend/18;
+      const spendV=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_acc);
       const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
       const impressV  =parseInt(r["Impressions"]||0)||0;
       // Morno uses "Action Video View" for 3s views (vs "Action 3s Video Views" in dist)
@@ -1351,8 +1359,7 @@ async function loadData(force=false){
       for(const r of parseSheet(feoMetaJ)){
         const d=toISO(r["Date"]);if(!d)continue;
         const _acc=(r["Account Name"]||r["Account name"]||"").trim();
-        const _raw=parseBRL(r["Spend (Cost, Amount Spent)"]);
-        const spendV=_acc==="Conta 2 cartão"?_raw/18:_raw;
+        const spendV=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_acc);
         const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
         const icV       =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
         const impressV  =parseInt(r["Impressions"]||0)||0;
