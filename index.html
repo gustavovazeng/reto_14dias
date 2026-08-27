@@ -1054,8 +1054,8 @@ async function loadData(force=false){
     // ── Vendas Reto ────────────────────────────────────────────────────────
     // Filtro de oferta: a partir de 24/08/2026 o campo offerCode passou a ser preenchido.
     // Só considerar linhas sem código (dados antigos) ou com código "gsi35uek".
-    const RETO_OFFER="gsi35uek";
-    const retoRows=parseHotmartRows(retoJ).filter(r=>!r.offerCode||r.offerCode===RETO_OFFER);
+    const RETO_OFFERS=new Set(["gsi35uek","n85u013k"]);
+    const retoRows=parseHotmartRows(retoJ).filter(r=>!r.offerCode||RETO_OFFERS.has(r.offerCode));
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
