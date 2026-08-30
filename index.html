@@ -720,9 +720,21 @@ const SHEET_CARRINHO_DISPARO_NAME = null;  // "Base fichas - disparo"
 const SHEET_CARRINHO_VENDAS_NAME = null;   // "Base vendas"
 const SHEET_CARRINHO_META_NAME = null;     // "Base Meta - Carrinho"
 const SHEET_LIVES_CAPTACAO_NAME = null;    // "Base Meta - lives captação"
-// Dados de página (GA4) — sem esta aba, Connect Rate e Tx conv Pg cadastro
-// ficam "—" no Resumo diário e nas Métricas do Tráfego.
-const SHEET_GA4_NAME = null;               // "Base GA4"
+// Dados de página (GA4) — alimentam Connect Rate e Tx conv Pg cadastro.
+const SHEET_GA4_NAME = "Base GA4";
+
+// ── Fonte do "denominador de página" ──────────────────────────────────────
+// Connect Rate e Tx conv Pg cadastro precisam de um número de "quantas
+// pessoas chegaram na página de captura". Há duas fontes possíveis:
+//   "meta" → visualizações da página de destino do GERENCIADOR (coluna
+//            "Action Landing Page View" da Base Meta - Captação);
+//   "ga4"  → sessões da Base GA4.
+// Hoje a fonte é o gerenciador: o GA4 está medindo errado neste lançamento
+// (em 28/08 reportou 157 Page Views para 838 Sessions — page views menores
+// que sessões é impossível em tracking normal, e em 27/08 a proporção estava
+// certa). Quando o GA4 voltar ao normal, trocar esta constante por "ga4" faz
+// tudo voltar sozinho — nenhuma outra linha precisa mudar.
+let FONTE_PAGINA = "meta";
 const SHEET_LIKES_NAME = null;             // "Contagem likes"
 function sheetCsvUrl(sheetName){
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
@@ -1707,12 +1719,26 @@ function processCarrinhoVendas(vendasRowsRaw){
 //  • /mdi-obrigado-forms-newls → pesquisa, acessada só DEPOIS do cadastro
 // Comparação normalizada (sem barra final e sem querystring) pra não
 // escapar por causa de "/mdi-obrigado-forms-newls/" ou "?email=...".
-// Paths do mdi_set26, lidos da própria Base leads/pesquisa:
-//   • página de captura   → /mdi-2026-jun-captura-v6/  (é a que CONTA)
-//   • página de obrigado  → /mdi-obrigado-forms-newls/ (pesquisa, só depois
-//     do cadastro — não pode entrar no denominador da conversão de página)
-// ⚠️ TODO: confirmar contra os "Page Path" reais quando a Base GA4 existir.
+// Paths do mdi_set26:
+//   • página de captura  → /mdi-2026-setp-captura-v1/  (é a que CONTA; é o
+//     único "Page Path" que aparece na Base GA4 hoje)
+//   • página de obrigado → /mdi-obrigado-forms-newls/  (a pesquisa, acessada
+//     só DEPOIS do cadastro — não pode entrar no denominador da conversão)
 const GA4_PATHS_EXCLUIDOS = ["/mdi-obrigado-forms-newls"];
+// Ponte entre a página que a LEAD diz ter usado e a que o GA4 registrou. A
+// Base leads grava sempre a mesma URL ("/mdi-2026-jun-captura-v6/"), herdada
+// do lançamento de junho — é campo fixo do ActiveCampaign, não a página real;
+// tanto que as leads de maio também vêm com ela. O GA4 registra a página de
+// verdade ("/mdi-2026-setp-captura-v1/"). Sem esta ponte a tabela por página
+// mostraria as sessões de um lado com 0 cadastros e os cadastros do outro com
+// 0 sessões, e a conversão por página ficaria zerada nas duas linhas.
+const GA4_PATH_ALIASES = {
+  "/mdi-2026-jun-captura-v6":"/mdi-2026-setp-captura-v1",
+};
+function ga4PathCanonico(p){
+  const v=normPath(p);
+  return GA4_PATH_ALIASES[v]||v;
+}
 function normPath(p){
   return String(p||"").trim().split("?")[0].split("#")[0].replace(/\/+$/,"").toLowerCase();
 }
@@ -1720,18 +1746,37 @@ function ga4PathExcluido(p){
   const v=normPath(p);
   return GA4_PATHS_EXCLUIDOS.some(x=>normPath(x)===v);
 }
+// Origens do GA4 que NÃO são tráfego pago pra página de captura e por isso
+// ficam fora da conta. Neste lançamento o GA4 não está recebendo as UTMs — as
+// colunas Session Source/Medium/Term/Ad Content vêm "(not set)" em quase toda
+// linha —, então filtrar por "FBAds" como nos outros funis zeraria a métrica
+// inteira. O critério aqui é o inverso: conta tudo que chegou na página de
+// captura e descarta só o que é reconhecidamente de outra origem.
+const GA4_SOURCES_EXCLUIDAS = ["eventsmanager.facebook.com","business.facebook.com","adsmanager.facebook.com"];
+function ga4SourceExcluida(source,medium){
+  const src=String(source||"").trim().toLowerCase();
+  if(GA4_SOURCES_EXCLUIDAS.includes(src))return true;
+  // Visita interna de ferramenta (referral do próprio gerenciador) não é lead.
+  return String(medium||"").trim().toLowerCase()==="referral"&&src.includes("facebook.com");
+}
 function processGA4(rowsRaw){
   const rows=[];
   for(const r of rowsRaw){
     const date=toISO(r["Date"]);if(!date)continue;
     const source=(r["Session Source"]||"").trim();
-    if(!source.startsWith("FBAds"))continue;
     const pagePath=(r["Page Path"]||"").trim();
+    if(ga4SourceExcluida(source,r["Session Medium"]))continue;
     if(ga4PathExcluido(pagePath))continue;
     const sessionMedium=(r["Session Medium"]||"").trim();
     const sessions=parseInt(r["Sessions"],10)||0;
     const pageViews=parseInt(r["Page Views"],10)||0;
-    rows.push({date,pagePath,sessions,pageViews,temperatureName:campaignTemperature(sessionMedium)});
+    // A temperatura sai do Session Medium, que é onde o nome da campanha
+    // chega quando a UTM funciona. Hoje vem "(not set)", então fica "" e as
+    // sessões só entram no recorte "Todos" — o filtro por temperatura das
+    // Métricas do Tráfego mostra "—" pra Connect Rate/Tx Pág até a UTM
+    // começar a chegar no GA4.
+    rows.push({date,pagePath:ga4PathCanonico(pagePath),sessions,pageViews,
+      temperatureName:campaignTemperature(sessionMedium)});
   }
   return rows;
 }
@@ -1755,6 +1800,19 @@ function ga4Metrics(start,end,temp){
 // "path" (a página onde a pessoa se cadastrou), que usa o mesmo valor do
 // "Page Path" da Base GA4 (ex.: "/v1/h3/f"). Nada de estimativa/rateio:
 // cada cadastro é contado só na página em que ele realmente aconteceu.
+// Quantas pessoas chegaram na página de captura no período, pela fonte
+// configurada em FONTE_PAGINA. Devolve junto o rótulo da fonte, pra que a
+// tela diga de onde veio o número em vez de deixar o leitor adivinhar.
+function paginaMetrics(start,end,temp){
+  if(FONTE_PAGINA==="meta"){
+    const m=sumMetaRows(metaRowsFiltered(start,end,temp));
+    return{sessions:m.lpv||0,fonte:"gerenciador"};
+  }
+  const g=ga4Metrics(start,end,temp);
+  return{sessions:g.sessions,fonte:"GA4"};
+}
+function fontePaginaLabel(){ return FONTE_PAGINA==="meta"?"gerenciador":"GA4"; }
+
 function getGA4PageRows(start,end){
   const rows=ga4RowsInRange(start,end,"todos");
   const byPath={};
@@ -1766,7 +1824,7 @@ function getGA4PageRows(start,end){
   const leadsTrafego=leadsForChannel(leadsInRange(start,end),"trafego");
   const cadastrosByPath={};
   for(const l of leadsTrafego){
-    const key=l.path||"(sem página)";
+    const key=l.path?ga4PathCanonico(l.path):"(sem página)";
     cadastrosByPath[key]=(cadastrosByPath[key]||0)+1;
   }
   // Garante que uma página com cadastro apareça mesmo sem sessão de GA4
@@ -1892,6 +1950,12 @@ async function loadData(){
       const cl=parseInt(r["Action Link Clicks"]||0)||0;
       const im=parseInt(r["Impressions"]||0)||0;
       const al=parseInt(r["Action Leads"]||0)||0;
+      // Visualizações da página de destino — é o equivalente do gerenciador a
+      // uma "sessão" na página de captura. ⚠️ A exportação atual da Base Meta -
+      // Captação NÃO traz esta coluna; sem ela o Connect Rate fica "—" e a Tx
+      // conv Pg cai na aproximação por cliques. É só incluir "Action Landing
+      // Page View" no export que as duas métricas ligam sozinhas.
+      const lpv=parseInt(r["Action Landing Page View"]||0)||0;
       const vv=parseInt(r["Action Video View"]||0)||0;
       const adId=(r["Ad ID"]||"").trim();
       const adName=(r["Ad Name"]||"").trim();
@@ -1901,10 +1965,10 @@ async function loadData(){
       const igUrl=(r["Instagram Permalink URL"]||"").trim();
       const platform=(r["Publisher Platform (Breakdown)"]||"").trim();
 
-      if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,actionLeads:0,videoViews:0};
-      mD[d].spend+=sp;mD[d].clicks+=cl;mD[d].impressions+=im;mD[d].actionLeads+=al;mD[d].videoViews+=vv;
+      if(!mD[d])mD[d]={spend:0,clicks:0,impressions:0,actionLeads:0,videoViews:0,lpv:0};
+      mD[d].spend+=sp;mD[d].clicks+=cl;mD[d].impressions+=im;mD[d].actionLeads+=al;mD[d].videoViews+=vv;mD[d].lpv+=lpv;
 
-      metaRows.push({date:d,adId,adName,campId,campName,adsetName,spend:sp,clicks:cl,impressions:im,actionLeads:al,videoViews:vv,igUrl,platform,
+      metaRows.push({date:d,adId,adName,campId,campName,adsetName,spend:sp,clicks:cl,impressions:im,actionLeads:al,videoViews:vv,lpv,igUrl,platform,
         temperatureName:campaignTemperature(campName)});
 
       if(adId&&!adIdMap[adId])adIdMap[adId]={adName,campName,campId,adsetName,igUrl};
@@ -2132,8 +2196,8 @@ function leadsForTemp(rows,temp){
   return rows.filter(l=>l.temperatureName===map[temp]);
 }
 function sumMetaRows(rows){
-  return rows.reduce((a,r)=>({spend:a.spend+r.spend,clicks:a.clicks+r.clicks,impressions:a.impressions+r.impressions,actionLeads:a.actionLeads+r.actionLeads}),
-    {spend:0,clicks:0,impressions:0,actionLeads:0});
+  return rows.reduce((a,r)=>({spend:a.spend+r.spend,clicks:a.clicks+r.clicks,impressions:a.impressions+r.impressions,actionLeads:a.actionLeads+r.actionLeads,lpv:a.lpv+(r.lpv||0)}),
+    {spend:0,clicks:0,impressions:0,actionLeads:0,lpv:0});
 }
 // start/end = null → sem limite naquele lado (mesma convenção de leadsInRange)
 function metaRowsFiltered(start,end,temp){
@@ -2192,7 +2256,7 @@ function principalTotals(start,end,channel,temp="todos"){
   const leads=rows.length;
   const spend=channel==="organico"?0:m.spend;
   const cpl=(spend>0&&leads>0)?spend/leads:null;
-  return{spend,leads,cpl,clicks:m.clicks,impressions:m.impressions,actionLeads:m.actionLeads};
+  return{spend,leads,cpl,clicks:m.clicks,impressions:m.impressions,actionLeads:m.actionLeads,lpv:m.lpv};
 }
 // % de faixa/quiz/temperatura — sempre sobre quem respondeu (não-resposta não
 // entra no denominador), exceto a própria taxa de resposta do quiz, cujo
@@ -2243,33 +2307,40 @@ function resumoMetrics(s,e){
   const rows=leadsForChannel(rowsAll,"trafego");
   const leadsTrafego=rows.length;
   const leadsOrganico=leadsForChannel(rowsAll,"organico").length;
-  // Tx conv Pg cadastro: leads de tráfego ÷ sessões da página de captura
-  // (Base GA4, só FBAds — exclusão da página de pesquisa/quiz pendente).
-  // SEM fallback aqui (diferente de trafficMetrics/Métricas de Tráfego): o
-  // Resumo diário usa só dado real do GA4 — fica "—" quando não há sessão
-  // no período, em vez de aproximar por cliques.
-  const ga4=ga4Metrics(s,e,"todos");
-  const txConvPg=ga4.sessions>0?(leadsTrafego/ga4.sessions)*100:null;
-  // Connect Rate: sessões (GA4) ÷ cliques no link (Meta Ads).
-  const connectRate=(per.clicks>0&&ga4.sessions>0)?(ga4.sessions/per.clicks)*100:null;
+  // Tx conv Pg cadastro: leads de tráfego ÷ quem chegou na página, pela
+  // fonte configurada (ver FONTE_PAGINA). SEM fallback aqui (diferente de
+  // trafficMetrics/Métricas de Tráfego): o Resumo diário usa só dado real —
+  // fica "—" quando não há número de página no período, em vez de aproximar
+  // por cliques.
+  const pag=paginaMetrics(s,e,"todos");
+  // Sem número de página no período (é o caso enquanto a Base Meta não trouxer
+  // "Action Landing Page View"), a taxa cai pra cadastros ÷ CLIQUES. Não é a
+  // mesma coisa — é o funil inteiro do clique ao cadastro, não da página pro
+  // cadastro —, por isso txConvPgAprox marca o número e a tela avisa.
+  const txConvPgAprox=pag.sessions===0&&per.clicks>0;
+  const txConvPg=pag.sessions>0?(leadsTrafego/pag.sessions)*100
+    :(per.clicks>0?(leadsTrafego/per.clicks)*100:null);
+  // Connect Rate: quem chegou na página ÷ cliques no link. Sem o número de
+  // página não existe aproximação honesta — fica "—" mesmo.
+  const connectRate=(per.clicks>0&&pag.sessions>0)?(pag.sessions/per.clicks)*100:null;
   // Custo por cadastro AC Tráfego: todo o gasto é pago (tráfego), então o
   // custo/lead "oficial" da meta é sobre os cadastros de tráfego — não o
   // blended (que dilui com orgânico, hoje sempre 0 leads).
   const cpl=leadsTrafego>0?per.spend/leadsTrafego:null;
-  return{...per,...qm,leadsTrafego,leadsOrganico,cpl,txConvPg,connectRate};
+  return{...per,...qm,leadsTrafego,leadsOrganico,cpl,txConvPg,txConvPgAprox,connectRate,paginaSessions:pag.sessions,paginaFonte:pag.fonte};
 }
 // s,e = null → todo o período (all-time)
 function periodTotals(s,e){
   const dates=new Set([...Object.keys(S.leadsByDate),...Object.keys(S.meta)]);
-  let leads=0,spend=0,clicks=0,impressions=0,actionLeads=0;
+  let leads=0,spend=0,clicks=0,impressions=0,actionLeads=0,lpv=0;
   for(const d of dates){
     if(s!==null&&d<s)continue;
     if(e!==null&&d>e)continue;
     leads+=S.leadsByDate[d]||0;
     const m=S.meta[d];
-    if(m){ spend+=m.spend||0; clicks+=m.clicks||0; impressions+=m.impressions||0; actionLeads+=m.actionLeads||0; }
+    if(m){ spend+=m.spend||0; clicks+=m.clicks||0; impressions+=m.impressions||0; actionLeads+=m.actionLeads||0; lpv+=m.lpv||0; }
   }
-  return{leads,spend,clicks,impressions,actionLeads,
+  return{leads,spend,clicks,impressions,actionLeads,lpv,
     cpl:leads>0?spend/leads:0,
     cpc:clicks>0?spend/clicks:0,
     ctr:impressions>0?(clicks/impressions)*100:0,
@@ -3492,8 +3563,8 @@ function renderResumo(){
       ${row("CPM",fUSD(m.cpm),`🎯 ${fUSD(METAS_RESUMO.cpm.val)}`,metaEmoji(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher))}
       ${!isHoje?`
       <div style="height:10px"></div>
-      ${row("Tx conv Pg cadastro",fPctOrDash(m.txConvPg),`🎯 ${METAS_RESUMO.txConvPg.val}%`,metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher))}
-      ${row("Connect Rate",fPctOrDash(m.connectRate),`🎯 ${METAS_RESUMO.connectRate.val}%`,metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher))}`:""}
+      ${row(`Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}`,fPctOrDash(m.txConvPg),`🎯 ${METAS_RESUMO.txConvPg.val}%`,metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher))}
+      ${row("Connect Rate",fPctOrDash(m.connectRate),m.connectRate==null?`sem visualização de pg. de destino`:`🎯 ${METAS_RESUMO.connectRate.val}%`,metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher))}`:""}
     </div>`;
   }
 
@@ -3525,7 +3596,7 @@ CPC:\t${fUSD(m.cpc)}\t${metaEmoji(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.hi
 CTR:\t${fPct(m.ctr)}\t${metaEmoji(m.ctr,METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher)} (🎯: ${METAS_RESUMO.ctr.val}%)
 CPM:\t${fUSD(m.cpm)}\t${metaEmoji(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher)} (🎯: ${fUSD(METAS_RESUMO.cpm.val)})${isHoje?"":`
 
-Tx conv Pg cadastro:\t${fPctOrDash(m.txConvPg)}\t${metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher)} (🎯: ${METAS_RESUMO.txConvPg.val}%)
+Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}:\t${fPctOrDash(m.txConvPg)}\t${metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher)} (🎯: ${METAS_RESUMO.txConvPg.val}%)
 Connect Rate:\t${fPctOrDash(m.connectRate)}\t${metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher)} (🎯: ${METAS_RESUMO.connectRate.val}%)`}`;
   }
   const resumoText=
@@ -3628,20 +3699,20 @@ function trafficMetrics(start,end,temp){
   const cpc=m.clicks>0?m.spend/m.clicks:null;
   const ctr=m.impressions>0?(m.clicks/m.impressions)*100:null;
   const cpm=m.impressions>0?(m.spend/m.impressions)*1000:null;
-  const ga4=ga4Metrics(start,end,temp);
+  const pag=paginaMetrics(start,end,temp);
   // Tx Pág → Cadastro: leads de tráfego ÷ sessões da página de captura (Base
-  // GA4, só FBAds — exclusão da página de pesquisa/quiz pendente). Cai de volta pra aproximação
+  // GA4, já sem a página de obrigado e sem as origens internas). Cai de volta pra aproximação
   // leads/cliques quando não há dado de GA4 no período (ex.: antes da Base
   // GA4 existir) — txConvPgAprox sinaliza quando é essa aproximação, pra UI
   // avisar que não é o dado real do GA4 (diferente do Resumo diário, que não
   // tem esse fallback).
-  const txConvPgAprox=ga4.sessions===0&&m.clicks>0;
-  const txConvPg=ga4.sessions>0?(leadsTrafego/ga4.sessions)*100:(m.clicks>0?(leads/m.clicks)*100:null);
+  const txConvPgAprox=pag.sessions===0&&m.clicks>0;
+  const txConvPg=pag.sessions>0?(leadsTrafego/pag.sessions)*100:(m.clicks>0?(leads/m.clicks)*100:null);
   // Connect Rate: sessões da página de captura (GA4) ÷ cliques no link (Meta
   // Ads) — mede quantos de quem clicou no anúncio realmente carregou a
   // página. Só existe quando há dado de GA4 no período.
-  const connectRate=(m.clicks>0&&ga4.sessions>0)?(ga4.sessions/m.clicks)*100:null;
-  return{spend:m.spend,leads,cpl,cpc,ctr,cpm,txConvPg,txConvPgAprox,connectRate};
+  const connectRate=(m.clicks>0&&pag.sessions>0)?(pag.sessions/m.clicks)*100:null;
+  return{spend:m.spend,leads,cpl,cpc,ctr,cpm,txConvPg,txConvPgAprox,connectRate,paginaFonte:pag.fonte};
 }
 function getDailyTraffic(start,end,temp){
   const dates=new Set(Object.keys(S.meta));
@@ -3770,8 +3841,8 @@ function renderMetricasTrafego(){
       ${metricCard("CPC",m.cpc!=null?fUSD(m.cpc):"—",METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher,fUSD,m.cpc)}
       ${metricCard("CTR",fPctOrDash(m.ctr),METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher,v=>fPct(v),m.ctr)}
       ${metricCard("CPM",m.cpm!=null?fUSD(m.cpm):"—",METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher,fUSD,m.cpm)}
-      ${metricCard("Tx Pág → Cadastro",fPctOrDash(m.txConvPg),METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher,v=>fPct(v),m.txConvPg,m.txConvPgAprox?"cliques reais do Meta Ads (sem sessão GA4 no período)":null)}
-      ${metricCard("Connect Rate",fPctOrDash(m.connectRate),METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher,v=>fPct(v),m.connectRate)}
+      ${metricCard(m.txConvPgAprox?"Tx Cliques → Cadastro":"Tx Pág → Cadastro",fPctOrDash(m.txConvPg),METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher,v=>fPct(v),m.txConvPg,m.txConvPgAprox?"cadastros ÷ cliques — falta a coluna de visualização da pg. de destino":null)}
+      ${metricCard("Connect Rate",fPctOrDash(m.connectRate),METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher,v=>fPct(v),m.connectRate,m.connectRate==null?"sem visualização de pg. de destino no período":null)}
     `;
   }
 
@@ -3779,7 +3850,7 @@ function renderMetricasTrafego(){
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">Métricas do Tráfego</div>
-        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · temperatura: ${tempLabel}</div>
+        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · temperatura: ${tempLabel} · página: ${fontePaginaLabel()}</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
@@ -5596,9 +5667,12 @@ window.MDI = {
   fetchSheetCSVOpt,
   findPrecoKey,
   firstOfMonthISO,
+  fontePaginaLabel,
   ga4Metrics,
+  ga4PathCanonico,
   ga4PathExcluido,
   ga4RowsInRange,
+  ga4SourceExcluida,
   gapTd,
   getAdRows,
   getCampRows,
@@ -5658,6 +5732,7 @@ window.MDI = {
   normalizePhone,
   nowBR,
   onDCCurrent,
+  paginaMetrics,
   parseCSVText,
   parseFichaDateTimeMs,
   parseNum,
