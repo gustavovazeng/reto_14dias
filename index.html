@@ -2286,6 +2286,7 @@ function tempPcts(rows){
   return{
     quenteN:q, mornoN:m, frioN:f,
     quentePct:n>0?(q/n)*100:null,
+    mornoPct:n>0?(m/n)*100:null,
     frioPct:n>0?(f/n)*100:null,
     quenteMornoPct:n>0?((q+m)/n)*100:null,
     quenteMornoN:q+m,
@@ -3548,6 +3549,7 @@ function renderResumo(){
       ${row("Cadastros no AC Total",m.leads,pctAtingimento!=null?`atingimento: ${fPct(pctAtingimento)}`:"","")}
       <div style="height:10px"></div>
       ${row("Tx quente",fPctOrDash(m.quentePct),`🎯 ${METAS_RESUMO.quente.val}%`,metaEmoji(m.quentePct,METAS_RESUMO.quente.val,METAS_RESUMO.quente.higher))}
+      ${row("Tx morno",fPctOrDash(m.mornoPct),"","")}
       ${row("Tx frio",fPctOrDash(m.frioPct),`🎯 ${METAS_RESUMO.frio.val}%`,metaEmoji(m.frioPct,METAS_RESUMO.frio.val,METAS_RESUMO.frio.higher))}
       ${row("% público quente + morno",fPctOrDash(m.quenteMornoPct),`🎯 ${METAS_RESUMO.quenteMorno.val}%`,metaEmoji(m.quenteMornoPct,METAS_RESUMO.quenteMorno.val,METAS_RESUMO.quenteMorno.higher))}
       <div style="height:10px"></div>
@@ -3575,21 +3577,19 @@ function renderResumo(){
 
 Investimento:\t${fUSD(m.spend)}\t${plan?`(plan.: ${fUSD(plan.investimento)})`:"(sem plano p/ este período)"}
 Cadastros no AC Tráfego:\t${m.leadsTrafego}\t${plan?`(plan.: ${plan.leads})`:"(sem plano p/ este período)"}
-
 Custo por cadastro AC Tráfego:\t${c.txt}\t${c.emoji} (🎯: ${fUSD(META_CPL)})
 
 Cadastros no AC Orgânico:\t${m.leadsOrganico}
 Cadastros no AC Total:\t${m.leads}${pctAtingimento!=null?`\t(atingimento: ${fPct(pctAtingimento)})`:""}
 
-Tx quente:\t${fPctOrDash(m.quentePct)}\t${metaEmoji(m.quentePct,METAS_RESUMO.quente.val,METAS_RESUMO.quente.higher)} (🎯: ${METAS_RESUMO.quente.val}%)
-Tx frio:\t${fPctOrDash(m.frioPct)}\t${metaEmoji(m.frioPct,METAS_RESUMO.frio.val,METAS_RESUMO.frio.higher)} (🎯: ${METAS_RESUMO.frio.val}%)
-% público quente + morno:\t${fPctOrDash(m.quenteMornoPct)}\t${metaEmoji(m.quenteMornoPct,METAS_RESUMO.quenteMorno.val,METAS_RESUMO.quenteMorno.higher)} (🎯: ${METAS_RESUMO.quenteMorno.val}%)
+Tx quente:\t${fPctOrDash(m.quentePct)}
+Tx morno:\t${fPctOrDash(m.mornoPct)}
+Tx frio:\t${fPctOrDash(m.frioPct)}
 
 Faixa A\t${fPctOrDash(m.faixaA)}\t${metaEmoji(m.faixaA,METAS_RESUMO.faixaA.val,METAS_RESUMO.faixaA.higher)} (🎯: ${METAS_RESUMO.faixaA.val}%)
 Faixa B\t${fPctOrDash(m.faixaB)}\t${metaEmoji(m.faixaB,METAS_RESUMO.faixaB.val,METAS_RESUMO.faixaB.higher)} (🎯: ${METAS_RESUMO.faixaB.val}%)
 Faixa C\t${fPctOrDash(m.faixaC)}\t${metaEmoji(m.faixaC,METAS_RESUMO.faixaC.val,METAS_RESUMO.faixaC.higher)} (🎯: ${METAS_RESUMO.faixaC.val}%)
 Faixa D\t${fPctOrDash(m.faixaD)}\t${metaEmoji(m.faixaD,METAS_RESUMO.faixaD.val,METAS_RESUMO.faixaD.higher)} (🎯: ${METAS_RESUMO.faixaD.val}%)
-
 Tx de resp pesquisa:\t${fPctOrDash(m.quizPct)}\t${metaEmoji(m.quizPct,METAS_RESUMO.quiz.val,METAS_RESUMO.quiz.higher)} (🎯: ${METAS_RESUMO.quiz.val}%)
 
 CPC:\t${fUSD(m.cpc)}\t${metaEmoji(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher)} (🎯: ${fUSD(METAS_RESUMO.cpc.val)})
