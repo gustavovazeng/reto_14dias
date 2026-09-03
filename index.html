@@ -577,12 +577,13 @@ const FUNIS = {
     // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas/likes neste
     // lançamento — null-safe em todo o código de renderização.
     // Benchmark do Aquecimento — "Plan consolidado" do oro_jul25.
-    aquecimentoMetas:{
-      cpc:       {val:2.18,  higher:false}, // menor é melhor
-      frequencia:{val:10.98, higher:true},  // meta a ALCANÇAR (repetição planejada)
-      tx75:      {val:9.46,  higher:true},
-      cptx75:    {val:0.54,  higher:false},
-    },
+    // Aquecimento sem meta por enquanto — as que estavam aqui vinham do
+    // oro_jul25, em real, e não valem pro mdi_set26. Com `null` a página
+    // mostra "sem meta definida ainda", os cartões saem sem cor de status e
+    // os gráficos sem a linha tracejada. Pra ligar, é só devolver o objeto:
+    //   aquecimentoMetas:{ cpc:{val:X,higher:false}, frequencia:{val:X,higher:true},
+    //                      tx75:{val:X,higher:true}, cptx75:{val:X,higher:false} },
+    aquecimentoMetas:null,
     lembreteMetas:null,
     // Benchmark do Lembrete por DIAS QUE FALTAM até a Aula 01 (oro_jul25).
     // A chave é o nº de dias restantes — diasFaltamLembrete() calcula isso a
@@ -708,10 +709,14 @@ const SHEET_LEADS_NAME = "Base leads ajustado";
 // vazia, então o e-mail é a única chave de cruzamento disponível).
 const SHEET_PESQUISA_NAME = "Base pesquisa";
 
+// Mídia do Aquecimento — mesmas colunas que as demais abas de etapa, com
+// "Account Name" no export, então a conversão pra dólar lê a moeda da conta
+// em vez de assumir MXN (ver metaSpendToUSD).
+
 // Abas ainda inexistentes neste lançamento. `null` = o dashboard NEM TENTA
 // buscar (sem erro no console, sem espera); é só trocar o null pelo nome da
 // aba quando ela for criada que a seção correspondente liga sozinha.
-const SHEET_AQUECIMENTO_NAME = null;   // "Base Meta - aquecimento"
+const SHEET_AQUECIMENTO_NAME = "Base aquecimento";
 const SHEET_LEMBRETE_NAME = null;      // "Base Meta - lembrete"
 const SHEET_AULAS_NAME = null;         // "Base Meta - Aulas"
 const SHEET_CARRINHO_TRAFEGO_NAME = null;  // "Base fichas - Tráfego"
@@ -4835,7 +4840,7 @@ function aquecimentoResumoText(){
   const planClicks=(plan!=null&&metas)?Math.round(plan/metas.cpc.val):null;
   const bm=(v,meta,higher,fmt)=>metas?`${metaEmojiGlobal(v,meta,higher)} Plan consolidado: ${fmt(meta)}`:"sem meta ainda";
   const planTxt=plan!=null?`(planej até hoje: ${fUSD(plan)})`:"(sem plano p/ este período)";
-  return `*mdi_set26 - Resumo Aquecimento* - benchmark oro_jul25
+  return `*mdi_set26 - Resumo Aquecimento*${metas?" - benchmark":""}
 
 ${first?fDateBR(first):"—"}\t${fDateBR(todayISO())}
 
