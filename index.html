@@ -630,10 +630,15 @@ const FUNIS = {
     // "leads" = investimento do dia ÷ meta de CPL ($1,25), arredondado.
     // Total planejado de cadastros: 6.880.
     //
-    // Calendário: Captação 28/08→08/09 · Aquecimento 31/08→08/09 ·
-    // Lembrete 01/09→08/09 · Aulas 08, 09 e 10/09 · Grupo VIP 10→13/09 ·
+    // Calendário: Captação 28/08→08/09 · Aquecimento 03/09→08/09 ·
+    // Lembrete 04/09→08/09 · Aulas 08, 09 e 10/09 · Grupo VIP 10→13/09 ·
     // Carrinho 14→17/09. Captação, Aquecimento e Lembrete vão até o dia da
     // Aula 01 (08/09) inclusive.
+    //
+    // Replanejamento de 04/09: o Aquecimento só entrou no ar em 03/09 (era
+    // 31/08) e o Lembrete em 04/09 (era 01/09). As duas verbas seguem as
+    // mesmas ($300 e $200), redistribuídas nas janelas mais curtas — por isso
+    // o valor diário subiu: o Aquecimento perdeu 3 dias e o Lembrete 3.
     planoDiario:[
       {date:"2026-08-28", investimento:510.00, leads:408},
       {date:"2026-08-29", investimento:554.00, leads:443},
@@ -649,26 +654,20 @@ const FUNIS = {
       {date:"2026-09-08", investimento:570.00, leads:456},
     ],
     planoAquecimento:[
-      {date:"2026-08-31", investimento:18.60},
-      {date:"2026-09-01", investimento:22.28},
-      {date:"2026-09-02", investimento:25.97},
-      {date:"2026-09-03", investimento:29.65},
-      {date:"2026-09-04", investimento:33.33},
-      {date:"2026-09-05", investimento:37.02},
-      {date:"2026-09-06", investimento:40.70},
-      {date:"2026-09-07", investimento:44.38},
-      {date:"2026-09-08", investimento:48.07},
+      {date:"2026-09-03", investimento:33.44},
+      {date:"2026-09-04", investimento:40.07},
+      {date:"2026-09-05", investimento:46.69},
+      {date:"2026-09-06", investimento:53.31},
+      {date:"2026-09-07", investimento:59.93},
+      {date:"2026-09-08", investimento:66.56},
     ],
     planoAquecimentoTotal:300,
     planoLembrete:[
-      {date:"2026-09-01", investimento:14.77},
-      {date:"2026-09-02", investimento:17.69},
-      {date:"2026-09-03", investimento:20.61},
-      {date:"2026-09-04", investimento:23.54},
-      {date:"2026-09-05", investimento:26.46},
-      {date:"2026-09-06", investimento:29.39},
-      {date:"2026-09-07", investimento:32.31},
-      {date:"2026-09-08", investimento:35.23},
+      {date:"2026-09-04", investimento:28.65},
+      {date:"2026-09-05", investimento:34.33},
+      {date:"2026-09-06", investimento:40.00},
+      {date:"2026-09-07", investimento:45.67},
+      {date:"2026-09-08", investimento:51.35},
     ],
     planoAulas:[
       {date:"2026-09-08", investimento:125.21},
@@ -842,6 +841,7 @@ const S = {
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   likesRows:[],          // linhas da Contagem likes: {date,time,likes}
+  stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
   lembreteRows:[],       // idem, Base Meta - lembrete
   carrinhoMetaRows:[],   // linhas da Base Meta - Carrinho (mídia da etapa de Carrinho)
@@ -909,7 +909,7 @@ function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
   S.ga4Rows=[]; S.likesRows=[];
-  S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
+  S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null};
   S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
   S.carrinhoTrafego={}; S.carrinhoTrafegoComPreco={};
@@ -2089,22 +2089,16 @@ async function loadData(){
   S.loading=false;
   render();
 
-  // Etapas Aquecimento/Lembrete/Aulas.
-  (async()=>{
-    try{
-      const [aquecimentoCsv, lembreteCsv, aulasCsv] = await Promise.all([
-        fetchSheetCSVOpt(SHEET_AQUECIMENTO_NAME),
-        fetchSheetCSVOpt(SHEET_LEMBRETE_NAME),
-        fetchSheetCSVOpt(SHEET_AULAS_NAME),
-      ]);
-      S.aquecimentoRows = parseStageRows(parseRows(parseCSVText(aquecimentoCsv)));
-      S.lembreteRows = parseStageRows(parseRows(parseCSVText(lembreteCsv)));
-      S.aulasRows = parseStageRows(parseRows(parseCSVText(aulasCsv)));
-      render();
-    }catch(e){
-      console.error("Erro ao carregar dados das etapas (Aquecimento/Lembrete/Aulas):",e);
-    }
-  })();
+  // Etapas Aquecimento/Lembrete/Aulas — cada uma no seu próprio try/catch.
+  // Antes as três vinham num Promise.all: bastava UMA aba faltar (nome
+  // errado, planilha não compartilhada) pra derrubar as três de uma vez, e o
+  // único sinal era um console.error que ninguém vê. Agora uma aba quebrada
+  // não afeta as outras, e o erro fica guardado em S.stageErrors pra aparecer
+  // na própria página da etapa — em vez do genérico "nenhum dado carregado",
+  // que não distingue "aba vazia" de "aba não encontrada".
+  carregarEtapa("aquecimento", SHEET_AQUECIMENTO_NAME, rows=>{S.aquecimentoRows=rows;});
+  carregarEtapa("lembrete",    SHEET_LEMBRETE_NAME,    rows=>{S.lembreteRows=rows;});
+  carregarEtapa("aulas",       SHEET_AULAS_NAME,       rows=>{S.aulasRows=rows;});
 
   // Mídia do Carrinho (aba própria).
   (async()=>{
@@ -2180,6 +2174,23 @@ async function loadData(){
       console.error("Erro ao carregar Contagem likes:",e);
     }
   })();
+}
+
+// Carrega uma aba de etapa isoladamente. Guarda o erro em S.stageErrors[chave]
+// pra que a página da etapa possa mostrar o motivo real da falha.
+async function carregarEtapa(chave, sheetName, aplicar){
+  if(!sheetName) return;
+  try{
+    const rows=parseStageRows(parseRows(parseCSVText(await fetchSheetCSV(sheetName))));
+    aplicar(rows);
+    delete S.stageErrors[chave];
+    if(rows.length===0) S.stageErrors[chave]=`A aba "${sheetName}" respondeu, mas sem nenhuma linha de dado — confira se ela tem conteúdo e se a coluna "Date" está preenchida.`;
+    render();
+  }catch(e){
+    S.stageErrors[chave]=e.message||String(e);
+    console.error(`Erro ao carregar a etapa ${chave} (aba "${sheetName}"):`,e);
+    render();
+  }
 }
 
 // ── Derived metrics ───────────────────────────────────────────────────────
@@ -5127,6 +5138,13 @@ function kpiCardManual(lbl,inputId,value,setterCall,sub){
 // Lembrete, e 3x dentro da aba Aulas — uma vez por aula). "scope" identifica
 // o estado independente (toggle de gráfico, busca e ordenação da tabela) e
 // os ids dos canvases; "alcanceKey" é a chave em S.manualAlcance.
+// Aviso na página da etapa quando a aba dela falhou — diz o nome da aba e o
+// motivo, em vez de deixar a tela vazia sem explicação.
+function stageErroHtml(chave){
+  const msg=S.stageErrors[chave];
+  if(!msg)return "";
+  return `<div class="err" style="margin-top:10px">⚠️ ${msg}</div>`;
+}
 function stageAnalysisHtml(scope,rows,metas,alcanceKey){
   metas=metas||{};
   const m=stageMetrics(rows);
@@ -5262,6 +5280,7 @@ function renderAquecimento(){
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${stageErroHtml("aquecimento")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("aquecimento",rows,AQUECIMENTO_METAS,"aquecimento")}
     <div class="foot">mdi_set26 · Aquecimento</div>`;
   restoreStageFocus(_fid);
@@ -5284,6 +5303,7 @@ function renderLembrete(){
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${stageErroHtml("lembrete")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("lembrete",rows,LEMBRETE_METAS,"lembrete")}
     <div class="foot">mdi_set26 · Lembrete</div>`;
   restoreStageFocus(_fid);
@@ -5336,6 +5356,7 @@ function renderAulas(){
     </div>
     ${aulasSubTabBar()}
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${stageErroHtml("aulas")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta aula.</div>`:stageAnalysisHtml(cfg.scope,rows,cfg.metas,cfg.alcanceKey)}
     <div class="foot">mdi_set26 · Aulas · ${cfg.label}</div>`;
   restoreStageFocus(_fid);
@@ -5618,6 +5639,7 @@ window.MDI = {
   barRow,
   campaignStage,
   campaignTemperature,
+  carregarEtapa,
   carrinhoAdResumoBlock,
   carrinhoAdRows,
   carrinhoBloco,
@@ -5815,6 +5837,7 @@ window.MDI = {
   stageAdAgg,
   stageAnalysisHtml,
   stageDailyAgg,
+  stageErroHtml,
   stageManualRow,
   stageMetricCfg,
   stageMetrics,
