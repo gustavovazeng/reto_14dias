@@ -574,9 +574,8 @@ const FUNIS = {
       indiceConsciencia:{val:42.00, higher:true},
       txConvPgObrigado: {val:35.00, higher:true},
     },
-    // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas/likes neste
+    // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas neste
     // lançamento — null-safe em todo o código de renderização.
-    // Benchmark do Aquecimento — "Plan consolidado" do oro_jul25.
     // Aquecimento sem meta por enquanto — as que estavam aqui vinham do
     // oro_jul25, em real, e não valem pro mdi_set26. Com `null` a página
     // mostra "sem meta definida ainda", os cartões saem sem cor de status e
@@ -584,23 +583,12 @@ const FUNIS = {
     //   aquecimentoMetas:{ cpc:{val:X,higher:false}, frequencia:{val:X,higher:true},
     //                      tx75:{val:X,higher:true}, cptx75:{val:X,higher:false} },
     aquecimentoMetas:null,
+    // Lembrete sem meta nenhuma — nem as fixas nem o benchmark por dias que
+    // faltavam pra Aula 01. Os valores que estavam aqui vinham do oro_jul25 e
+    // não valem pro mdi_set26. A página e o Resumo diário mostram os números
+    // sem cor de status e sem alvo, do mesmo jeito que o Aquecimento.
     lembreteMetas:null,
-    // Benchmark do Lembrete por DIAS QUE FALTAM até a Aula 01 (oro_jul25).
-    // A chave é o nº de dias restantes — diasFaltamLembrete() calcula isso a
-    // partir de PLANO_AULAS[0].date (24/08). CPC: menor é melhor;
-    // frequência: é a repetição planejada pra aquele dia (alcançar é bom).
-    lembreteBenchDia:{
-      7:{cpc:0.50, freq:1.74},
-      6:{cpc:0.58, freq:2.69},
-      5:{cpc:0.64, freq:3.43},
-      4:{cpc:0.67, freq:4.43},
-      3:{cpc:0.74, freq:5.62},
-      2:{cpc:0.77, freq:6.86},
-      1:{cpc:0.79, freq:8.17},
-    },
     aula01Metas:null,
-    lembreteBenchmark:null,
-    cplBenchmark:null,
     // Meta do Carrinho: custo por ficha COM PREÇO — menor é melhor.
     // ⚠️ TODO: valor herdado do tdo_ago26 (era em R$). Com $100 de verba de
     // Carrinho no mdi_set26, esse alvo precisa ser revisto em dólar.
@@ -744,7 +732,6 @@ const SHEET_GA4_NAME = "Base GA4";
 // certa). Quando o GA4 voltar ao normal, trocar esta constante por "ga4" faz
 // tudo voltar sozinho — nenhuma outra linha precisa mudar.
 let FONTE_PAGINA = "meta";
-const SHEET_LIKES_NAME = null;             // "Contagem likes"
 function sheetCsvUrl(sheetName){
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 }
@@ -784,18 +771,6 @@ let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
 let AULA01_METAS = FUNIS.mdi.aula01Metas;
-let LEMBRETE_BENCHMARK_OUT25 = FUNIS.mdi.lembreteBenchmark;
-// Benchmark do Lembrete por dias-que-faltam (CPC/frequência) — ver FUNIS.
-let LEMBRETE_BENCH_DIA = FUNIS.mdi.lembreteBenchDia;
-// Benchmark do dia de HOJE (ou null fora da janela de 1 a 7 dias).
-function lembreteBenchHoje(){
-  const d=diasFaltamLembrete(todayISO());
-  return (LEMBRETE_BENCH_DIA&&d!=null&&LEMBRETE_BENCH_DIA[d])?{...LEMBRETE_BENCH_DIA[d],diasFaltam:d}:null;
-}
-// CPL_HOURS continua fixo — são os checkpoints de hora em hora (09:30 às
-// 19:30) usados pra registrar likes nos dias de Aula, iguais em qualquer funil.
-const CPL_HOURS = ["09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30","18:30","19:30"];
-let CPL_BENCHMARK_OUT25 = FUNIS.mdi.cplBenchmark;
 let META_CARRINHO_CUSTO_FICHA_COM_PRECO = FUNIS.mdi.metaCarrinhoCustoFichaComPreco;
 let PLANO_DIARIO = FUNIS.mdi.planoDiario;
 // Soma do plano (Captação) até hoje — usado na aba Principal pros cartões
@@ -845,7 +820,6 @@ const S = {
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
-  likesRows:[],          // linhas da Contagem likes: {date,time,likes}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
   lembreteRows:[],       // idem, Base Meta - lembrete
@@ -913,7 +887,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
-  S.ga4Rows=[]; S.likesRows=[];
+  S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null};
   S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
@@ -948,9 +922,6 @@ function switchFunil(key){
   AQUECIMENTO_METAS=f.aquecimentoMetas;
   LEMBRETE_METAS=f.lembreteMetas;
   AULA01_METAS=f.aula01Metas;
-  LEMBRETE_BENCHMARK_OUT25=f.lembreteBenchmark;
-  LEMBRETE_BENCH_DIA=f.lembreteBenchDia;
-  CPL_BENCHMARK_OUT25=f.cplBenchmark;
   META_CARRINHO_CUSTO_FICHA_COM_PRECO=f.metaCarrinhoCustoFichaComPreco;
   PLANO_DIARIO=f.planoDiario;
   PLANO_AQUECIMENTO=f.planoAquecimento;
@@ -1848,87 +1819,6 @@ function getGA4PageRows(start,end){
   }).sort((a,b)=>b.sessions-a.sessions);
 }
 
-// ── Contagem de likes (YouTube) — Lembrete + CPLs ───────────────────────────
-// Planilha "Contagem likes": Data, Hora, Likes. Normaliza a Hora pra
-// "HH:MM" (a exportação do Google Sheets pode vir com segundos, ex. "12:00:00").
-function normalizeHora(s){
-  if(!s)return null;
-  const p=String(s).trim().split(":");
-  if(p.length<2)return null;
-  const h=parseInt(p[0],10),m=parseInt(p[1],10);
-  if(isNaN(h)||isNaN(m))return null;
-  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
-}
-function processLikes(rowsRaw){
-  const out=[];
-  for(const r of rowsRaw){
-    const date=toISO(r["Data"]);if(!date)continue;
-    const time=normalizeHora(r["Hora"]);if(!time)continue;
-    const likes=parseInt(String(r["Likes"]||"").replace(/\D/g,""),10);
-    if(isNaN(likes))continue;
-    out.push({date,time,likes});
-  }
-  return out;
-}
-// "Dias que faltam" até a Aula 01 (referência do countdown do Lembrete) —
-// PLANO_AULAS[0].date é a data real da Aula 01 no calendário deste
-// lançamento. Ex.: 03/08 → 7 dias faltam; 09/08 (domingo) → 1 dia falta.
-function diasFaltamLembrete(dateISO){
-  const aula1=PLANO_AULAS[0]?.date; if(!aula1)return null;
-  const ms=Date.parse(aula1+"T00:00:00Z")-Date.parse(dateISO+"T00:00:00Z");
-  return Math.round(ms/86400000);
-}
-// A qual Aula (1/2/3) pertence essa data, pela agenda real (PLANO_AULAS).
-function aulaNumForDate(dateISO){
-  const idx=PLANO_AULAS.findIndex(p=>p.date===dateISO);
-  return idx>=0?idx+1:null;
-}
-// Checkpoint de hora mais próximo dentre os 11 fixos (09:30…19:30) — usado
-// pra casar um registro de likes com a linha certa do benchmark do CPL.
-function nearestCplHour(time){
-  const toMin=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
-  const target=toMin(time);
-  let best=CPL_HOURS[0],bestDiff=Infinity;
-  for(const h of CPL_HOURS){
-    const diff=Math.abs(toMin(h)-target);
-    if(diff<bestDiff){bestDiff=diff;best=h;}
-  }
-  return best;
-}
-// Linhas de likes do Lembrete: só o checkpoint das 12:00 de cada dia (regra
-// fixa pedida — nunca comparamos outro horário do Lembrete), uma por dia,
-// com o "dias que faltam" e a meta (fatorX benchmark × leads ao vivo).
-function lembreteLikesRows(leadsAoVivo){
-  // Só considera checkpoints das 12:00 DENTRO da janela real do Lembrete
-  // (dias que faltam 1-7, ou seja, dentro de PLANO_LEMBRETE) — uma linha
-  // batida às 12:00 num dia de Aula, por exemplo, não entra aqui.
-  const rows=S.likesRows.filter(r=>{
-    if(r.time!=="12:00")return false;
-    const d=diasFaltamLembrete(r.date);
-    return d!=null&&d>=1&&d<=7;
-  }).sort((a,b)=>a.date<b.date?-1:1);
-  return rows.map(r=>{
-    const diasFaltam=diasFaltamLembrete(r.date);
-    const fatorX=LEMBRETE_BENCHMARK_OUT25?LEMBRETE_BENCHMARK_OUT25[diasFaltam]:null;
-    const meta=fatorX!=null?(fatorX/100)*leadsAoVivo:null;
-    return{date:r.date,diasFaltam,likes:r.likes,fatorX,meta};
-  });
-}
-// Linhas de likes de uma Aula (checkpoint hora-em-hora), casando cada
-// registro com o horário mais próximo do benchmark daquele CPL específico.
-function aulaLikesRows(aulaNum,leadsAoVivo){
-  const dateForAula=PLANO_AULAS[aulaNum-1]?.date;
-  if(!dateForAula)return[];
-  const bench=CPL_BENCHMARK_OUT25?CPL_BENCHMARK_OUT25["aula0"+aulaNum]:null;
-  const rows=S.likesRows.filter(r=>r.date===dateForAula).sort((a,b)=>a.time<b.time?-1:1);
-  return rows.map(r=>{
-    const hour=nearestCplHour(r.time);
-    const fatorX=bench?bench[hour]:undefined;
-    const meta=fatorX!=null?(fatorX/100)*leadsAoVivo:null;
-    return{time:r.time,hourBench:hour,likes:r.likes,fatorX,meta};
-  });
-}
-
 // ── Load data ─────────────────────────────────────────────────────────────
 async function loadData(){
   // Guarda extra: se o funil ativo não tiver sheetId configurado, nem tenta
@@ -2168,17 +2058,6 @@ async function loadData(){
     }
   })();
 
-  // Contagem de likes (YouTube) — Lembrete + CPLs, comparado ao benchmark
-  // definido (fator X × leads ao vivo) quando houver — ver LEMBRETE_BENCHMARK_OUT25/CPL_BENCHMARK_OUT25.
-  (async()=>{
-    try{
-      const likesCsv = await fetchSheetCSVOpt(SHEET_LIKES_NAME);
-      S.likesRows = processLikes(parseRows(parseCSVText(likesCsv)));
-      render();
-    }catch(e){
-      console.error("Erro ao carregar Contagem likes:",e);
-    }
-  })();
 }
 
 // Carrega uma aba de etapa isoladamente. Guarda o erro em S.stageErrors[chave]
@@ -4748,7 +4627,7 @@ function stageRow(lbl,val,metaStr,emoji){
     <span style="font-size:14px;min-width:90px;text-align:right">${emoji||""}<span style="font-size:10px;color:var(--hint);margin-left:4px">${metaStr||""}</span></span>
   </div>`;
 }
-// Linha de input manual (Alcance ou Likes) — mesmo padrão do campo de
+// Linha de input manual (Alcance) — mesmo padrão do campo de
 // investimento manual do Resumo diário, com id próprio pra restaurar o foco
 // depois do re-render (senão o cursor pula pro início a cada tecla digitada).
 function stageManualRow(inputId,lbl,value,setterCall,metaStr,emoji){
@@ -4767,33 +4646,6 @@ function restoreStageFocus(fid){
     const s=document.getElementById(fid);
     if(s){s.focus();const l=s.value.length;s.setSelectionRange(l,l);}
   });
-}
-// Tabela de likes × benchmark (fator X × leads ao vivo) — usada no Lembrete
-// (checkpoint diário das 12:00) e em cada Aula (checkpoint de hora em hora).
-// rows: [{label, likes, fatorX, meta}]. Vem da planilha "Contagem likes";
-// sem registro ainda pra aquele checkpoint = linha some (não mostra zero).
-function likesBenchmarkTableHtml(rows,colLabel){
-  if(!rows.length)return `<div style="font-size:11px;color:var(--hint);padding:4px 0 8px">Sem registros ainda na aba "Contagem likes" pra esse checkpoint.</div>`;
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px">
-    <thead><tr style="color:var(--hint)">
-      <th style="text-align:left;padding:4px 8px 4px 0;font-weight:600">${colLabel}</th>
-      <th style="text-align:right;padding:4px 8px;font-weight:600">Likes</th>
-      <th style="text-align:right;padding:4px 8px;font-weight:600">Meta (fator X × leads)</th>
-      <th style="text-align:right;padding:4px 0;font-weight:600">Farol</th>
-    </tr></thead>
-    <tbody>
-      ${rows.map(r=>`<tr style="border-top:1px solid rgba(255,255,255,.04)">
-        <td style="padding:4px 8px 4px 0;color:var(--text)">${r.label}</td>
-        <td class="mono" style="text-align:right;padding:4px 8px;color:var(--text-strong)">${r.likes.toLocaleString("pt-BR")}</td>
-        <td class="mono" style="text-align:right;padding:4px 8px;color:var(--muted)">${r.meta!=null?Math.round(r.meta).toLocaleString("pt-BR"):"—"}${r.fatorX!=null?` <span style="color:var(--hint)">(${String(r.fatorX).replace(".",",")}%)</span>`:""}</td>
-        <td style="text-align:right;padding:4px 0">${r.meta!=null?metaEmojiGlobal(r.likes,r.meta,true):"⚪"}</td>
-      </tr>`).join("")}
-    </tbody>
-  </table>`;
-}
-function likesBenchmarkTableText(rows,colLabel){
-  if(!rows.length)return `${colLabel}: sem registros ainda na aba "Contagem likes".`;
-  return rows.map(r=>`${r.label}:\t${r.likes.toLocaleString("pt-BR")}\t${r.meta!=null?metaEmojiGlobal(r.likes,r.meta,true):"⚪"} (🎯 fator X ${r.fatorX!=null?String(r.fatorX).replace(".",","):"—"}% × leads: ${r.meta!=null?Math.round(r.meta).toLocaleString("pt-BR"):"—"})`).join("\n");
 }
 
 // ── Resumos de etapa (Aquecimento/Lembrete/Aulas) — vivem na aba "Resumo
@@ -4883,13 +4735,8 @@ function lembreteResumoHtml(){
   const freq=alcance>0?m.impressions/alcance:null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
-  const leadsAoVivo=S.leadsRows.length;
-  const likesRows=lembreteLikesRows(leadsAoVivo).map(r=>({label:`${fDateBR(r.date)}${r.diasFaltam!=null?` (faltam ${r.diasFaltam}d)`:""}`,likes:r.likes,fatorX:r.fatorX,meta:r.meta}));
   return `
     <div style="font-size:11px;color:var(--hint);margin-bottom:12px">${metas?"Benchmark definido":"sem meta definida ainda"} · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}</div>
-    ${stageResumoCard("👍 Likes na aula01 (checkpoint 12:00, vs. fator X × leads ao vivo)",
-      likesBenchmarkTableHtml(likesRows,"Dia")
-    )}
     ${stageResumoCard("Total",
       stageRow("Investido total",fUSD(m.spend),"","")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
@@ -4909,38 +4756,25 @@ function lembreteResumoText(){
   const m=stageMetrics(rows);
   const alcance=S.manualAlcance.lembrete;
   const freq=alcance>0?m.impressions/alcance:null;
-  const leadsAoVivo=S.leadsRows.length;
-  const likesRows=lembreteLikesRows(leadsAoVivo).map(r=>({label:`${fDateBR(r.date)}${r.diasFaltam!=null?` (faltam ${r.diasFaltam}d)`:""}`,likes:r.likes,fatorX:r.fatorX,meta:r.meta}));
-  // Benchmark do Lembrete varia por DIA (dias que faltam pra Aula 01).
-  const b=lembreteBenchHoje();
   const plan=planoAcumAteHoje(PLANO_LEMBRETE);
   const planTxt=plan!=null?`(planej até hoje: ${fUSD(plan)})`:"(sem plano p/ este período)";
-  const planClicks=(plan!=null&&b)?Math.round(plan/b.cpc):null;
-  const cpcTxt=b?`${metaEmojiGlobal(m.cpc,b.cpc,false)} Plan consolidado: ${fUSD(b.cpc)}`:"sem benchmark p/ hoje";
-  const clicksTxt=planClicks!=null?`${metaEmojiGlobal(m.clicks,planClicks,true)} Plan até hoje: ${planClicks.toLocaleString("pt-BR")}`:"sem plano p/ este período";
-  const freqTxt=b?`(${freq!=null?metaEmojiGlobal(freq,b.freq,true):"⚪"} Meta hj: ${String(b.freq).replace(".",",")})`:"(sem benchmark p/ hoje)";
-  return `*mdi_set26 - Resumo Lembrete - Bench oro_jul25*
+  return `*mdi_set26 - Resumo Lembrete*
 
-Date\t${fDateBR(todayISO())}${b?`\t(faltam ${b.diasFaltam} dia${b.diasFaltam>1?"s":""} p/ a Aula 01)`:""}
-
-👍 Likes na aula01 Bench jul25->
-${likesBenchmarkTableText(likesRows,"Dia")}
+Date\t${fDateBR(todayISO())}
 
 -> Total
 Investido total: ${fUSD(m.spend)}\t${planTxt}
-
-Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}\t${clicksTxt}
-CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}\t${cpcTxt}
+Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
+CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}
 
 ---------------------
 
 -> Facebook
 Investido total: ${fUSD(m.spend)}\t${planTxt}
-Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}\t${clicksTxt}
-
-CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}\t${cpcTxt}
+Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
+CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}
 Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}
-Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${freqTxt}`;
+Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
 }
 // Cada aula é identificada pelo NOME DA CAMPANHA (via aulaNumberFromCampaign)
 // — não por uma coluna própria, já que a Base Meta - Aulas mistura as 3
@@ -4954,13 +4788,8 @@ function aulaResumoHtml(aulaNum,metas){
   const freq=alcance>0?m.impressions/alcance:null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
-  const leadsAoVivo=S.leadsRows.length;
-  const likesRows=aulaLikesRows(aulaNum,leadsAoVivo).map(r=>({label:r.time,likes:r.likes,fatorX:r.fatorX,meta:r.meta}));
   return `
     <div class="section-lbl" style="${aulaNum>1?"margin-top:8px":"margin-top:0"}">Aula 0${aulaNum}${metas?"":" — aguardando metas específicas"}${first?` · desde ${fDateBR(first)}`:""}</div>
-    ${stageResumoCard(`👍 Likes na aula0${aulaNum} (hora em hora, vs. fator X × leads ao vivo)`,
-      likesBenchmarkTableHtml(likesRows,"Hora")
-    )}
     ${stageResumoCard("Total",
       stageRow("Investimento total",fUSD(m.spend),"","")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
@@ -4983,12 +4812,7 @@ function aulaResumoTextBlock(aulaNum,metas){
   const freq=alcance>0?m.impressions/alcance:null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
-  const leadsAoVivo=S.leadsRows.length;
-  const likesRows=aulaLikesRows(aulaNum,leadsAoVivo).map(r=>({label:r.time,likes:r.likes,fatorX:r.fatorX,meta:r.meta}));
   return `Aula 0${aulaNum}${metas?"":" — aguardando metas específicas"}${first?` · desde ${fDateBR(first)}`:""}
-
-*Likes (hora em hora, vs. fator X × leads ao vivo)*
-${likesBenchmarkTableText(likesRows,"Hora")}
 
 Investimento total:\t${fUSD(m.spend)}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
@@ -5632,8 +5456,6 @@ window.MDI = {
   applyQuickCurrent,
   aquecimentoResumoHtml,
   aquecimentoResumoText,
-  aulaLikesRows,
-  aulaNumForDate,
   aulaNumberFromCampaign,
   aulaResumoHtml,
   aulaResumoTextBlock,
@@ -5672,7 +5494,6 @@ window.MDI = {
   dedupByContact,
   dedupFichasByContact,
   diaSemana,
-  diasFaltamLembrete,
   distinctCount,
   drawBarPercent,
   drawBarSingle,
@@ -5737,12 +5558,8 @@ window.MDI = {
   leadsInRange,
   leadsInRangeRaw,
   leadsTempToggle,
-  lembreteBenchHoje,
-  lembreteLikesRows,
   lembreteResumoHtml,
   lembreteResumoText,
-  likesBenchmarkTableHtml,
-  likesBenchmarkTableText,
   loadData,
   metaEmojiGlobal,
   metaRowsFiltered,
@@ -5756,11 +5573,9 @@ window.MDI = {
   navCarrinhoSub,
   navSub,
   navTo,
-  nearestCplHour,
   normPath,
   normResposta,
   normalizeEmail,
-  normalizeHora,
   normalizePhone,
   nowBR,
   onDCCurrent,
@@ -5782,7 +5597,6 @@ window.MDI = {
   processCarrinhoFichas,
   processCarrinhoVendas,
   processGA4,
-  processLikes,
   processPesquisa,
   qualityFromLeadsArray,
   qualityMetrics,
