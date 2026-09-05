@@ -716,7 +716,12 @@ const SHEET_PESQUISA_NAME = "Base pesquisa";
 // buscar (sem erro no console, sem espera); é só trocar o null pelo nome da
 // aba quando ela for criada que a seção correspondente liga sozinha.
 const SHEET_AQUECIMENTO_NAME = "Base aquecimento";
-const SHEET_LEMBRETE_NAME = null;      // "Base Meta - lembrete"
+// Mídia do Lembrete, com "Account Name" no export — a conversão pra dólar lê
+// a moeda da conta em vez de assumir MXN (ver metaSpendToUSD). A exportação
+// traz ainda uma coluna a mais, "Cost per Inline Link Click", que o dashboard
+// ignora de propósito: o CPC é recalculado aqui a partir de gasto ÷ cliques,
+// pra ficar consistente com o de todas as outras abas.
+const SHEET_LEMBRETE_NAME = "Base lembrete";
 const SHEET_AULAS_NAME = null;         // "Base Meta - Aulas"
 const SHEET_CARRINHO_TRAFEGO_NAME = null;  // "Base fichas - Tráfego"
 const SHEET_CARRINHO_ORGANICO_NAME = null; // "Base fichas - orgânico"
