@@ -6075,17 +6075,26 @@ function extractPriceFromCamp(name){
   if(n.includes("85peso"))  return "85pesos";
   return null;
 }
+// Fallback por código de oferta (quando não há UTM com nome de campanha)
+function extractPriceFromOffer(offerCode){
+  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos"};
+  return FEO_OFFER_TIER[(offerCode||"").toLowerCase().trim()]||null;
+}
 // Fallback: infere price tier pelo valor da compra quando não há UTM
 // Recebe valor já convertido para USD (hotmartPriceUSD):
-//   ~5 USD  = 79 MXN  → 85pesos
-//   ~14 USD = 204 MXN → 220pesos
-//   ~16 USD = 234 MXN → 220pesos
+//   ~4.7 USD =  85 MXN → 85pesos
+//   ~8.8 USD = 158 MXN → 170pesos
+//   ~12.2 USD = 220 MXN → 220pesos
 //   <1 USD              → teste, ignorar
+// Pontos de corte: midpoint entre os preços reais em USD
+//   85↔158 MXN = 121.5 MXN ≈ 6.75 USD → corte em 7
+//   158↔220 MXN = 189 MXN ≈ 10.5 USD → corte em 10.5
 function inferPriceTierFromValue(valUSD){
   const v=parseFloat(String(valUSD||"0").replace(",","."))||0;
-  if(v<1) return null; // transação de teste (ex: 1 BRL ≈ 0.2 USD)
-  if(v<10) return "85pesos";
-  return "220pesos";
+  if(v<1)    return null;       // transação de teste
+  if(v<7)    return "85pesos";  //  85 MXN ≈ 4.7 USD
+  if(v<10.5) return "170pesos"; // 158 MXN ≈ 8.8 USD
+  return "220pesos";            // 220 MXN ≈ 12.2 USD
 }
 function extractCountryFromAdset(adsetName){
   if(!adsetName) return "México";
@@ -6914,6 +6923,7 @@ async function loadData(force=false){
         const adId=r["Ad Id"];
         const adData=adId?fmByAdId[adId]:null;
         const pt=extractPriceFromCamp(adData?.campName)
+              ||extractPriceFromOffer(r.offerCode)
               ||inferPriceTierFromValue(r["Valor do produto"]);
         if(!pt) continue;
         emailToPriceTier[em]=pt;
@@ -6924,6 +6934,7 @@ async function loadData(force=false){
           const adId=r["Ad Id"];
           const adData=adId?fmByAdId[adId]:null;
           const _priceTier=extractPriceFromCamp(adData?.campName)
+                          ||extractPriceFromOffer(r.offerCode)
                           ||inferPriceTierFromValue(r["Valor do produto"]);
           return {...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem",_priceTier};
         }),
