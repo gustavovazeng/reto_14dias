@@ -8565,7 +8565,7 @@ function getFeoVendasActive(){
     for(const r of S.feoFunilRows){
       if(classifyProduct(r["Nome do produto"]||"","feo")!=="feo") continue; // só produto principal
       if((r["Status da compra"]||"")!=="Paga") continue;
-      if(r._priceTier&&r._priceTier!==pF) continue; // exclui tier errado; null = desconhecido → inclui
+      if(r._priceTier!==pF) continue; // só inclui o tier exato; null = não classificado → exclui
       const d=r["Data da compra"]||""; if(!d) continue;
       if(tF!=="todos"){
         // Filtro de temp sobreposto: aplica só a rows com UTM (sem UTM não tem temp)
