@@ -6588,6 +6588,7 @@ async function loadData(force=false){
     }
 
     // ── Seguidores + Distribuição — fonte única: "Base Seguidores" (Valor gasto em USD) ─────
+    const dD={}, dByAd={}, dByAdByDate={}, dByCamp={}, dByCampByDate={};
     const sD={}, sByAd={}, sByCamp={};
     for(const r of parseSheet(segJ)){
       const dRaw=r["Dia"]||""; if(!dRaw||dRaw==="Dia")continue;
