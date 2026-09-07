@@ -6348,13 +6348,12 @@ async function loadData(force=false){
   // Tenta buscar do Google Sheets; cada aba falha de forma independente
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
-  let mj, retoJ, ceroJ, mapaJ, distJ, segJ, aquecSegJ;
-  [mj, retoJ, ceroJ, mapaJ, distJ, segJ, aquecSegJ] = await Promise.all([
+  let mj, retoJ, ceroJ, mapaJ, segJ, aquecSegJ;
+  [mj, retoJ, ceroJ, mapaJ, segJ, aquecSegJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
     _fetchSafe(SHEET_MAPA,"Z",5000),
-    _fetchSafe(SHEET_DIST,"T",5000),
     _fetchSafe(SHEET_SEG,"Z",5000),
     _fetchSafe(SHEET_AQUEC_SEG,"Z",5000),
   ]);
@@ -6588,48 +6587,7 @@ async function loadData(force=false){
       const d=r["Data da compra"]||""; if(d>lastISO) lastISO=d;
     }
 
-    // ── Distribuição de Conteúdo ──────────────────────────────────────────
-    const dD={}, dByAd={}, dByAdByDate={}, dByCamp={}, dByCampByDate={};
-    for(const r of parseSheet(distJ)){
-      const d=r["Date"]||""; if(!d||d==="Date")continue;
-      const _acc=(r["Account Name"]||"").trim();
-      const spendV=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_acc);
-      const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
-      const impressV  =parseInt(r["Impressions"]||0)||0;
-      const video3sV  =parseInt(r["Action 3s Video Views"]||0)||0;
-      const video15sV =parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
-      const profVisV  =parseInt(r["Instagram Profile Visits"]||0)||0;
-      const adName    =(r["Ad Name"]||"").trim();
-      const campName  =(r["Campaign Name"]||"").trim();
-      const igUrl     =r["Instagram Permalink URL"]||"";
-      // daily totals
-      if(!dD[d])dD[d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
-      dD[d].spend+=spendV; dD[d].clicks+=clicksV; dD[d].impressions+=impressV;
-      dD[d].video3s+=video3sV; dD[d].video15s+=video15sV; dD[d].profileVisits+=profVisV;
-      // by ad
-      if(adName){
-        if(!dByAd[adName])dByAd[adName]={adName,campName,igUrl,spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0,seguidores:0};
-        dByAd[adName].spend+=spendV; dByAd[adName].clicks+=clicksV; dByAd[adName].impressions+=impressV;
-        dByAd[adName].video3s+=video3sV; dByAd[adName].video15s+=video15sV; dByAd[adName].profileVisits+=profVisV;
-        if(!dByAdByDate[adName])dByAdByDate[adName]={};
-        if(!dByAdByDate[adName][d])dByAdByDate[adName][d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
-        dByAdByDate[adName][d].spend+=spendV; dByAdByDate[adName][d].clicks+=clicksV;
-        dByAdByDate[adName][d].impressions+=impressV; dByAdByDate[adName][d].video3s+=video3sV;
-        dByAdByDate[adName][d].video15s+=video15sV; dByAdByDate[adName][d].profileVisits+=profVisV;
-      }
-      // by camp
-      if(campName){
-        if(!dByCamp[campName])dByCamp[campName]={campName,spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0,seguidores:0};
-        dByCamp[campName].spend+=spendV; dByCamp[campName].clicks+=clicksV; dByCamp[campName].impressions+=impressV;
-        dByCamp[campName].video3s+=video3sV; dByCamp[campName].video15s+=video15sV; dByCamp[campName].profileVisits+=profVisV;
-        if(!dByCampByDate[campName])dByCampByDate[campName]={};
-        if(!dByCampByDate[campName][d])dByCampByDate[campName][d]={spend:0,clicks:0,impressions:0,video3s:0,video15s:0,profileVisits:0};
-        dByCampByDate[campName][d].spend+=spendV; dByCampByDate[campName][d].clicks+=clicksV;
-        dByCampByDate[campName][d].impressions+=impressV; dByCampByDate[campName][d].video3s+=video3sV;
-        dByCampByDate[campName][d].video15s+=video15sV; dByCampByDate[campName][d].profileVisits+=profVisV;
-      }
-    }
-    // ── Seguidores — fonte única: "Base Seguidores" (Valor gasto em USD) ─────
+    // ── Seguidores + Distribuição — fonte única: "Base Seguidores" (Valor gasto em USD) ─────
     const sD={}, sByAd={}, sByCamp={};
     for(const r of parseSheet(segJ)){
       const dRaw=r["Dia"]||""; if(!dRaw||dRaw==="Dia")continue;
@@ -6694,7 +6652,7 @@ async function loadData(force=false){
     for(const r of parseSheet(aquecSegJ)){
       const d=r["Dia"]||""; if(!d||d==="Dia")continue;
       const _acc=(r["Nome da conta"]||"").trim();
-      const spendV=metaSpendToUSD(parseBRL(r["Valor gasto (MXN)"]),_acc);
+      const spendV=metaSpendToUSD(parseFloat(String(r["Valor gasto (MXN)"]||"0").replace(",","."))||0,_acc);
       const clicksV   =parseInt(r["Cliques no link"]||0)||0;
       const impressV  =parseInt(r["Impressões"]||0)||0;
       const video3sV  =parseInt(r["Reproduções do vídeo por no mínimo 3 segundos"]||0)||0;
