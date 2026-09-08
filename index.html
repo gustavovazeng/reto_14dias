@@ -464,9 +464,8 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer;fi
     <div class="presets" id="hdr-presets">
       <button class="btn-pre" onclick="MDI.applyQuickCurrent('hoje')">Hoje</button>
       <button class="btn-pre" onclick="MDI.applyQuickCurrent('ontem')">Ontem</button>
-      <button class="btn-pre" onclick="MDI.applyQuickCurrent('3d')">Últimos 3 dias</button>
-      <button class="btn-pre" onclick="MDI.applyQuickCurrent('7d')">Últimos 7 dias</button>
-      <button class="btn-pre" onclick="MDI.applyQuickCurrent('mes-ant')">Mês passado</button>
+      <button class="btn-pre" onclick="MDI.applyQuickCurrent('7d')">7 dias</button>
+      <button class="btn-pre on" onclick="MDI.applyQuickCurrent('30d')">30 dias</button>
       <button class="btn-pre" onclick="MDI.applyQuickCurrent('mes')">Este mês</button>
     </div>
     <div class="drbox">
@@ -598,8 +597,13 @@ const FUNIS = {
     // ── Planejamento de investimento do mdi_set26 ─────────────────────────
     // Verba total: $10.000, dividida por etapa nos percentuais definidos:
     //   Cadastros 86,0% = $8.600  ·  Aquecimento 3,0% = $300
-    //   Lembretes  2,0% = $200    ·  Aulas gratuitas 4,5% = $450
+    //   Lembretes  2,0% = $200    ·  Aulas gratuitas = $455
     //   Grupos VIP 3,5% = $350    ·  Carrinho 1,0% = $100
+    // ⚠️ As Aulas passaram de $450 (4,5%) pra $455 — valores definidos à mão
+    // por aula (155/145/155), então o total do lançamento virou $10.005.
+    //
+    // As AULAS fogem da curva: os três dias têm valor definido à mão
+    // (155/145/155), sem rampa — é uma agenda de eventos, não uma escalada.
     //
     // Curva dentro de cada etapa: CRESCENTE e LINEAR — o investimento sobe um
     // valor FIXO em dólar por dia (não um percentual composto), calibrado pra
@@ -660,9 +664,9 @@ const FUNIS = {
       {date:"2026-09-08", investimento:51.35},
     ],
     planoAulas:[
-      {date:"2026-09-08", investimento:125.21},
-      {date:"2026-09-09", investimento:150.00},
-      {date:"2026-09-10", investimento:174.79},
+      {date:"2026-09-08", investimento:155.00},
+      {date:"2026-09-09", investimento:145.00},
+      {date:"2026-09-10", investimento:155.00},
     ],
     // Grupo VIP: etapa nova do mdi_set26. Entra só no planejamento (linha do
     // "Resumo por etapa" + tabela diária no Planejado/Realizado); não tem
@@ -712,7 +716,9 @@ const SHEET_AQUECIMENTO_NAME = "Base aquecimento";
 // ignora de propósito: o CPC é recalculado aqui a partir de gasto ÷ cliques,
 // pra ficar consistente com o de todas as outras abas.
 const SHEET_LEMBRETE_NAME = "Base lembrete";
-const SHEET_AULAS_NAME = null;         // "Base Meta - Aulas"
+// Mídia das Aulas — as 3 aulas vivem na mesma aba, separadas pelo nome da
+// campanha (ver aulaNumberFromCampaign, que lê "aula01"/"aula 1" do nome).
+const SHEET_AULAS_NAME = "Base Aulas";
 const SHEET_CARRINHO_TRAFEGO_NAME = null;  // "Base fichas - Tráfego"
 const SHEET_CARRINHO_ORGANICO_NAME = null; // "Base fichas - orgânico"
 const SHEET_CARRINHO_DISPARO_NAME = null;  // "Base fichas - disparo"
@@ -854,7 +860,7 @@ const S = {
   carrinhoVendaOrigem:[],   // TODAS as vendas casadas (tráfego+orgânico) com origem/canal: {date,tipo,origem,canal,comPreco}
   carrinhoVendasPorDia:{},  // date → count (usa a própria "Data Correta" da venda, sem ajuste de fuso)
   carrinhoVendasTotal:0, carrinhoVendasMatched:0, carrinhoVendasUnmatched:0,
-  startDate:"", endDate:"", activeQuick:"",
+  startDate:"", endDate:"", activeQuick:"30d",
   principalChannel:"total", // "total" | "trafego" | "organico" — filtro exclusivo da aba Principal
   principalTemp:"todos",    // "todos" | "quente" | "morno" | "frio" — filtro exclusivo da aba Principal
   leadsChannel:"total",      // filtro de canal exclusivo da aba Análise qualificação
@@ -2390,10 +2396,8 @@ function navCarrinhoSub(sub){
 }
 function applyQuickCurrent(k){
   const t=todayISO();
-  function _mesAnt(){const d=new Date();const last=new Date(d.getFullYear(),d.getMonth(),0);const y=last.getFullYear();const m=String(last.getMonth()+1).padStart(2,"0");const ld=String(last.getDate()).padStart(2,"0");return{s:`${y}-${m}-01`,e:`${y}-${m}-${ld}`};}
   const map={hoje:()=>({s:t,e:t}),ontem:()=>{const y=yesterdayISO();return{s:y,e:y}},
-    "3d":()=>({s:nDaysAgoISO(2),e:t}),"7d":()=>({s:nDaysAgoISO(6),e:t}),
-    "mes-ant":_mesAnt,mes:()=>({s:firstOfMonthISO(),e:t})};
+    "7d":()=>({s:nDaysAgoISO(6),e:t}),"30d":()=>({s:nDaysAgoISO(29),e:t}),mes:()=>({s:firstOfMonthISO(),e:t})};
   const r=map[k]?.();if(!r)return;
   S.startDate=r.s;S.endDate=r.e;S.activeQuick=k;render();
 }
@@ -2521,8 +2525,8 @@ function renderHeader(){
     }
   }
   const per=getCurrentPeriod();
-  const QUICKS=["hoje","ontem","3d","7d","mes-ant","mes"];
-  const QLABEL={hoje:"Hoje",ontem:"Ontem","3d":"Últimos 3 dias","7d":"Últimos 7 dias","mes-ant":"Mês passado",mes:"Este mês"};
+  const QUICKS=["hoje","ontem","7d","30d","mes"];
+  const QLABEL={hoje:"Hoje",ontem:"Ontem","7d":"7 dias","30d":"30 dias",mes:"Este mês"};
   const preEl=document.getElementById("hdr-presets");
   if(preEl)preEl.innerHTML=QUICKS.map(k=>`<button class="btn-pre${per.q===k?" on":""}" onclick="MDI.applyQuickCurrent('${k}')">${QLABEL[k]}</button>`).join("");
   const hs=document.getElementById("hdr-start");if(hs)hs.value=per.s||"";
@@ -4782,7 +4786,8 @@ Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
 }
 // Cada aula é identificada pelo NOME DA CAMPANHA (via aulaNumberFromCampaign)
 // — não por uma coluna própria, já que a Base Meta - Aulas mistura as 3
-// campanhas numa aba só. Só a Aula 01 tem metas de benchmark por enquanto.
+// campanhas numa aba só. As Aulas não têm meta neste lançamento — os blocos
+// mostram só os números.
 function aulaResumoHtml(aulaNum,metas){
   const numStr=String(aulaNum);
   const rows=S.aulasRows.filter(r=>aulaNumberFromCampaign(r.campName)===numStr);
@@ -4793,18 +4798,18 @@ function aulaResumoHtml(aulaNum,metas){
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   return `
-    <div class="section-lbl" style="${aulaNum>1?"margin-top:8px":"margin-top:0"}">Aula 0${aulaNum}${metas?"":" — aguardando metas específicas"}${first?` · desde ${fDateBR(first)}`:""}</div>
+    <div class="section-lbl" style="${aulaNum>1?"margin-top:8px":"margin-top:0"}">Aula 0${aulaNum}${first?` · desde ${fDateBR(first)}`:""}</div>
     ${stageResumoCard("Total",
       stageRow("Investimento total",fUSD(m.spend),"","")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
-      stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—",metas?`Meta: ${fUSD(metas.cpc.val)}`:"sem meta ainda",metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):"")
+      stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—","","")
     )}
     ${stageResumoCard("Facebook",
       stageRow("Investimento Facebook",fUSD(m.spend),"","")+
       stageRow("Cliques FB",m.clicks.toLocaleString("pt-BR"),"","")+
-      stageRow("CPC FB",m.cpc!=null?fUSD(m.cpc):"—",metas?`Meta: ${fUSD(metas.cpc.val)}`:"sem meta ainda",metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):"")+
+      stageRow("CPC FB",m.cpc!=null?fUSD(m.cpc):"—","","")+
       stageManualRow(`manual-alcance-aula0${aulaNum}`,"Alcance FB",alcance,`MDI.setManualAlcance('${alcanceKey}',this.value)`,"manual 🔧 (API não fornece)","")+
-      stageRow("Frequência FB",freq!=null?freq.toFixed(2).replace(".",","):"—",metas?`Meta: ${metas.frequencia.val}`:"sem meta ainda",metas?(freq!=null?metaEmojiGlobal(freq,metas.frequencia.val,metas.frequencia.higher):"⚪"):"")
+      stageRow("Frequência FB",freq!=null?freq.toFixed(2).replace(".",","):"—","","")
     )}`;
 }
 function aulaResumoTextBlock(aulaNum,metas){
@@ -4816,13 +4821,13 @@ function aulaResumoTextBlock(aulaNum,metas){
   const freq=alcance>0?m.impressions/alcance:null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
-  return `Aula 0${aulaNum}${metas?"":" — aguardando metas específicas"}${first?` · desde ${fDateBR(first)}`:""}
+  return `Aula 0${aulaNum}${first?` · desde ${fDateBR(first)}`:""}
 
 Investimento total:\t${fUSD(m.spend)}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
-CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}\t${metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):""}${metas?` (🎯: ${fUSD(metas.cpc.val)})`:" (sem meta ainda)"}
+CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}
 Alcance FB:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
-Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${metas?(freq!=null?metaEmojiGlobal(freq,metas.frequencia.val,metas.frequencia.higher):"⚪"):""}${metas?` (🎯: ${metas.frequencia.val})`:" (sem meta ainda)"}`;
+Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
 }
 function aulasResumoHtml(){
   return `${aulaResumoHtml(1,AULA01_METAS)}${aulaResumoHtml(2,null)}${aulaResumoHtml(3,null)}`;
@@ -5177,7 +5182,7 @@ function renderAulas(){
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   const subLbl=cfg.num!=null
-    ? `${cfg.metas?"Benchmark definido":"aguardando metas específicas"} · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}`
+    ? `${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}`
     : `Soma das 3 aulas · sem meta consolidada · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}`;
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
