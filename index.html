@@ -9235,10 +9235,9 @@ Investimento:\t${fBRL(m.spend)}\t
 ${vLabel}:\t${m.vendas}\t
 ${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}
 ROAS:\t${m.roas.toFixed(2)}\t
-
-% vendas quente:\t${!isFeo&&m.pctQuente!=null?m.pctQuente+"%":"—"}\t
-% vendas frio:\t${!isFeo&&m.pctFrio!=null?m.pctFrio+"%":"—"}\t
-
+${!isFeo?`
+% vendas quente:\t${m.pctQuente!=null?m.pctQuente+"%":"—"}\t
+% vendas frio:\t${m.pctFrio!=null?m.pctFrio+"%":"—"}\t`:""}
 Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%${pcMeta}
 Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%${cvMeta}
 Connect Rate:\t${m.connect.toFixed(2)}%${cnMeta}
