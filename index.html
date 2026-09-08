@@ -1176,11 +1176,11 @@ function parseStageRows(rowsRaw){
   for(const r of rowsRaw){
     const d=toISO(r["Date"]);if(!d)continue;
     const spend=spendUSD(r); // já convertido pra dólar pela moeda da conta
-    const clicks=parseInt(r["Action Link Clicks"]||0)||0;
-    const impressions=parseInt(r["Impressions"]||0)||0;
-    const video75=parseInt(r["Video 75 Percent Watched Actions"]||0)||0;
+    const clicks=piS(r["Action Link Clicks"]);
+    const impressions=piS(r["Impressions"]);
+    const video75=piS(r["Video 75 Percent Watched Actions"]);
     // "Views 3s": Aquecimento/Lembrete usam "Action 3s Video Views"; Aulas usa "Action Video View".
-    const view3s=parseInt(r["Action 3s Video Views"]??r["Action Video View"]??0)||0;
+    const view3s=piS(r["Action 3s Video Views"]??r["Action Video View"]);
     const campName=(r["Campaign Name"]||"").trim();
     const adName=(r["Ad Name"]||"").trim();
     const igUrl=(r["Instagram Permalink URL"]||"").trim();
@@ -1757,8 +1757,8 @@ function processGA4(rowsRaw){
     if(ga4SourceExcluida(source,r["Session Medium"]))continue;
     if(ga4PathExcluido(pagePath))continue;
     const sessionMedium=(r["Session Medium"]||"").trim();
-    const sessions=parseInt(r["Sessions"],10)||0;
-    const pageViews=parseInt(r["Page Views"],10)||0;
+    const sessions=piS(r["Sessions"]);
+    const pageViews=piS(r["Page Views"]);
     // A temperatura sai do Session Medium, que é onde o nome da campanha
     // chega quando a UTM funciona. Hoje vem "(not set)", então fica "" e as
     // sessões só entram no recorte "Todos" — o filtro por temperatura das
@@ -1855,16 +1855,16 @@ async function loadData(){
     for(const r of metaRowsRaw){
       const d=toISO(r["Date"]);if(!d)continue;
       const sp=spendUSD(r); // convertido pra dólar pela moeda da conta (ver metaSpendToUSD)
-      const cl=parseInt(r["Action Link Clicks"]||0)||0;
-      const im=parseInt(r["Impressions"]||0)||0;
-      const al=parseInt(r["Action Leads"]||0)||0;
+      const cl=piS(r["Action Link Clicks"]);
+      const im=piS(r["Impressions"]);
+      const al=piS(r["Action Leads"]);
       // Visualizações da página de destino — é o equivalente do gerenciador a
       // uma "sessão" na página de captura. ⚠️ A exportação atual da Base Meta -
       // Captação NÃO traz esta coluna; sem ela o Connect Rate fica "—" e a Tx
       // conv Pg cai na aproximação por cliques. É só incluir "Action Landing
       // Page View" no export que as duas métricas ligam sozinhas.
-      const lpv=parseInt(r["Action Landing Page View"]||0)||0;
-      const vv=parseInt(r["Action Video View"]||0)||0;
+      const lpv=piS(r["Action Landing Page View"]);
+      const vv=piS(r["Action Video View"]);
       const adId=(r["Ad ID"]||"").trim();
       const adName=(r["Ad Name"]||"").trim();
       const campId=(r["Campaign ID"]||"").trim();
@@ -6039,6 +6039,8 @@ function fPct(n){ return (n||0).toFixed(1)+"%"; }
 function fDate(iso){ if(!iso)return"";const[,m,d]=iso.split("-");return `${d}/${m}`; }
 function fDateBR(iso){ if(!iso)return"";const[y,m,d]=iso.split("-");return `${d}/${m}/${y}`; }
 function parseSheet(json){ const rows=json.values||[];if(rows.length<2)return[];const h=rows[0];return rows.slice(1).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||"").trim()]))); }
+// parseInt seguro: remove separadores de milhar (. ou ,) antes de parsear
+function piS(v){ return parseInt(String(v||"0").replace(/[.,]/g,""))||0; }
 
 // Status color — dark mode semantics
 function statusColor(val,meta,higherIsBetter){
@@ -6375,11 +6377,11 @@ async function loadData(force=false){
       const _accMeta=(r["Account Name"]||r["Account name"]||r[""]||"").trim();
       const _spendMeta=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_accMeta);
       mD[d].spend        += _spendMeta;
-      mD[d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
-      mD[d].impressions  += parseInt(r["Impressions"]||0)||0;
-      mD[d].landingViews += parseInt(r["Action Landing Page View"]||0)||0;
-      mD[d].checkouts    += parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
-      mD[d].purchases    += parseInt(r["Action Omni Purchase"]||0)||0;
+      mD[d].clicks       += piS(r["Action Link Clicks"]);
+      mD[d].impressions  += piS(r["Impressions"]);
+      mD[d].landingViews += piS(r["Action Landing Page View"]);
+      mD[d].checkouts    += piS(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]);
+      mD[d].purchases    += piS(r["Action Omni Purchase"]);
       const adId=r["Ad ID"]||r["Ad Id"]||"";
       const adName=r["Ad Name"]||"";
       const igUrl=r["Instagram Permalink URL"]||"";
@@ -6387,13 +6389,13 @@ async function loadData(force=false){
       const adsetName=r["Adset Name"]||"";
       const country=extractCountryFromAdset(adsetName);
       const spendV=_spendMeta;
-      const clicksV=parseInt(r["Action Link Clicks"]||0)||0;
-      const impressV=parseInt(r["Impressions"]||0)||0;
-      const icV      =parseInt(r["Action Omni Initiated Checkout"]||0)||0;
-      const video3sV =parseInt(r["Action Video View"]||0)||0;
-      const video15sV=parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
-      const lvV  =parseInt(r["Action Landing Page View"]||0)||0;
-      const chkV =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
+      const clicksV=piS(r["Action Link Clicks"]);
+      const impressV=piS(r["Impressions"]);
+      const icV      =piS(r["Action Omni Initiated Checkout"]);
+      const video3sV =piS(r["Action Video View"]);
+      const video15sV=piS(r["Video 15 Sec Watched Actions"]);
+      const lvV  =piS(r["Action Landing Page View"]);
+      const chkV =piS(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]);
       const adStatusR  =r["Ad status"]||"";
       const campStatusR=r["Campaign status"]||"";
       const adsetStatusR=r["Adset status"]||"";
@@ -6483,11 +6485,11 @@ async function loadData(force=false){
       if(_temp){
         if(!mDByTemp[_temp][d])mDByTemp[_temp][d]={spend:0,clicks:0,impressions:0,landingViews:0,checkouts:0,purchases:0};
         mDByTemp[_temp][d].spend        += _spendMeta;
-        mDByTemp[_temp][d].clicks       += parseInt(r["Action Link Clicks"]||0)||0;
-        mDByTemp[_temp][d].impressions  += parseInt(r["Impressions"]||0)||0;
-        mDByTemp[_temp][d].landingViews += parseInt(r["Action Landing Page View"]||0)||0;
-        mDByTemp[_temp][d].checkouts    += parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
-        mDByTemp[_temp][d].purchases    += parseInt(r["Action Omni Purchase"]||0)||0;
+        mDByTemp[_temp][d].clicks       += piS(r["Action Link Clicks"]);
+        mDByTemp[_temp][d].impressions  += piS(r["Impressions"]);
+        mDByTemp[_temp][d].landingViews += piS(r["Action Landing Page View"]);
+        mDByTemp[_temp][d].checkouts    += piS(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]);
+        mDByTemp[_temp][d].purchases    += piS(r["Action Omni Purchase"]);
       }
     }
 
@@ -6604,12 +6606,12 @@ async function loadData(force=false){
       } else { d=dRaw; }
       if(!d)continue;
       const spendUSD  =(parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0);
-      const clicksV   =parseInt(r["Cliques no link"]||0)||0;
-      const impressV  =parseInt(r["Impressões"]||0)||0;
-      const video3sV  =parseInt(r["Reproduções do vídeo por no mínimo 3 segundos"]||0)||0;
-      const video15sV =parseInt(r["Reproduções de 25% do vídeo"]||0)||0;
-      const segV      =parseInt(r["Seguidores no Instagram"]||0)||0;
-      const visV      =parseInt(r["Visitas ao perfil do Instagram"]||0)||0;
+      const clicksV   =piS(r["Cliques no link"]);
+      const impressV  =piS(r["Impressões"]);
+      const video3sV  =piS(r["Reproduções do vídeo por no mínimo 3 segundos"]);
+      const video15sV =piS(r["Reproduções de 25% do vídeo"]);
+      const segV      =piS(r["Seguidores no Instagram"]);
+      const visV      =piS(r["Visitas ao perfil do Instagram"]);
       const adName    =(r["Nome do anúncio"]||"").trim();
       const campName  =(r["Nome da campanha"]||"").trim();
       // distMeta (tráfego diário)
@@ -6659,12 +6661,12 @@ async function loadData(force=false){
       const d=r["Dia"]||""; if(!d||d==="Dia")continue;
       const _acc=(r["Nome da conta"]||"").trim();
       const spendV=metaSpendToUSD(parseFloat(String(r["Valor gasto (MXN)"]||"0").replace(",","."))||0,_acc);
-      const clicksV   =parseInt(r["Cliques no link"]||0)||0;
-      const impressV  =parseInt(r["Impressões"]||0)||0;
-      const video3sV  =parseInt(r["Reproduções do vídeo por no mínimo 3 segundos"]||0)||0;
-      const video15sV =parseInt(r["Reproduções de 25% do vídeo"]||0)||0;
-      const profVisV  =parseInt(r["Visitas ao perfil do Instagram"]||0)||0;
-      const segV      =parseInt(r["Seguidores no Instagram"]||0)||0;
+      const clicksV   =piS(r["Cliques no link"]);
+      const impressV  =piS(r["Impressões"]);
+      const video3sV  =piS(r["Reproduções do vídeo por no mínimo 3 segundos"]);
+      const video15sV =piS(r["Reproduções de 25% do vídeo"]);
+      const profVisV  =piS(r["Visitas ao perfil do Instagram"]);
+      const segV      =piS(r["Seguidores no Instagram"]);
       const adName    =(r["Nome do anúncio"]||"").trim();
       const campName  =(r["Nome da campanha"]||"").trim();
       const igUrl     ="";
@@ -6720,14 +6722,14 @@ async function loadData(force=false){
         const d=toISO(r["Date"]);if(!d)continue;
         const _acc=(r["Account Name"]||r["Account name"]||"").trim();
         const spendV=metaSpendToUSD(parseBRL(r["Spend (Cost, Amount Spent)"]),_acc);
-        const clicksV   =parseInt(r["Action Link Clicks"]||0)||0;
-        const icV       =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
-        const impressV  =parseInt(r["Impressions"]||0)||0;
-        const lvV       =parseInt(r["Action Landing Page View"]||0)||0;
-        const chkV      =parseInt(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]||0)||0;
-        const purchV    =parseInt(r["Action Omni Purchase"]||0)||0;
-        const video3sV  =parseInt(r["Action Video View"]||0)||0;
-        const video15sV =parseInt(r["Video 15 Sec Watched Actions"]||0)||0;
+        const clicksV   =piS(r["Action Link Clicks"]);
+        const icV       =piS(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]);
+        const impressV  =piS(r["Impressions"]);
+        const lvV       =piS(r["Action Landing Page View"]);
+        const chkV      =piS(r["Action Omni Initiated Checkout"]||r["Action FB Pixel Initiate Checkout (Offsite Conversion)"]);
+        const purchV    =piS(r["Action Omni Purchase"]);
+        const video3sV  =piS(r["Action Video View"]);
+        const video15sV =piS(r["Video 15 Sec Watched Actions"]);
         const adId      =(r["Ad ID"]||r["Ad Id"]||"").trim();
         const adName    =(r["Ad Name"]||"").trim();
         const adsetName =(r["Adset Name"]||"").trim();
