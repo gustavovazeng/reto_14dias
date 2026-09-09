@@ -6039,6 +6039,8 @@ function fPct(n){ return (n||0).toFixed(1)+"%"; }
 function fDate(iso){ if(!iso)return"";const[,m,d]=iso.split("-");return `${d}/${m}`; }
 function fDateBR(iso){ if(!iso)return"";const[y,m,d]=iso.split("-");return `${d}/${m}/${y}`; }
 function parseSheet(json){ const rows=json.values||[];if(rows.length<2)return[];const h=rows[0];return rows.slice(1).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||"").trim()]))); }
+// Igual a parseSheet mas em colunas duplicadas usa o PRIMEIRO valor não-vazio (necessário p/ Hotmart que repete data.buyer.email)
+function parseSheetFirstWins(json){ const rows=json.values||[];if(rows.length<2)return[];const h=rows[0];return rows.slice(1).map(r=>{const obj={};h.forEach((k,i)=>{const v=(r[i]||"").trim();if(!(k in obj)||(!obj[k]&&v))obj[k]=v;});return obj;}); }
 // parseInt seguro: remove separadores de milhar (. ou ,) antes de parsear
 function piS(v){ return parseInt(String(v||"0").replace(/[.,]/g,""))||0; }
 
@@ -6228,7 +6230,7 @@ function hotmartPriceUSD(priceRaw, currency, productName){
 
 // Parseia aba Hotmart para linhas normalizadas (valores convertidos para USD)
 function parseHotmartRows(sheetJ){
-  return parseSheet(sheetJ).map(r=>{
+  return parseSheetFirstWins(sheetJ).map(r=>{
     const ts=r["data.purchase.order_date"]||r["data.purchase.approved_date"]||"0";
     const d=tsToISO(ts);
     const st=normalizeHotmartStatus(r["data.purchase.status"]||"");
@@ -6595,6 +6597,8 @@ async function loadData(force=false){
     }
 
     // ── Seguidores + Distribuição — fonte única: "Base Seguidores" (Valor gasto em USD) ─────
+    // DEBUG: mostra primeiras linhas para verificar colunas de vídeo
+    {const rows=parseSheet(segJ);if(rows.length>0){const _r=rows.find(r=>r["Dia"]&&r["Dia"]!=="Dia")||rows[0];console.log("[DEBUG segJ] colunas disponíveis:",Object.keys(_r));console.log("[DEBUG segJ] exemplo linha:",{dia:_r["Dia"],imp:_r["Impressões"],v3:_r["Reproduções do vídeo por no mínimo 3 segundos"],v25:_r["Reproduções de 25% do vídeo"],gasto:_r["Valor gasto (USD)"]});}}
     const dD={}, dByAd={}, dByAdByDate={}, dByCamp={}, dByCampByDate={};
     const sD={}, sByAd={}, sByCamp={};
     for(const r of parseSheet(segJ)){
