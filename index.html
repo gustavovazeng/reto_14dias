@@ -669,14 +669,18 @@ const FUNIS = {
       {date:"2026-09-09", investimento:145.00},
       {date:"2026-09-10", investimento:155.00},
     ],
+    // O GRUPO VIP também foge da curva: a verba é rateada em 40% / 40% / 20%
+    // pelos três dias (os dois primeiros carregam o peso e o último afunila
+    // pra abertura do Carrinho), em vez da rampa crescente das demais etapas.
+    //
     // Grupo VIP: etapa nova do mdi_set26. Entra só no planejamento (linha do
     // "Resumo por etapa" + tabela diária no Planejado/Realizado); não tem
     // página própria. O realizado vem das campanhas cujo nome contém "vip"
     // (ver campaignStage).
     planoGrupoVip:[
-      {date:"2026-09-11", investimento:97.38},
-      {date:"2026-09-12", investimento:116.67},
-      {date:"2026-09-13", investimento:135.95},
+      {date:"2026-09-11", investimento:140.00},
+      {date:"2026-09-12", investimento:140.00},
+      {date:"2026-09-13", investimento:70.00},
     ],
     planoCarrinho:[
       {date:"2026-09-14", investimento:19.28},
