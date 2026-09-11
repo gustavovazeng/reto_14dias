@@ -625,8 +625,9 @@ const FUNIS = {
     // Total planejado de cadastros: 6.880.
     //
     // Calendário: Captação 28/08→08/09 · Aquecimento 03/09→08/09 ·
-    // Lembrete 04/09→08/09 · Aulas 08, 09 e 10/09 · Grupo VIP 10→13/09 ·
-    // Carrinho 14→17/09. Captação, Aquecimento e Lembrete vão até o dia da
+    // Lembrete 04/09→08/09 · Aulas 08, 09 e 10/09 · Grupo VIP 11→13/09 ·
+    // Carrinho 14→17/09. O Grupo VIP começa no dia SEGUINTE à Aula 03
+    // (10/09) — antes o plano abria em 10/09 e disputava o dia com ela. Captação, Aquecimento e Lembrete vão até o dia da
     // Aula 01 (08/09) inclusive.
     //
     // Replanejamento de 04/09: o Aquecimento só entrou no ar em 03/09 (era
@@ -673,10 +674,9 @@ const FUNIS = {
     // página própria. O realizado vem das campanhas cujo nome contém "vip"
     // (ver campaignStage).
     planoGrupoVip:[
-      {date:"2026-09-10", investimento:67.46},
-      {date:"2026-09-11", investimento:80.82},
-      {date:"2026-09-12", investimento:94.18},
-      {date:"2026-09-13", investimento:107.54},
+      {date:"2026-09-11", investimento:97.38},
+      {date:"2026-09-12", investimento:116.67},
+      {date:"2026-09-13", investimento:135.95},
     ],
     planoCarrinho:[
       {date:"2026-09-14", investimento:19.28},
@@ -1176,11 +1176,11 @@ function parseStageRows(rowsRaw){
   for(const r of rowsRaw){
     const d=toISO(r["Date"]);if(!d)continue;
     const spend=spendUSD(r); // já convertido pra dólar pela moeda da conta
-    const clicks=piS(r["Action Link Clicks"]);
-    const impressions=piS(r["Impressions"]);
-    const video75=piS(r["Video 75 Percent Watched Actions"]);
+    const clicks=parseInt(r["Action Link Clicks"]||0)||0;
+    const impressions=parseInt(r["Impressions"]||0)||0;
+    const video75=parseInt(r["Video 75 Percent Watched Actions"]||0)||0;
     // "Views 3s": Aquecimento/Lembrete usam "Action 3s Video Views"; Aulas usa "Action Video View".
-    const view3s=piS(r["Action 3s Video Views"]??r["Action Video View"]);
+    const view3s=parseInt(r["Action 3s Video Views"]??r["Action Video View"]??0)||0;
     const campName=(r["Campaign Name"]||"").trim();
     const adName=(r["Ad Name"]||"").trim();
     const igUrl=(r["Instagram Permalink URL"]||"").trim();
@@ -1757,8 +1757,8 @@ function processGA4(rowsRaw){
     if(ga4SourceExcluida(source,r["Session Medium"]))continue;
     if(ga4PathExcluido(pagePath))continue;
     const sessionMedium=(r["Session Medium"]||"").trim();
-    const sessions=piS(r["Sessions"]);
-    const pageViews=piS(r["Page Views"]);
+    const sessions=parseInt(r["Sessions"],10)||0;
+    const pageViews=parseInt(r["Page Views"],10)||0;
     // A temperatura sai do Session Medium, que é onde o nome da campanha
     // chega quando a UTM funciona. Hoje vem "(not set)", então fica "" e as
     // sessões só entram no recorte "Todos" — o filtro por temperatura das
@@ -1855,16 +1855,16 @@ async function loadData(){
     for(const r of metaRowsRaw){
       const d=toISO(r["Date"]);if(!d)continue;
       const sp=spendUSD(r); // convertido pra dólar pela moeda da conta (ver metaSpendToUSD)
-      const cl=piS(r["Action Link Clicks"]);
-      const im=piS(r["Impressions"]);
-      const al=piS(r["Action Leads"]);
+      const cl=parseInt(r["Action Link Clicks"]||0)||0;
+      const im=parseInt(r["Impressions"]||0)||0;
+      const al=parseInt(r["Action Leads"]||0)||0;
       // Visualizações da página de destino — é o equivalente do gerenciador a
       // uma "sessão" na página de captura. ⚠️ A exportação atual da Base Meta -
       // Captação NÃO traz esta coluna; sem ela o Connect Rate fica "—" e a Tx
       // conv Pg cai na aproximação por cliques. É só incluir "Action Landing
       // Page View" no export que as duas métricas ligam sozinhas.
-      const lpv=piS(r["Action Landing Page View"]);
-      const vv=piS(r["Action Video View"]);
+      const lpv=parseInt(r["Action Landing Page View"]||0)||0;
+      const vv=parseInt(r["Action Video View"]||0)||0;
       const adId=(r["Ad ID"]||"").trim();
       const adName=(r["Ad Name"]||"").trim();
       const campId=(r["Campaign ID"]||"").trim();
