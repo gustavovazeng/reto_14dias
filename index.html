@@ -4892,7 +4892,7 @@ function grupoVipResumoHtml(){
       stageRow("Custo por clique",m.cpc!=null?fUSD(m.cpc):"—",meta(m.cpc,"cpc",fUSD),farol(m.cpc,"cpc"))
     )}
     ${stageResumoCard("Entradas no Grupo VIP",
-      stageManualRow("manual-entradas-vip","Entradas Grupo VIP",m.entradas,`setManualEntradasVip(this.value)`,"manual 🔧 (API não fornece)","")+
+      stageManualRow("manual-entradas-vip","Entradas Grupo VIP",m.entradas,`MDI.setManualEntradasVip(this.value)`,"manual 🔧 (API não fornece)","")+
       stageRow("Custo por entrada no Grupo VIP",m.custoEntrada!=null?fUSD(m.custoEntrada):"—",meta(m.custoEntrada,"custoEntrada",fUSD),farol(m.custoEntrada,"custoEntrada"))
     )}
     ${stageResumoCard("Alcance e frequência",
