@@ -6601,8 +6601,6 @@ async function loadData(force=false){
     }
 
     // ── Seguidores + Distribuição — fonte única: "Base Seguidores" (Valor gasto em USD) ─────
-    // DEBUG: mostra primeiras linhas para verificar colunas de vídeo
-    {const rows=parseSheet(segJ);if(rows.length>0){const _r=rows.find(r=>r["Dia"]&&r["Dia"]!=="Dia")||rows[0];console.log("[DEBUG segJ] colunas disponíveis:",Object.keys(_r));console.log("[DEBUG segJ] exemplo linha:",{dia:_r["Dia"],imp:_r["Impressões"],v3:_r["Reproduções do vídeo por no mínimo 3 segundos"],v25:_r["Reproduções de 25% do vídeo"],gasto:_r["Valor gasto (USD)"]});}}
     const dD={}, dByAd={}, dByAdByDate={}, dByCamp={}, dByCampByDate={};
     const sD={}, sByAd={}, sByCamp={};
     for(const r of parseSheet(segJ)){
@@ -6718,10 +6716,13 @@ async function loadData(force=false){
 
     // ── FEO ────────────────────────────────────────────────────────────────
     const _feoSafe=(tab,col)=>fetchSheetPaged(tab,col,5000,FEO_SHEET_ID).catch(e=>{console.warn(`[feo] "${tab}":`,e.message);return {values:[]};});
-    const [feoMetaJ, feoVendasJ, feoRetoJ] = await Promise.all([
+    const [feoMetaJ, feoVendasJ, feoRetoJ, feoCalcJ, feoIngJ, feoComboJ] = await Promise.all([
       _feoSafe("Base meta","V"),
       _feoSafe("Base vendas","Z"),
       _feoSafe("Base vendas - Reto","Z"),
+      _feoSafe("Base vendas - Calculadora","Z"),
+      _feoSafe("Base vendas - Ingresso","Z"),
+      _feoSafe("Base vendas - Combo Calculadora + Ingresso","Z"),
     ]);
     {
       const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
@@ -6860,6 +6861,9 @@ async function loadData(force=false){
         if(!pt) continue;
         emailToPriceTier[em]=pt;
       }
+      const feoCalcRows =parseHotmartRows(feoCalcJ);
+      const feoIngRows  =parseHotmartRows(feoIngJ);
+      const feoComboRows=parseHotmartRows(feoComboJ);
       S.feoFunilRows=[
         ...feoRows.map(r=>{
           // Garante _priceTier nas rows FEO também (usado em getFeoFunilRows para filtro de preço)
@@ -6870,6 +6874,9 @@ async function loadData(force=false){
                           ||inferPriceTierFromValue(r["Valor do produto"]);
           return {...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem",_priceTier};
         }),
+        ...feoCalcRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
+        ...feoIngRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
+        ...feoComboRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
         ...feoRetoRows.map(r=>({
           ...r,
           _priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null,
@@ -8621,6 +8628,9 @@ function classifyProduct(name, funil){
   const n=name.toUpperCase();
   if(funil==="feo"){
     if(n.includes("FEO")||n.includes("FINANZ")) return "feo";
+    if(n.includes("COMBO")) return "ob_combo";
+    if(n.includes("CALCULADORA")) return "ob_calc";
+    if(n.includes("INGRES")) return "ob_ing";
     if(n.includes("RETO")) return "reto";
     return null;
   }
@@ -8632,8 +8642,11 @@ function classifyProduct(name, funil){
 
 function getFunilSteps(funil){
   if(funil==="feo") return [
-    {id:"feo",  label:"Planilla Finanzas en Orden", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
-    {id:"reto", label:"Finanzas - Reto 14 Dias",    step:"Upsell",             fill:"#92400e", text:"#fef3c7"},
+    {id:"feo",      label:"Planilla Finanzas en Orden",            step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
+    {id:"ob_calc",  label:"Calculadora de Retiro",                 step:"Order Bump",          fill:"#7c3aed", text:"#ede9fe", isOB:true},
+    {id:"ob_ing",   label:"Ingreso Extra Express",                 step:"Order Bump",          fill:"#0f766e", text:"#ccfbf1", isOB:true},
+    {id:"ob_combo", label:"Combo Calc + Ingreso",                  step:"Order Bump",          fill:"#b45309", text:"#fef3c7", isOB:true},
+    {id:"reto",     label:"Finanzas - Reto 14 Dias",              step:"Upsell",              fill:"#92400e", text:"#fef3c7"},
   ];
   return [
     {id:"reto", label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
@@ -8793,8 +8806,8 @@ function buildFunilData(rows, start, end, funil){
   }
 
   // Funil: só Paga, dentro do período
-  // OBs de faturamento (produto principal + OBs diretos)
-  const OB_FAT_IDS = new Set([primaryId]);
+  // OBs de faturamento (produto principal + OBs diretos via isOB)
+  const OB_FAT_IDS = new Set(getFunilSteps(f).filter(s=>s.id===primaryId||s.isOB).map(s=>s.id));
 
   // Passo 1: agrupa por comprador+data para calcular faturamento do produto principal
   // (evita duplicatas entre webhook e histórica)
@@ -8821,10 +8834,16 @@ function buildFunilData(rows, start, end, funil){
       if((ST_PRI[st]||0)>(ST_PRI[g.st]||0)) g.st=st;
       if(prodId===primaryId) g.hasPrimary=true;
       if(st==="Paga"){
-        g.valor += (parseFloat(r["Valor do produto"])||0);
-        g.taxa  += parseBRLAbs(r["Taxa da plataforma"]);
-        // Conta cada OB individualmente dentro do grupo
-        if(prodId!==primaryId) g.obCounts[prodId]=(g.obCounts[prodId]||0)+1;
+        const _v=parseFloat(r["Valor do produto"])||0;
+        if(prodId===primaryId){
+          g.valor += _v;
+          g.taxa  += parseBRLAbs(r["Taxa da plataforma"]);
+        } else {
+          // OB: acumula valor separadamente para fat[obId]
+          if(!g.obVals) g.obVals={};
+          g.obVals[prodId]=(g.obVals[prodId]||0)+_v;
+          g.obCounts[prodId]=(g.obCounts[prodId]||0)+1;
+        }
       }
     }
     for(const [,g] of grupos){
@@ -8832,9 +8851,10 @@ function buildFunilData(rows, start, end, funil){
       counts[primaryId]++;
       fat[primaryId] += g.valor;
       taxa[primaryId]+= g.taxa;
-      // Contagem dos OBs desta transação
+      // Contagem e faturamento dos OBs desta transação
       for(const [obId, obQtd] of Object.entries(g.obCounts)){
         counts[obId]=(counts[obId]||0)+obQtd;
+        fat[obId]=(fat[obId]||0)+((g.obVals||{})[obId]||0);
       }
     }
   }
@@ -8971,8 +8991,16 @@ function renderFunil(){
   const SW=520,BH=90,GAP=12;
   const svgSteps=[];
   svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
-  if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
-  if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
+  if(isFeoFunil){
+    steps.slice(1).forEach(s=>{
+      const cnt=counts[s.id]||0;
+      const pct=cnt0>0?(cnt/cnt0)*100:0;
+      svgSteps.push({...s,count:cnt,fat:fat[s.id]||0,w:Math.max(SW*(pct/100),40),pct:`${pct.toFixed(1)}% dos compradores ${s0.label}`});
+    });
+  } else {
+    if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
+    if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
+  }
   const SH=svgSteps.length*(BH+GAP)-GAP;
   let svgBlocks="";
   svgSteps.forEach((s,i)=>{
@@ -9032,55 +9060,102 @@ function renderFunil(){
       anaContent=`<p style="color:var(--muted);font-size:13px;padding:20px 0">Sem dados no período.</p>`;
     } else {
       const maxPrimary=Math.max(...mList.map(m=>meses[m][s0.id]||0),1);
-      const stepLabel=s=>s.id==="feo"?"FEO":s.id==="reto"?"Reto":s.id==="cero"?"Cero":s.id==="mapa"?"Mapa":s.label;
-      anaContent=`<table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
-          <th style="text-align:left;padding:7px 10px;font-weight:700">Mês</th>
-          <th style="text-align:right;padding:7px 10px;font-weight:700">Investimento</th>
-          <th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s0)}</th>
-          <th style="text-align:right;padding:7px 10px;font-weight:700">CPV</th>
-          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s1)}</th>`:""}
-          ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
-          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s2)}</th>`:""}
-          ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
-          <th style="text-align:right;padding:7px 10px;font-weight:700">Faturamento</th>
-          <th style="text-align:right;padding:7px 10px;font-weight:700">ROAS</th>
-        </tr></thead><tbody>
-        ${mList.map(m=>{
-          const d=meses[m];
-          const n0=d[s0.id]||0;
-          const n1=s1?d[s1.id]||0:0;
-          const n2=s2?d[s2.id]||0:0;
-          const tr1=n0>0?(n1/n0*100):0;
-          const tr2=n1>0?(n2/n1*100):0;
-          const bw=Math.round((n0/maxPrimary)*72);
-          const [y2,mo]=m.split("-");
-          const tr1C=tr1>=30?"var(--green)":tr1>=15?"var(--amber)":"var(--muted)";
-          const tr2C=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
-          const invest=mesSpend[m]||0;
-          const cpv=n0>0?invest/n0:0;
-          const fat=d.fat||0;
-          const roas=invest>0?fat/invest:0;
-          const roasC=roas>=META_ROAS?"var(--green)":roas>=(META_ROAS*0.85)?"var(--amber)":"var(--red)";
-          return `<tr style="border-top:1px solid var(--border)">
-            <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
-            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
-            <td style="padding:8px 10px">
-              <div style="display:flex;align-items:center;gap:7px;justify-content:center">
-                <div style="width:${bw}px;height:5px;background:#3b82f6;border-radius:3px;min-width:2px;opacity:.8"></div>
-                <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${n0}</span>
-              </div>
-            </td>
-            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--muted)">${cpv>0?fBRL(cpv):"—"}</td>
-            ${s1?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[0]};font-weight:600;font-family:'JetBrains Mono',monospace">${n1}</td>`:""}
-            ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
-            ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
-            ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
-            <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fat>0?fBRL(fat):"—"}</td>
-            <td style="padding:8px 10px;text-align:right;font-weight:600;color:${invest>0?roasC:"var(--muted)"}">${invest>0?roas.toFixed(2)+"x":"—"}</td>
-          </tr>`;
-        }).join("")}
-        </tbody></table>`;
+      const stepLabel=s=>s.id==="feo"?"FEO":s.id==="reto"?"Reto":s.id==="cero"?"Cero":s.id==="mapa"?"Mapa":s.id==="ob_calc"?"Calc":s.id==="ob_ing"?"Ingreso":s.id==="ob_combo"?"Combo":s.label;
+      const nonPrimary=steps.slice(1);
+      if(isFeoFunil){
+        // FEO: todas as taxas vs compradores FEO (s0)
+        anaContent=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
+            <th style="text-align:left;padding:7px 10px;font-weight:700">Mês</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">Investimento</th>
+            <th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s0)}</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">CPV</th>
+            ${nonPrimary.map(s=>`<th style="text-align:center;padding:7px 6px;font-weight:700">${stepLabel(s)}</th><th style="text-align:center;padding:7px 6px;font-weight:700">Take ${stepLabel(s)}</th>`).join("")}
+            <th style="text-align:right;padding:7px 10px;font-weight:700">Fat.</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">ROAS</th>
+          </tr></thead><tbody>
+          ${mList.map(m=>{
+            const d=meses[m];
+            const n0=d[s0.id]||0;
+            const bw=Math.round((n0/maxPrimary)*72);
+            const [y2,mo]=m.split("-");
+            const invest=mesSpend[m]||0;
+            const cpv=n0>0?invest/n0:0;
+            const fat=d.fat||0;
+            const roas=invest>0?fat/invest:0;
+            const roasC=roas>=META_ROAS?"var(--green)":roas>=(META_ROAS*0.85)?"var(--amber)":"var(--red)";
+            return `<tr style="border-top:1px solid var(--border)">
+              <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
+              <td style="padding:8px 10px">
+                <div style="display:flex;align-items:center;gap:7px;justify-content:center">
+                  <div style="width:${bw}px;height:5px;background:#3b82f6;border-radius:3px;min-width:2px;opacity:.8"></div>
+                  <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${n0}</span>
+                </div>
+              </td>
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--muted)">${cpv>0?fBRL(cpv):"—"}</td>
+              ${nonPrimary.map((s,i)=>{
+                const n=d[s.id]||0;
+                const tr=n0>0?(n/n0*100):0;
+                const trC=tr>=30?"var(--green)":tr>=15?"var(--amber)":"var(--muted)";
+                return `<td style="padding:8px 6px;text-align:center;color:${upsellColors[i%upsellColors.length]};font-weight:600;font-family:'JetBrains Mono',monospace">${n}</td><td style="padding:8px 6px;text-align:center;color:${trC};font-weight:600">${tr.toFixed(1)}%</td>`;
+              }).join("")}
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fat>0?fBRL(fat):"—"}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:600;color:${invest>0?roasC:"var(--muted)"}">${invest>0?roas.toFixed(2)+"x":"—"}</td>
+            </tr>`;
+          }).join("")}
+          </tbody></table>`;
+      } else {
+        // Reto: cadeia cero/mapa
+        anaContent=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.08em">
+            <th style="text-align:left;padding:7px 10px;font-weight:700">Mês</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">Investimento</th>
+            <th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s0)}</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">CPV</th>
+            ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s1)}</th>`:""}
+            ${s1?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s1)}</th>`:""}
+            ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">${stepLabel(s2)}</th>`:""}
+            ${s2?`<th style="text-align:center;padding:7px 10px;font-weight:700">Take ${stepLabel(s2)}</th>`:""}
+            <th style="text-align:right;padding:7px 10px;font-weight:700">Faturamento</th>
+            <th style="text-align:right;padding:7px 10px;font-weight:700">ROAS</th>
+          </tr></thead><tbody>
+          ${mList.map(m=>{
+            const d=meses[m];
+            const n0=d[s0.id]||0;
+            const n1=s1?d[s1.id]||0:0;
+            const n2=s2?d[s2.id]||0:0;
+            const tr1=n0>0?(n1/n0*100):0;
+            const tr2=n1>0?(n2/n1*100):0;
+            const bw=Math.round((n0/maxPrimary)*72);
+            const [y2,mo]=m.split("-");
+            const tr1C=tr1>=30?"var(--green)":tr1>=15?"var(--amber)":"var(--muted)";
+            const tr2C=tr2>=30?"var(--green)":tr2>=15?"var(--amber)":"var(--muted)";
+            const invest=mesSpend[m]||0;
+            const cpv=n0>0?invest/n0:0;
+            const fat=d.fat||0;
+            const roas=invest>0?fat/invest:0;
+            const roasC=roas>=META_ROAS?"var(--green)":roas>=(META_ROAS*0.85)?"var(--amber)":"var(--red)";
+            return `<tr style="border-top:1px solid var(--border)">
+              <td style="padding:8px 10px;color:var(--text-strong);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px">${mo}/${y2}</td>
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${invest>0?fBRL(invest):"—"}</td>
+              <td style="padding:8px 10px">
+                <div style="display:flex;align-items:center;gap:7px;justify-content:center">
+                  <div style="width:${bw}px;height:5px;background:#3b82f6;border-radius:3px;min-width:2px;opacity:.8"></div>
+                  <span style="color:var(--text);font-family:'JetBrains Mono',monospace">${n0}</span>
+                </div>
+              </td>
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--muted)">${cpv>0?fBRL(cpv):"—"}</td>
+              ${s1?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[0]};font-weight:600;font-family:'JetBrains Mono',monospace">${n1}</td>`:""}
+              ${s1?`<td style="padding:8px 10px;text-align:center;color:${tr1C};font-weight:600">${tr1.toFixed(1)}%</td>`:""}
+              ${s2?`<td style="padding:8px 10px;text-align:center;color:${upsellColors[1]};font-weight:600;font-family:'JetBrains Mono',monospace">${n2||0}</td>`:""}
+              ${s2?`<td style="padding:8px 10px;text-align:center;color:${tr2C};font-weight:600">${tr2.toFixed(1)}%</td>`:""}
+              <td style="padding:8px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fat>0?fBRL(fat):"—"}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:600;color:${invest>0?roasC:"var(--muted)"}">${invest>0?roas.toFixed(2)+"x":"—"}</td>
+            </tr>`;
+          }).join("")}
+          </tbody></table>`;
+      }
     }
   } else {
     const stOrder=["Paga","Aberta","Em Recuperacao","Aguardando Reembolso","Reembolsado","Expirado"];
@@ -9107,8 +9182,8 @@ function renderFunil(){
 
   // KPI cards de contagem — um por step
   const kpiCountCards=svgSteps.map((s,i)=>{
-    const col=i===0?"var(--text)":upsellColors[i-1];
-    const pct=i===0?"":i===1?`${pct1.toFixed(1)}% do ${s0.label.split(" ")[0]}`:i===2?`${pct2.toFixed(1)}% do ${s1?.label.split(" ")[0]||""}`:"";;
+    const col=i===0?"var(--text)":upsellColors[(i-1)%upsellColors.length];
+    const pct=i===0?"":s.pct;
     return `<div class="kc"><div class="kc-lbl">Compradores ${s.label}</div><div class="kc-val" style="color:${col}">${s.count}</div><div class="kc-sub">${pct}</div></div>`;
   }).join("");
 
@@ -9134,8 +9209,17 @@ function renderFunil(){
     </div>
     <div style="display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:10px;margin-bottom:20px">
       <div class="kc"><div class="kc-lbl">LTV médio</div><div class="kc-val kc-val-sm">${fBRL(ltv)}</div><div class="kc-sub">por comprador ${s0.label.split(" ")[0]}</div></div>
-      ${s1?`<div class="kc"><div class="kc-lbl">Take rate ${s1.label.split(" ")[0]}</div><div class="kc-val kc-val-sm">${taxaAscensao.toFixed(1)}%</div><div class="kc-sub">${cnt1} de ${cnt0} compraram</div></div>`:""}
-      ${s2?`<div class="kc"><div class="kc-lbl">Take rate ${s2.label.split(" ")[0]}</div><div class="kc-val kc-val-sm" style="color:#34d399">${(taxaMapa||0).toFixed(1)}%</div><div class="kc-sub">${cnt2} de ${cnt1} compraram</div></div>`:""}
+      ${isFeoFunil
+        ? steps.slice(1).map((s,i)=>{
+            const cnt=counts[s.id]||0;
+            const pct=cnt0>0?(cnt/cnt0)*100:0;
+            return `<div class="kc"><div class="kc-lbl">Take rate ${s.label.split(" ")[0]}</div><div class="kc-val kc-val-sm" style="color:${upsellColors[i%upsellColors.length]}">${pct.toFixed(1)}%</div><div class="kc-sub">${cnt} de ${cnt0} compraram</div></div>`;
+          }).join("")
+        : [
+            s1?`<div class="kc"><div class="kc-lbl">Take rate ${s1.label.split(" ")[0]}</div><div class="kc-val kc-val-sm">${taxaAscensao.toFixed(1)}%</div><div class="kc-sub">${cnt1} de ${cnt0} compraram</div></div>`:"",
+            s2?`<div class="kc"><div class="kc-lbl">Take rate ${s2.label.split(" ")[0]}</div><div class="kc-val kc-val-sm" style="color:#34d399">${(taxaMapa||0).toFixed(1)}%</div><div class="kc-sub">${cnt2} de ${cnt1} compraram</div></div>`:"",
+          ].join("")
+      }
       ${ticketCards}
     </div>
 
