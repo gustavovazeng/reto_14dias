@@ -590,6 +590,16 @@ const FUNIS = {
     // sem cor de status e sem alvo, do mesmo jeito que o Aquecimento.
     lembreteMetas:null,
     aula01Metas:null,
+    // Metas do Grupo VIP. "Custo por entrada" e "Frequência" dependem de
+    // números que a API não entrega (entradas no grupo e alcance): os dois
+    // são digitados à mão no próprio bloco do Resumo diário.
+    grupoVipMetas:{
+      cpc:          {val:0.42, higher:false}, // custo por clique no link — menor é melhor
+      custoEntrada: {val:4.63, higher:false}, // custo por entrada no grupo — menor é melhor
+      frequencia:   {val:4.44, higher:true},  // repetição planejada — alcançar é bom
+      ctr:          {val:2.10, higher:true},  // maior é melhor
+      cpm:          {val:8.87, higher:false}, // menor é melhor
+    },
     // Meta do Carrinho: custo por ficha COM PREÇO — menor é melhor.
     // ⚠️ TODO: valor herdado do tdo_ago26 (era em R$). Com $100 de verba de
     // Carrinho no mdi_set26, esse alvo precisa ser revisto em dólar.
@@ -723,6 +733,8 @@ const SHEET_LEMBRETE_NAME = "Base lembrete";
 // Mídia das Aulas — as 3 aulas vivem na mesma aba, separadas pelo nome da
 // campanha (ver aulaNumberFromCampaign, que lê "aula01"/"aula 1" do nome).
 const SHEET_AULAS_NAME = "Base Aulas";
+// Mídia do Grupo VIP — mesmas colunas das demais etapas, com "Account Name".
+const SHEET_GRUPO_VIP_NAME = "Grupo VIP";
 const SHEET_CARRINHO_TRAFEGO_NAME = null;  // "Base fichas - Tráfego"
 const SHEET_CARRINHO_ORGANICO_NAME = null; // "Base fichas - orgânico"
 const SHEET_CARRINHO_DISPARO_NAME = null;  // "Base fichas - disparo"
@@ -783,6 +795,7 @@ let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
 let AULA01_METAS = FUNIS.mdi.aula01Metas;
+let GRUPO_VIP_METAS = FUNIS.mdi.grupoVipMetas;
 let META_CARRINHO_CUSTO_FICHA_COM_PRECO = FUNIS.mdi.metaCarrinhoCustoFichaComPreco;
 let PLANO_DIARIO = FUNIS.mdi.planoDiario;
 // Soma do plano (Captação) até hoje — usado na aba Principal pros cartões
@@ -838,7 +851,9 @@ const S = {
   carrinhoMetaRows:[],   // linhas da Base Meta - Carrinho (mídia da etapa de Carrinho)
   livesCaptacaoRows:[],  // linhas da Base Meta - lives captação (só realizado, sem plano)
   aulasRows:[],          // idem, Base Meta - Aulas (uma ou mais campanhas por aula, ver aulaNumberFromCampaign)
-  manualAlcance:{aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null}, // Alcance manual (API não fornece) — usado pra calcular Frequência
+  grupoVipRows:[],       // linhas da aba Grupo VIP
+  manualAlcance:{aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null}, // Alcance manual (API não fornece) — usado pra calcular Frequência
+  manualEntradasVip:null, // Entradas no Grupo VIP — a API não fornece, é digitado à mão
   // Estado das páginas de análise por etapa (Aquecimento/Lembrete/Aula01/02/03/Consolidado)
   stageChartMetric:{aquecimento:"cpc",lembrete:"cpc",aula01:"cpc",aula02:"cpc",aula03:"cpc",aulaConsolidado:"cpc"}, // toggle do gráfico "Acumulado por dia": cpc|tx75|cptx75
   stageAdSearch:{aquecimento:"",lembrete:"",aula01:"",aula02:"",aula03:"",aulaConsolidado:""},
@@ -901,7 +916,8 @@ function resetFunilData(){
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
-  S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null};
+  S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null};
+  S.manualEntradasVip=null; S.grupoVipRows=[];
   S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
   S.carrinhoTrafego={}; S.carrinhoTrafegoComPreco={};
   S.carrinhoOrganico={}; S.carrinhoOrganicoComPreco={};
@@ -934,6 +950,7 @@ function switchFunil(key){
   AQUECIMENTO_METAS=f.aquecimentoMetas;
   LEMBRETE_METAS=f.lembreteMetas;
   AULA01_METAS=f.aula01Metas;
+  GRUPO_VIP_METAS=f.grupoVipMetas;
   META_CARRINHO_CUSTO_FICHA_COM_PRECO=f.metaCarrinhoCustoFichaComPreco;
   PLANO_DIARIO=f.planoDiario;
   PLANO_AQUECIMENTO=f.planoAquecimento;
@@ -1487,6 +1504,7 @@ function stageRowsForStage(stage){
   if(stage==="Aquecimento")return S.aquecimentoRows||[];
   if(stage==="Lembrete")return S.lembreteRows||[];
   if(stage==="Aulas")return S.aulasRows||[];
+  if(stage==="Grupo VIP")return S.grupoVipRows||[];
   return S.metaRows.filter(r=>campaignStage(r.campName)===stage);
 }
 // Investimento realizado de uma etapa numa data específica.
@@ -2006,6 +2024,7 @@ async function loadData(){
   carregarEtapa("aquecimento", SHEET_AQUECIMENTO_NAME, rows=>{S.aquecimentoRows=rows;});
   carregarEtapa("lembrete",    SHEET_LEMBRETE_NAME,    rows=>{S.lembreteRows=rows;});
   carregarEtapa("aulas",       SHEET_AULAS_NAME,       rows=>{S.aulasRows=rows;});
+  carregarEtapa("grupovip",    SHEET_GRUPO_VIP_NAME,   rows=>{S.grupoVipRows=rows;});
 
   // Mídia do Carrinho (aba própria).
   (async()=>{
@@ -3545,6 +3564,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("🔥 Resumo Aquecimento",`dados carregados: ${S.aquecimentoRows.length} linha(s)`,aquecimentoResumoHtml(),"aquecimento",aquecimentoResumoText())}
     ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
     ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
+    ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
     ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · fichas: ${(S.carrinhoFichaOrigem||[]).length} · vendas: ${(S.carrinhoVendaOrigem||[]).length}`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
     <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
@@ -4626,6 +4646,11 @@ function renderCarrinhoAnuncios(){
 }
 
 // ── Helpers compartilhados dos resumos de etapa (Aquecimento/Lembrete/Aulas) ─
+function setManualEntradasVip(v){
+  const n=parseInt(String(v).replace(/\D/g,""),10);
+  S.manualEntradasVip=(isNaN(n)||n<=0)?null:n;
+  renderResumo();
+}
 function setManualAlcance(key,v){
   const n=parseInt(String(v).replace(/\D/g,""));
   S.manualAlcance[key]=(isNaN(n)||n<=0)?null:n;
@@ -4833,6 +4858,71 @@ CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}
 Alcance FB:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
 Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
 }
+// ── Resumo do Grupo VIP ────────────────────────────────────────────────────
+// Duas entradas vêm à mão porque a API do Meta não as fornece: o ALCANCE
+// (como nas demais etapas) e as ENTRADAS NO GRUPO, que são contadas no
+// próprio WhatsApp/Telegram. Sem elas, "Frequência" e "Custo por entrada"
+// ficam "—" em vez de zero — não é resultado ruim, é dado que falta.
+function grupoVipMetrics(){
+  const rows=S.grupoVipRows;
+  const m=stageMetrics(rows);
+  const alcance=S.manualAlcance.grupoVip;
+  const entradas=S.manualEntradasVip;
+  return{
+    ...m,
+    alcance, entradas,
+    ctr:m.impressions>0?(m.clicks/m.impressions)*100:null,
+    cpm:m.impressions>0?(m.spend/m.impressions)*1000:null,
+    freq:alcance>0?m.impressions/alcance:null,
+    custoEntrada:entradas>0?m.spend/entradas:null,
+  };
+}
+function grupoVipResumoHtml(){
+  const M=GRUPO_VIP_METAS, m=grupoVipMetrics();
+  const dates=S.grupoVipRows.map(r=>r.date).sort();
+  const first=dates[0]||null;
+  const meta=(v,k,fmt)=>`Meta: ${fmt(M[k].val)}`;
+  const farol=(v,k)=>v!=null?metaEmojiGlobal(v,M[k].val,M[k].higher):"⚪";
+  const pct=v=>fPct(v), num=v=>String(v).replace(".",",");
+  return `
+    <div style="font-size:11px;color:var(--hint);margin-bottom:12px">${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}</div>
+    ${stageResumoCard("Total",
+      stageRow("Investimento",fUSD(m.spend),"","")+
+      stageRow("Cliques no link",m.clicks.toLocaleString("pt-BR"),"","")+
+      stageRow("Custo por clique",m.cpc!=null?fUSD(m.cpc):"—",meta(m.cpc,"cpc",fUSD),farol(m.cpc,"cpc"))
+    )}
+    ${stageResumoCard("Entradas no Grupo VIP",
+      stageManualRow("manual-entradas-vip","Entradas Grupo VIP",m.entradas,`setManualEntradasVip(this.value)`,"manual 🔧 (API não fornece)","")+
+      stageRow("Custo por entrada no Grupo VIP",m.custoEntrada!=null?fUSD(m.custoEntrada):"—",meta(m.custoEntrada,"custoEntrada",fUSD),farol(m.custoEntrada,"custoEntrada"))
+    )}
+    ${stageResumoCard("Alcance e frequência",
+      stageManualRow("manual-alcance-grupovip","Alcance",m.alcance,`MDI.setManualAlcance('grupoVip',this.value)`,"manual 🔧 (API não fornece)","")+
+      stageRow("Frequência",m.freq!=null?m.freq.toFixed(2).replace(".",","):"—",meta(m.freq,"frequencia",num),farol(m.freq,"frequencia"))
+    )}
+    ${stageResumoCard("Entrega",
+      stageRow("CTR",m.ctr!=null?pct(m.ctr):"—",`Meta: ${M.ctr.val.toFixed(2).replace(".",",")}%`,farol(m.ctr,"ctr"))+
+      stageRow("CPM",m.cpm!=null?fUSD(m.cpm):"—",meta(m.cpm,"cpm",fUSD),farol(m.cpm,"cpm"))
+    )}`;
+}
+function grupoVipResumoText(){
+  const M=GRUPO_VIP_METAS, m=grupoVipMetrics();
+  const num=v=>String(v).replace(".",",");
+  const f=(v,k)=>v!=null?metaEmojiGlobal(v,M[k].val,M[k].higher):"⚪";
+  return `*mdi_set26 - Resumo Grupo VIP*
+
+Investimento: ${fUSD(m.spend)}
+Cliques no link: ${m.clicks.toLocaleString("pt-BR")}
+Custo por clique: ${m.cpc!=null?fUSD(m.cpc):"—"} ${f(m.cpc,"cpc")} (Meta: ${fUSD(M.cpc.val)})
+
+Entradas Grupo VIP: ${m.entradas?m.entradas.toLocaleString("pt-BR"):""}
+Custo por entrada no Grupo VIP: ${m.custoEntrada!=null?fUSD(m.custoEntrada):""} ${f(m.custoEntrada,"custoEntrada")} (Meta: ${fUSD(M.custoEntrada.val)})
+
+Alcance: ${m.alcance?m.alcance.toLocaleString("pt-BR"):""}
+Frequência: ${m.freq!=null?m.freq.toFixed(2).replace(".",","):""} ${f(m.freq,"frequencia")} (Meta: ${num(M.frequencia.val)})
+
+CTR: ${m.ctr!=null?fPct(m.ctr):"—"} ${f(m.ctr,"ctr")} (Meta: ${M.ctr.val.toFixed(2).replace(".",",")}%)
+CPM: ${m.cpm!=null?fUSD(m.cpm):"—"} ${f(m.cpm,"cpm")} (Meta: ${fUSD(M.cpm.val)})`;
+}
 function aulasResumoHtml(){
   return `${aulaResumoHtml(1,AULA01_METAS)}${aulaResumoHtml(2,null)}${aulaResumoHtml(3,null)}`;
 }
@@ -4903,6 +4993,7 @@ function copyStageResumo(scope,btn){
   if(scope==="aquecimento")text=aquecimentoResumoText();
   else if(scope==="lembrete")text=lembreteResumoText();
   else if(scope==="aulas")text=aulasResumoText();
+  else if(scope==="grupovip")text=grupoVipResumoText();
   else if(scope==="carrinho")text=carrinhoResumoText();
   if(!text||!btn)return;
   navigator.clipboard.writeText(text).then(()=>{
@@ -5559,6 +5650,9 @@ window.MDI = {
   getLeadsRowsForCamp,
   getMetaRowsInRange,
   getTotals,
+  grupoVipMetrics,
+  grupoVipResumoHtml,
+  grupoVipResumoText,
   hojeBadge,
   initCanvas,
   investimentoTotalLancamento,
@@ -5649,6 +5743,7 @@ window.MDI = {
   setLeadsChannel,
   setLeadsTemp,
   setManualAlcance,
+  setManualEntradasVip,
   setManualSpendHoje,
   setMetricasTemp,
   setPrincipalChannel,
