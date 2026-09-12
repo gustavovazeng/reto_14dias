@@ -8990,34 +8990,84 @@ function renderFunil(){
   // Funil SVG — dark theme
   const SW=520,BH=90,GAP=12;
   const svgSteps=[];
-  svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
+  let SH, svgBlocks="";
+
   if(isFeoFunil){
-    steps.slice(1).forEach(s=>{
+    // FEO: 3 linhas — produto principal | OBs lado a lado | Reto upsell
+    const feoObs=steps.filter(s=>s.isOB);
+    const retoStep=steps.find(s=>s.id==="reto");
+    const OB_GAP=8;
+    const OB_W=(SW-OB_GAP*(feoObs.length-1))/feoObs.length;
+    const y0=0, y1=BH+GAP, y2=2*(BH+GAP);
+    const retoCnt=retoStep?counts[retoStep.id]||0:0;
+    const retoPct=cnt0>0?(retoCnt/cnt0)*100:0;
+    const retoW=retoStep?Math.max(SW*(retoPct/100),40):0;
+    const retoX=(SW-retoW)/2;
+    SH=3*(BH+GAP)-GAP;
+
+    // svgSteps para KPI/ticket cards
+    svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
+    feoObs.forEach(s=>{
       const cnt=counts[s.id]||0;
       const pct=cnt0>0?(cnt/cnt0)*100:0;
-      svgSteps.push({...s,count:cnt,fat:fat[s.id]||0,w:Math.max(SW*(pct/100),40),pct:`${pct.toFixed(1)}% dos compradores ${s0.label}`});
+      svgSteps.push({...s,count:cnt,fat:fat[s.id]||0,w:OB_W,pct:`${pct.toFixed(1)}% dos compradores ${s0.label}`});
     });
+    if(retoStep) svgSteps.push({...retoStep,count:retoCnt,fat:fat[retoStep.id]||0,w:retoW,pct:`${retoPct.toFixed(1)}% dos compradores ${s0.label}`});
+
+    // Linha 0: FEO
+    svgBlocks+=`
+      <rect x="0" y="${y0}" width="${SW}" height="${BH}" rx="10" fill="${s0.fill}" fill-opacity="0.85"/>
+      <text x="${SW/2}" y="${y0+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.65">${s0.step}</text>
+      <text x="${SW/2}" y="${y0+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s0.text}">${s0.label}</text>
+      <text x="${SW/2}" y="${y0+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s0.text}" opacity="0.9">${cnt0} compras · ${fBRLShort(fat[s0.id]||0)}</text>
+      <text x="${SW/2}" y="${y0+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.55">100%</text>
+      <polygon points="0,${y0+BH} ${SW},${y0+BH} ${SW},${y1} 0,${y1}" fill="rgba(255,255,255,0.04)"/>`;
+
+    // Linha 1: OBs lado a lado
+    feoObs.forEach((s,i)=>{
+      const obX=i*(OB_W+OB_GAP);
+      const cnt=counts[s.id]||0;
+      const pct=cnt0>0?(cnt/cnt0)*100:0;
+      svgBlocks+=`
+        <rect x="${obX.toFixed(1)}" y="${y1}" width="${OB_W.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(obX+OB_W/2).toFixed(1)}" y="${y1+16}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(obX+OB_W/2).toFixed(1)}" y="${y1+34}" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(obX+OB_W/2).toFixed(1)}" y="${y1+53}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="${s.text}" opacity="0.9">${cnt} · ${fBRLShort(fat[s.id]||0)}</text>
+        <text x="${(obX+OB_W/2).toFixed(1)}" y="${y1+71}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}% compradores</text>`;
+    });
+
+    // Conector OBs → Reto + Linha 2: Reto
+    if(retoStep){
+      svgBlocks+=`<polygon points="0,${y1+BH} ${SW},${y1+BH} ${(retoX+retoW).toFixed(1)},${y2} ${retoX.toFixed(1)},${y2}" fill="rgba(255,255,255,0.04)"/>`;
+      svgBlocks+=`
+        <rect x="${retoX.toFixed(1)}" y="${y2}" width="${retoW.toFixed(1)}" height="${BH}" rx="10" fill="${retoStep.fill}" fill-opacity="0.85"/>
+        <text x="${SW/2}" y="${y2+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.65">${retoStep.step}</text>
+        <text x="${SW/2}" y="${y2+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${retoStep.text}">${retoStep.label}</text>
+        <text x="${SW/2}" y="${y2+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${retoStep.text}" opacity="0.9">${retoCnt} compras · ${fBRLShort(fat[retoStep.id]||0)}</text>
+        <text x="${SW/2}" y="${y2+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.55">${retoPct.toFixed(1)}% dos compradores ${s0.label}</text>`;
+    }
   } else {
+    // Reto / não-FEO: cascata original
+    svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
     if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
     if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
+    SH=svgSteps.length*(BH+GAP)-GAP;
+    svgSteps.forEach((s,i)=>{
+      const y=i*(BH+GAP);
+      const x=(SW-s.w)/2;
+      svgBlocks+=`
+        <rect x="${x.toFixed(1)}" y="${y}" width="${s.w.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${SW/2}" y="${y+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${SW/2}" y="${y+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${SW/2}" y="${y+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s.text}" opacity="0.9">${s.count} compras · ${fBRLShort(s.fat)}</text>
+        <text x="${SW/2}" y="${y+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${s.pct}</text>`;
+      if(i<svgSteps.length-1){
+        const ns=svgSteps[i+1];
+        const x1=x,x2=x+s.w,x3=(SW-ns.w)/2+ns.w,x4=(SW-ns.w)/2;
+        svgBlocks+=`<polygon points="${x1},${y+BH} ${x2},${y+BH} ${x3},${y+BH+GAP} ${x4},${y+BH+GAP}" fill="rgba(255,255,255,0.04)"/>`;
+      }
+    });
   }
-  const SH=svgSteps.length*(BH+GAP)-GAP;
-  let svgBlocks="";
-  svgSteps.forEach((s,i)=>{
-    const y=i*(BH+GAP);
-    const x=(SW-s.w)/2;
-    svgBlocks+=`
-      <rect x="${x.toFixed(1)}" y="${y}" width="${s.w.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
-      <text x="${SW/2}" y="${y+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.65">${s.step}</text>
-      <text x="${SW/2}" y="${y+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s.text}">${s.label}</text>
-      <text x="${SW/2}" y="${y+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s.text}" opacity="0.9">${s.count} compras · ${fBRLShort(s.fat)}</text>
-      <text x="${SW/2}" y="${y+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${s.pct}</text>`;
-    if(i<svgSteps.length-1){
-      const ns=svgSteps[i+1];
-      const x1=x,x2=x+s.w,x3=(SW-ns.w)/2+ns.w,x4=(SW-ns.w)/2;
-      svgBlocks+=`<polygon points="${x1},${y+BH} ${x2},${y+BH} ${x3},${y+BH+GAP} ${x4},${y+BH+GAP}" fill="rgba(255,255,255,0.04)"/>`;
-    }
-  });
 
   // Analytics
   window.setAnaTab=t=>{S.aTab=t;renderFunil();};
