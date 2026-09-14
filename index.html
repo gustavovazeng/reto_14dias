@@ -6561,7 +6561,8 @@ async function loadData(force=false){
         d=parts.length===3?`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`:"";
       } else { d=dRaw; }
       if(!d)continue;
-      const spendUSD  =(parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0);
+      const _acc      =(r["Nome da conta"]||"").trim();
+      const spendUSD  =metaSpendToUSD(parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0, _acc);
       const clicksV   =piS(r["Cliques no link"]);
       const impressV  =piS(r["Impressões"]);
       const video3sV  =piS(r["Reproduções do vídeo por no mínimo 3 segundos"]);
