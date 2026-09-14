@@ -866,7 +866,7 @@ const S = {
   carrinhoVendasLinhas:0,   // linhas lidas na aba (inclui não aprovadas)
   carrinhoVendasTotal:0,    // vendas aprovadas (as que contam)
   carrinhoVendasDevolvidas:0, carrinhoVendasSemData:0,
-  carrinhoVendasComUtm:0, carrinhoVendasSemUtm:0,
+  carrinhoVendasTrafego:0, carrinhoVendasOutras:0,
   carrinhoFaturamento:0,
   carrinhoOrigemSearch:"", carrinhoCanalSearch:"",
   carrinhoOSort:{col:"vendas",dir:"desc"}, carrinhoCSort:{col:"vendas",dir:"desc"},
@@ -914,7 +914,7 @@ function resetFunilData(){
   S.manualEntradasVip=null; S.grupoVipRows=[];
   S.carrinhoVendas=[]; S.carrinhoVendasPorDia={}; S.carrinhoFatPorDia={};
   S.carrinhoVendasLinhas=0; S.carrinhoVendasTotal=0; S.carrinhoVendasDevolvidas=0;
-  S.carrinhoVendasSemData=0; S.carrinhoVendasComUtm=0; S.carrinhoVendasSemUtm=0;
+  S.carrinhoVendasSemData=0; S.carrinhoVendasTrafego=0; S.carrinhoVendasOutras=0;
   S.carrinhoFaturamento=0;
   // Seleções/buscas ligadas a nomes de campanha/anúncio não fazem sentido
   // depois de trocar de funil (outra planilha, outros nomes).
@@ -1553,9 +1553,10 @@ function stageMetrics(rows){
 // atribuição nos campos de origem do checkout — não existe mais o casamento
 // por telefone/e-mail com uma ficha intermediária.
 //
-// Venda COM origem preenchida  → tráfego (entra em campanha/anúncio).
-// Venda SEM origem preenchida  → orgânica (conta em vendas e faturamento,
-//                                 mas não é atribuída a nenhum anúncio).
+// Venda com UTM contendo FBAds → tráfego (entra em campanha/anúncio).
+// Qualquer outra (sem UTM, ou UTM de e-mail/WhatsApp/disparo) → orgânica:
+// conta em vendas, faturamento e ROAS, aparece na aba Vendas pela origem
+// dela, mas não é atribuída a nenhum anúncio.
 
 // Dedup genérico por contato (telefone OU e-mail, union-find — liga registros
 // transitivamente mesmo quando só um dos dois campos bate) — mantém, de cada
@@ -1625,6 +1626,12 @@ function vendaDataMs(raw){
 // (boleto gerado, aguardando pagamento, checkout abandonado) é ignorado.
 const VENDA_STATUS_OK=["APPROVED","COMPLETE","COMPLETED"];
 const VENDA_STATUS_DEVOLVIDA=["REFUNDED","CHARGEBACK","CANCELED","CANCELLED","DISPUTE"];
+// Só conta como venda de TRÁFEGO a que traz "FBAds" na UTM do checkout. As
+// outras UTMs que aparecem por lá (e-mail, WhatsApp, disparo, link direto)
+// NÃO vêm de anúncio — mesmo trazendo origem preenchida, entram no balde de
+// orgânico/outras origens e ficam fora da atribuição por campanha/anúncio.
+// É só mudar esta expressão se a nomenclatura da UTM paga mudar.
+const VENDA_UTM_TRAFEGO = /fbads/i;
 // Atribuição da venda. O checkout carrega a origem em "origin.xcod" (e, como
 // reserva, "origin.sck"). Não há um formato único: o campo pode vir como
 // pares "utm_x=valor", como uma sequência separada por "|" (padrão do src do
@@ -1661,9 +1668,12 @@ function parseVendaOrigem(xcod,sck){
     adName=S.adIdMap[adId].adName||adName;
     campName=S.adIdMap[adId].campName||campName;
   }
-  return{tipo:"traf",
-    origem:src||campName||"(sem identificação)",
-    canal:med||campName||"(sem identificação)",
+  const origem=src||campName||"(sem identificação)";
+  const canal=med||campName||"(sem identificação)";
+  // UTM preenchida mas sem FBAds: a origem é mantida (aparece nas tabelas de
+  // origem/canal da aba Vendas), só que sem campanha/anúncio — não é tráfego.
+  if(!VENDA_UTM_TRAFEGO.test(raw))return{tipo:"org",origem,canal,campName:null,adName:null,raw};
+  return{tipo:"traf",origem,canal,
     campName:campName||"(sem atribuição)",
     adName:adName||"(sem atribuição)",
     raw};
@@ -1672,7 +1682,7 @@ function parseVendaOrigem(xcod,sck){
 // Roda DEPOIS da Base Meta (usa S.adIdMap pra resolver o nome do anúncio).
 function processCarrinhoVendas(rowsRaw){
   const vendas=[], porDia={}, fatPorDia={};
-  let total=0, aprovadas=0, devolvidas=0, comUtm=0, semUtm=0, faturamento=0, semData=0;
+  let total=0, aprovadas=0, devolvidas=0, trafego=0, outras=0, faturamento=0, semData=0;
   for(const r of rowsRaw){
     const nome=String(getCol(r,"data.buyer.name","Nome","Name","Comprador")||"").trim();
     const email=normalizeEmail(getCol(r,"data.buyer.email","E-mail","Email","Mail"));
@@ -1691,7 +1701,7 @@ function processCarrinhoVendas(rowsRaw){
     const o=parseVendaOrigem(getCol(r,"data.purchase.origin.xcod","xcod","utm","UTM"),
                              getCol(r,"data.purchase.origin.sck","sck"));
     aprovadas++;
-    if(o.tipo==="traf")comUtm++;else semUtm++;
+    if(o.tipo==="traf")trafego++;else outras++;
     faturamento+=valorUSD;
     if(date){porDia[date]=(porDia[date]||0)+1; fatPorDia[date]=(fatPorDia[date]||0)+valorUSD;}
     vendas.push({date,ms,nome,email,phone,status,moeda,valor,valorUSD,
@@ -1704,8 +1714,8 @@ function processCarrinhoVendas(rowsRaw){
   S.carrinhoVendasLinhas=total;
   S.carrinhoVendasTotal=aprovadas;
   S.carrinhoVendasDevolvidas=devolvidas;
-  S.carrinhoVendasComUtm=comUtm;
-  S.carrinhoVendasSemUtm=semUtm;
+  S.carrinhoVendasTrafego=trafego;
+  S.carrinhoVendasOutras=outras;
   S.carrinhoVendasSemData=semData;
   S.carrinhoFaturamento=faturamento;
 }
@@ -3544,7 +3554,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
     ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
     ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
-    ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasComUtm||0} c/ UTM · ${S.carrinhoVendasSemUtm||0} orgânica(s))`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
+    ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasTrafego||0} de tráfego · ${S.carrinhoVendasOutras||0} orgânica(s)/outras)`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
     <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
   el._resumoText=resumoText;
@@ -3855,10 +3865,10 @@ function carrinhoMetaRowsInRange(start,end){
 function carrinhoVendasInRange(start,end){
   return (S.carrinhoVendas||[]).filter(v=>v.date&&v.date>=start&&v.date<=end);
 }
-// Métricas consolidadas do Carrinho no período. As vendas ORGÂNICAS entram em
-// vendas/faturamento/ROAS (elas existem e foram pagas), mas o custo por venda
-// de tráfego é calculado só sobre as vendas com UTM — senão o investimento
-// ficaria dividido por vendas que ele não gerou.
+// Métricas consolidadas do Carrinho no período. As vendas orgânicas/de outras
+// origens entram em vendas/faturamento/ROAS (elas existem e foram pagas), mas
+// o custo por venda de tráfego é calculado só sobre as vendas com FBAds na
+// UTM — senão o investimento ficaria dividido por vendas que ele não gerou.
 function carrinhoMetrics(start,end){
   const metaRows=carrinhoMetaRowsInRange(start,end);
   const spend=metaRows.reduce((a,r)=>a+r.spend,0);
@@ -3929,7 +3939,7 @@ function renderCarrinhoPrincipal(){
 
     <div class="g5" style="margin-bottom:18px">
       ${kpiCard("Investimento",fUSD(m.spend),"verba da etapa de carrinho","var(--text-strong)")}
-      ${kpiCard("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} com UTM · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)`,"#34d399")}
+      ${kpiCard("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} de tráfego · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)/outras`,"#34d399")}
       ${kpiCard("Faturamento",fUSD(m.faturamento),"todas as vendas do período","#34d399")}
       ${kpiCard("Ticket médio",m.ticket!=null?fUSD(m.ticket):"—","faturamento ÷ vendas","var(--text-strong)")}
       ${kpiCard("ROAS (carrinho)",m.roas!=null?m.roas.toFixed(2)+"x":"—","faturamento ÷ investimento do carrinho","var(--text-strong)")}
@@ -3937,7 +3947,7 @@ function renderCarrinhoPrincipal(){
 
     <div class="g6" style="margin-bottom:18px">
       ${kpiCard("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"—","sem meta definida · todas as vendas","var(--text-strong)")}
-      ${kpiCard("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"—","só vendas com UTM","var(--text-strong)")}
+      ${kpiCard("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"—","só vendas com UTM do FBAds","var(--text-strong)")}
       ${kpiCard("Cliques no link",m.clicks.toLocaleString("pt-BR"),"","var(--text-strong)")}
       ${kpiCard("Tx conversão clique → venda",m.txConvVenda!=null?fPct(m.txConvVenda):"—","vendas ÷ cliques no link","var(--text-strong)")}
       ${kpiCard("Checkouts iniciados",m.checkouts.toLocaleString("pt-BR"),"reportado pelo gerenciador","var(--text-strong)")}
@@ -3964,7 +3974,7 @@ function renderCarrinhoPrincipal(){
 
     <div class="card" style="margin-bottom:18px">
       <div class="ch"><span class="ct">Vendas por dia</span>
-        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_LEAD}"></span>Total (tráfego + orgânico)</span></div>
+        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_LEAD}"></span>Total (tráfego FBAds + orgânico/outras)</span></div>
       </div>
       <div style="position:relative"><canvas id="c-carrinho-vendas-dia"></canvas><div class="tip" id="t-carrinho-vendas-dia"></div></div>
     </div>
@@ -3988,8 +3998,8 @@ function renderCarrinhoPrincipal(){
     if(box2)drawBarSingle("c-carrinho-vendas-dia",daily,"vendas",CHART_LEAD,box2.clientWidth,200);
     setupTip("c-carrinho-vendas-dia","t-carrinho-vendas-dia",daily,[
       {name:"Vendas",color:CHART_LEAD,key:"vendas",fmt:v=>String(v)},
-      {name:"Com UTM",color:CHART_CPL,key:"vendasTraf",fmt:v=>String(v)},
-      {name:"Orgânicas",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)}],40,12);
+      {name:"Tráfego (FBAds)",color:CHART_CPL,key:"vendasTraf",fmt:v=>String(v)},
+      {name:"Orgânicas/outras",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)}],40,12);
 
     const box3=document.getElementById("c-carrinho-fat")?.parentElement;
     if(box3)drawBarSingle("c-carrinho-fat",daily,"faturamento",CHART_QUIZ,box3.clientWidth,200);
@@ -4000,9 +4010,10 @@ function renderCarrinhoPrincipal(){
 }
 
 // ── Carrinho: Vendas ─────────────────────────────────────────────────────────
-// Cada venda traz a própria origem (UTM do checkout). Venda sem UTM é
-// orgânica — aparece agrupada como "(orgânico / sem UTM)" nas tabelas de
-// origem/canal e fica fora da atribuição por campanha/anúncio.
+// Cada venda traz a própria origem (UTM do checkout), mas só a UTM com
+// FBAds é tráfego. As demais aparecem nas tabelas de origem/canal com o
+// nome real da origem ("(orgânico / sem UTM)" quando o campo vem vazio) e
+// ficam fora da atribuição por campanha/anúncio.
 function carrinhoNormOrigem(o){
   const s=String(o||"").trim();
   return s||"(não informado)";
@@ -4107,7 +4118,7 @@ function renderCarrinhoVendas(){
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">Carrinho — Vendas</div>
-        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · atribuição pela UTM da própria venda · venda sem UTM = orgânica</div>
+        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · tráfego = UTM com FBAds · o resto (sem UTM ou UTM de outra origem) é orgânico</div>
       </div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
@@ -4121,12 +4132,12 @@ function renderCarrinhoVendas(){
       ${kpiCard("Faturamento total",fUSD(fatTotal),`${(S.carrinhoVendasTotal||0).toLocaleString("pt-BR")} venda(s) · lançamento inteiro`,"#34d399")}
       ${kpiCard("Investimento do lançamento",fUSD(invTotal),"todas as etapas","var(--text-strong)")}
       ${kpiCard("ROAS do lançamento",roasLanc!=null?roasLanc.toFixed(2)+"x":"—","faturamento ÷ investimento total","var(--text-strong)")}
-      ${kpiCard("Vendas com UTM",(S.carrinhoVendasComUtm||0).toLocaleString("pt-BR"),"atribuídas a campanha/anúncio","var(--text-strong)")}
-      ${kpiCard("Vendas orgânicas",(S.carrinhoVendasSemUtm||0).toLocaleString("pt-BR"),"sem UTM no checkout","var(--text-strong)")}
+      ${kpiCard("Vendas de tráfego",(S.carrinhoVendasTrafego||0).toLocaleString("pt-BR"),"UTM com FBAds · atribuídas a anúncio","var(--text-strong)")}
+      ${kpiCard("Orgânicas / outras origens",(S.carrinhoVendasOutras||0).toLocaleString("pt-BR"),"sem UTM, ou UTM que não é do FBAds","var(--text-strong)")}
     </div>
 
     <div class="g5" style="margin-bottom:22px">
-      ${kpiCard("Vendas no período",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} com UTM · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)`,"var(--text-strong)")}
+      ${kpiCard("Vendas no período",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} de tráfego · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)/outras`,"var(--text-strong)")}
       ${kpiCard("Faturamento no período",fUSD(m.faturamento),"","var(--text-strong)")}
       ${kpiCard("Ticket médio",m.ticket!=null?fUSD(m.ticket):"—","","var(--text-strong)")}
       ${kpiCard("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"—","investimento do carrinho ÷ vendas","var(--text-strong)")}
@@ -4201,16 +4212,16 @@ function renderCarrinhoVendas(){
     if(box)drawBarSingle("c-carrinho-vendas",daily,"vendas",CHART_CPL,box.clientWidth,200);
     setupTip("c-carrinho-vendas","t-carrinho-vendas",daily,[
       {name:"Vendas",color:CHART_CPL,key:"vendas",fmt:v=>String(v)},
-      {name:"Com UTM",color:CHART_LEAD,key:"vendasTraf",fmt:v=>String(v)},
-      {name:"Orgânicas",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)},
+      {name:"Tráfego (FBAds)",color:CHART_LEAD,key:"vendasTraf",fmt:v=>String(v)},
+      {name:"Orgânicas/outras",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)},
       {name:"Faturamento",color:"#34d399",key:"faturamento",fmt:fUSD}],40,12);
   });
 }
 
 // ── Carrinho: Campanhas/Anúncios ────────────────────────────────────────────
 // Mídia da aba "Base Carrinho" agregada por campanha e por anúncio, cruzada
-// com as vendas que trazem UTM. As vendas ORGÂNICAS não aparecem aqui (não
-// pertencem a nenhum anúncio) — elas estão na aba Vendas.
+// com as vendas de TRÁFEGO (UTM contendo FBAds). As orgânicas e as de outras
+// origens não aparecem aqui — elas estão na aba Vendas.
 function getCarrinhoCampRows(start,end){
   const rows=carrinhoMetaRowsInRange(start,end);
   const byCamp={};
@@ -4377,7 +4388,7 @@ function renderCarrinhoAnuncios(){
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
 
-    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Só as vendas COM UTM entram aqui. As ${(S.carrinhoVendasSemUtm||0).toLocaleString("pt-BR")} venda(s) orgânica(s) do lançamento ficam na aba Vendas.</div>
+    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Só entram aqui as vendas cuja UTM contém <b>FBAds</b>. As ${(S.carrinhoVendasOutras||0).toLocaleString("pt-BR")} venda(s) orgânica(s)/de outras origens do lançamento ficam na aba Vendas, agrupadas pela origem delas.</div>
 
     <div class="g6" style="margin-bottom:18px">
       ${kpiCard("Investimento",fUSD(tot.spend),"","var(--text-strong)")}
@@ -4779,8 +4790,9 @@ ${aulaResumoTextBlock(3,null)}`;
 // Três blocos, igual ao Resumo consolidado da Captação: Total (lançamento
 // inteiro), Ontem e Hoje. O Carrinho aqui é só tráfego + venda — sem metas,
 // por decisão do usuário (não há benchmark de custo por venda definido).
-// As vendas ORGÂNICAS entram em vendas/faturamento/ROAS; o custo por venda de
-// tráfego, à parte, divide o investimento só pelas vendas com UTM.
+// As vendas orgânicas/de outras origens entram em vendas/faturamento/ROAS; o
+// custo por venda de tráfego, à parte, divide o investimento só pelas vendas
+// com FBAds na UTM.
 function carrinhoBloco(s,e){ return carrinhoMetrics(s===null?"0000-01-01":s, e===null?"9999-12-31":e); }
 function carrinhoResumoHtml(){
   const hoje=todayISO(), ontem=yesterdayISO();
@@ -4793,9 +4805,9 @@ function carrinhoResumoHtml(){
       stageRow("CPC",m.cpc!=null?fUSD(m.cpc):fUSD(0),"","")+
       stageRow("Checkouts iniciados",m.checkouts.toLocaleString("pt-BR"),"","")+
       stageRow("Custo por checkout",m.custoCheckout!=null?fUSD(m.custoCheckout):"--","","")+
-      stageRow("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf} c/ UTM · ${m.vendasOrg} orgânica(s)`,"")+
+      stageRow("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf} de tráfego · ${m.vendasOrg} orgânica(s)/outras`,"")+
       stageRow("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"--","","")+
-      stageRow("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--","só vendas com UTM","")+
+      stageRow("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--","só UTM com FBAds","")+
       stageRow("Faturamento",fUSD(m.faturamento),"","")+
       stageRow("Ticket médio",m.ticket!=null?fUSD(m.ticket):"--","","")+
       stageRow("ROAS (carrinho)",m.roas!=null?m.roas.toFixed(2)+"x":"--","","")+
@@ -4803,7 +4815,7 @@ function carrinhoResumoHtml(){
       stageRow("CTR",m.ctr!=null?fPct(m.ctr):fPct(0),"","")+
       stageRow("CPM",m.cpm!=null?fUSD(m.cpm):fUSD(0),"","")
     )).join("")+
-    `<div style="font-size:10px;color:var(--hint);max-width:640px">Vendas e faturamento incluem as orgânicas (sem UTM). ROAS (carrinho) = faturamento ÷ investimento da própria etapa; o ROAS do lançamento inteiro fica na sub-aba Vendas.</div>`;
+    `<div style="font-size:10px;color:var(--hint);max-width:640px">Tráfego = venda com FBAds na UTM. Vendas e faturamento incluem as orgânicas/outras origens. ROAS (carrinho) = faturamento ÷ investimento da própria etapa; o ROAS do lançamento inteiro fica na sub-aba Vendas.</div>`;
 }
 function carrinhoResumoText(){
   const hoje=todayISO(), ontem=yesterdayISO();
@@ -4818,8 +4830,8 @@ Checkouts iniciados:\t${m.checkouts.toLocaleString("pt-BR")}
 Custo por checkout:\t${m.custoCheckout!=null?fUSD(m.custoCheckout):"--"}
 
 Vendas:\t${m.vendasTotal.toLocaleString("pt-BR")}
-Vendas com UTM:\t${m.vendasTraf.toLocaleString("pt-BR")}
-Vendas orgânicas:\t${m.vendasOrg.toLocaleString("pt-BR")}
+Vendas de tráfego:\t${m.vendasTraf.toLocaleString("pt-BR")}
+Vendas orgânicas/outras:\t${m.vendasOrg.toLocaleString("pt-BR")}
 Custo por venda:\t${m.custoVenda!=null?fUSD(m.custoVenda):"--"}
 Custo por venda (tráfego):\t${m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--"}
 
