@@ -490,7 +490,6 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer;fi
   <div id="page-lembrete"  class="mdipage"></div>
   <div id="page-aulas"     class="mdipage"></div>
   <div id="page-carrinho-principal" class="mdipage"></div>
-  <div id="page-carrinho-fichas"    class="mdipage"></div>
   <div id="page-carrinho-vendas"    class="mdipage"></div>
   <div id="page-carrinho-anuncios"  class="mdipage"></div>
   <div id="page-planoreal" class="mdipage"></div>
@@ -600,10 +599,8 @@ const FUNIS = {
       ctr:          {val:2.10, higher:true},  // maior é melhor
       cpm:          {val:8.87, higher:false}, // menor é melhor
     },
-    // Meta do Carrinho: custo por ficha COM PREÇO — menor é melhor.
-    // ⚠️ TODO: valor herdado do tdo_ago26 (era em R$). Com $100 de verba de
-    // Carrinho no mdi_set26, esse alvo precisa ser revisto em dólar.
-    metaCarrinhoCustoFichaComPreco:40,
+    // Carrinho sem metas: não há etapa de fichas e não foi definido alvo de
+    // custo por venda. Os cartões do carrinho ficam sem farol.
     // ── Planejamento de investimento do mdi_set26 ─────────────────────────
     // Verba total: $10.000, dividida por etapa nos percentuais definidos:
     //   Cadastros 86,0% = $8.600  ·  Aquecimento 3,0% = $300
@@ -679,6 +676,10 @@ const FUNIS = {
       {date:"2026-09-09", investimento:145.00},
       {date:"2026-09-10", investimento:155.00},
     ],
+    // O CARRINHO é DECRESCENTE: 40% / 30% / 20% / 10% pelos quatro dias. A
+    // abertura carrega o peso e o investimento afunila até o fechamento —
+    // o oposto da rampa das etapas de captação.
+    //
     // O GRUPO VIP também foge da curva: a verba é rateada em 40% / 40% / 20%
     // pelos três dias (os dois primeiros carregam o peso e o último afunila
     // pra abertura do Carrinho), em vez da rampa crescente das demais etapas.
@@ -693,10 +694,10 @@ const FUNIS = {
       {date:"2026-09-13", investimento:70.00},
     ],
     planoCarrinho:[
-      {date:"2026-09-14", investimento:19.28},
-      {date:"2026-09-15", investimento:23.09},
-      {date:"2026-09-16", investimento:26.91},
-      {date:"2026-09-17", investimento:30.72},
+      {date:"2026-09-14", investimento:40.00},
+      {date:"2026-09-15", investimento:30.00},
+      {date:"2026-09-16", investimento:20.00},
+      {date:"2026-09-17", investimento:10.00},
     ],
   },
 };
@@ -735,11 +736,10 @@ const SHEET_LEMBRETE_NAME = "Base lembrete";
 const SHEET_AULAS_NAME = "Base Aulas";
 // Mídia do Grupo VIP — mesmas colunas das demais etapas, com "Account Name".
 const SHEET_GRUPO_VIP_NAME = "Grupo VIP";
-const SHEET_CARRINHO_TRAFEGO_NAME = null;  // "Base fichas - Tráfego"
-const SHEET_CARRINHO_ORGANICO_NAME = null; // "Base fichas - orgânico"
-const SHEET_CARRINHO_DISPARO_NAME = null;  // "Base fichas - disparo"
-const SHEET_CARRINHO_VENDAS_NAME = null;   // "Base vendas"
-const SHEET_CARRINHO_META_NAME = null;     // "Base Meta - Carrinho"
+// Carrinho: só DUAS abas — mídia da etapa e vendas do checkout. Não existe
+// etapa de fichas de interesse no mdi_set26.
+const SHEET_CARRINHO_META_NAME = "Base Carrinho";   // mídia (tráfego) do carrinho
+const SHEET_CARRINHO_VENDAS_NAME = "Base Vendas";   // vendas (webhook do checkout)
 const SHEET_LIVES_CAPTACAO_NAME = null;    // "Base Meta - lives captação"
 // Dados de página (GA4) — alimentam Connect Rate e Tx conv Pg cadastro.
 const SHEET_GA4_NAME = "Base GA4";
@@ -796,7 +796,6 @@ let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
 let AULA01_METAS = FUNIS.mdi.aula01Metas;
 let GRUPO_VIP_METAS = FUNIS.mdi.grupoVipMetas;
-let META_CARRINHO_CUSTO_FICHA_COM_PRECO = FUNIS.mdi.metaCarrinhoCustoFichaComPreco;
 let PLANO_DIARIO = FUNIS.mdi.planoDiario;
 // Soma do plano (Captação) até hoje — usado na aba Principal pros cartões
 // "planejado até hoje" e "% atingimento da meta".
@@ -859,26 +858,21 @@ const S = {
   stageAdSearch:{aquecimento:"",lembrete:"",aula01:"",aula02:"",aula03:"",aulaConsolidado:""},
   stageAdSort:{aquecimento:{col:"spend",dir:"desc"},lembrete:{col:"spend",dir:"desc"},aula01:{col:"spend",dir:"desc"},aula02:{col:"spend",dir:"desc"},aula03:{col:"spend",dir:"desc"},aulaConsolidado:{col:"spend",dir:"desc"}},
   aulasSubTab:"aula01", // sub-aba ativa da página Aulas: "aula01" | "aula02" | "aula03" | "consolidado"
-  // ── Carrinho: fichas de interesse (Tráfego/Orgânico/Disparo) ──────────────
-  carrinhoSubPage:"principal", // "principal" | "fichas" | "vendas" | "anuncios"
-  carrinhoFichaAttrib:[],      // fichas de TRÁFEGO casadas com anúncio/campanha: {date,adName,campName,comPreco}
-  carrinhoFichaOrigem:[],      // TODAS as fichas (tráfego+orgânico+disparo) com origem/canal: {date,ms,tipo,origem,canal,phone,email,comPreco}
-  carrinhoFichaOrigemUnica:[], // deduplicadas por telefone/e-mail (só a mais antiga por pessoa)
-  carrinhoTrafego:{}, carrinhoTrafegoComPreco:{},  // date → count (fichas de tráfego)
-  carrinhoOrganico:{}, carrinhoOrganicoComPreco:{}, // date → count (orgânico + disparo somados)
-  carrinhoPrecoKeyFound:true,  // se a coluna "...forma de pagamento..." foi encontrada em pelo menos uma das 3 bases
-  carrinhoFichasMode:"totais", // "totais" | "unicas"
-  carrinhoFichasQual:"todas",  // "todas" | "traf" | "org"
-  carrinhoFichasPreco:"total", // "total" | "comPreco" | "semPreco"
+  // ── Carrinho: tráfego + venda (sem etapa de fichas) ───────────────────────
+  carrinhoSubPage:"principal", // "principal" | "vendas" | "anuncios"
+  carrinhoVendas:[],        // cada venda paga: {date,ms,nome,email,phone,status,moeda,valor,valorUSD,tipo,origem,canal,campName,adName,utmRaw,produto}
+  carrinhoVendasPorDia:{},  // date → nº de vendas
+  carrinhoFatPorDia:{},     // date → faturamento em US$
+  carrinhoVendasLinhas:0,   // linhas lidas na aba (inclui não aprovadas)
+  carrinhoVendasTotal:0,    // vendas aprovadas (as que contam)
+  carrinhoVendasDevolvidas:0, carrinhoVendasSemData:0,
+  carrinhoVendasComUtm:0, carrinhoVendasSemUtm:0,
+  carrinhoFaturamento:0,
   carrinhoOrigemSearch:"", carrinhoCanalSearch:"",
-  carrinhoOSort:{col:"fichas",dir:"desc"}, carrinhoCSort:{col:"fichas",dir:"desc"},
+  carrinhoOSort:{col:"vendas",dir:"desc"}, carrinhoCSort:{col:"vendas",dir:"desc"},
   carrinhoAdSearch:"", carrinhoAdSort:{col:"spend",dir:"desc"},
   carrinhoSelectedCamps:new Set(), carrinhoCampSearch:"", carrinhoCampSort:{col:"spend",dir:"desc"},
   carrinhoSelectedAds:new Set(),
-  carrinhoVendaAttrib:[],   // vendas de TRÁFEGO casadas com anúncio/campanha (herdado da ficha): {date,adName,campName}
-  carrinhoVendaOrigem:[],   // TODAS as vendas casadas (tráfego+orgânico) com origem/canal: {date,tipo,origem,canal,comPreco}
-  carrinhoVendasPorDia:{},  // date → count (usa a própria "Data Correta" da venda, sem ajuste de fuso)
-  carrinhoVendasTotal:0, carrinhoVendasMatched:0, carrinhoVendasUnmatched:0,
   startDate:"", endDate:"", activeQuick:"30d",
   principalChannel:"total", // "total" | "trafego" | "organico" — filtro exclusivo da aba Principal
   principalTemp:"todos",    // "todos" | "quente" | "morno" | "frio" — filtro exclusivo da aba Principal
@@ -918,12 +912,10 @@ function resetFunilData(){
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null};
   S.manualEntradasVip=null; S.grupoVipRows=[];
-  S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
-  S.carrinhoTrafego={}; S.carrinhoTrafegoComPreco={};
-  S.carrinhoOrganico={}; S.carrinhoOrganicoComPreco={};
-  S.carrinhoPrecoKeyFound=true;
-  S.carrinhoVendaAttrib=[]; S.carrinhoVendaOrigem=[]; S.carrinhoVendasPorDia={};
-  S.carrinhoVendasTotal=0; S.carrinhoVendasMatched=0; S.carrinhoVendasUnmatched=0;
+  S.carrinhoVendas=[]; S.carrinhoVendasPorDia={}; S.carrinhoFatPorDia={};
+  S.carrinhoVendasLinhas=0; S.carrinhoVendasTotal=0; S.carrinhoVendasDevolvidas=0;
+  S.carrinhoVendasSemData=0; S.carrinhoVendasComUtm=0; S.carrinhoVendasSemUtm=0;
+  S.carrinhoFaturamento=0;
   // Seleções/buscas ligadas a nomes de campanha/anúncio não fazem sentido
   // depois de trocar de funil (outra planilha, outros nomes).
   S.selectedCamps=new Set(); S.selectedAds=new Set(); S.campSearch=""; S.adSearch="";
@@ -951,7 +943,6 @@ function switchFunil(key){
   LEMBRETE_METAS=f.lembreteMetas;
   AULA01_METAS=f.aula01Metas;
   GRUPO_VIP_METAS=f.grupoVipMetas;
-  META_CARRINHO_CUSTO_FICHA_COM_PRECO=f.metaCarrinhoCustoFichaComPreco;
   PLANO_DIARIO=f.planoDiario;
   PLANO_AQUECIMENTO=f.planoAquecimento;
   PLANO_AQUECIMENTO_TOTAL=f.planoAquecimentoTotal;
@@ -1202,10 +1193,14 @@ function parseStageRows(rowsRaw){
     const video75=parseInt(r["Video 75 Percent Watched Actions"]||0)||0;
     // "Views 3s": Aquecimento/Lembrete usam "Action 3s Video Views"; Aulas usa "Action Video View".
     const view3s=parseInt(r["Action 3s Video Views"]??r["Action Video View"]??0)||0;
+    // "Action Omni Initiated Checkout" só existe na aba do Carrinho; nas
+    // demais etapas vem 0 e simplesmente não é usado.
+    const checkout=parseInt(r["Action Omni Initiated Checkout"]||0)||0;
+    const pageViews=parseInt(r["Action Landing Page View"]||0)||0;
     const campName=(r["Campaign Name"]||"").trim();
     const adName=(r["Ad Name"]||"").trim();
     const igUrl=(r["Instagram Permalink URL"]||"").trim();
-    out.push({date:d,campName,adName,igUrl,spend,clicks,impressions,video75,view3s});
+    out.push({date:d,campName,adName,igUrl,spend,clicks,impressions,video75,view3s,checkout,pageViews});
   }
   return out;
 }
@@ -1492,9 +1487,9 @@ function campaignStage(campName){
 // campaignStage, mas as campanhas dessas 3 etapas não estão nessa sheet (só
 // nas sheets próprias) — por isso "Planejado/Realizado" sempre mostrava
 // R$0,00 de realizado ali, mesmo com investimento normal nas outras abas.
-// Mídia do Carrinho: usa a aba própria quando existir; se estiver vazia,
-// cai no comportamento antigo (Base Meta - captação filtrada por campanha),
-// pra não quebrar lançamentos que não têm a aba separada.
+// Mídia do Carrinho: usa a aba própria ("Base Carrinho") quando existir; se
+// estiver vazia, cai no comportamento antigo (Base Meta - captação filtrada
+// por campanha), pra não quebrar enquanto a aba nova não tem linhas.
 function carrinhoMetaRows(){
   if(S.carrinhoMetaRows&&S.carrinhoMetaRows.length)return S.carrinhoMetaRows;
   return S.metaRows.filter(r=>campaignStage(r.campName)==="Carrinho");
@@ -1551,24 +1546,22 @@ function stageMetrics(rows){
   return{...t,cpc,tx75,cptx75};
 }
 
-// ── Carrinho: fichas de interesse (Tráfego/Orgânico/Disparo) ──────────────
-// Mesmo modelo replicado de outro projeto: 3 bases de fichas do formulário
-// "Ficha de Interesse", casadas com anúncio/campanha via UTM (só Tráfego —
-// Orgânico/Disparo não tem UTM de anúncio) e deduplicadas por telefone/e-mail.
-// A pergunta de preço/forma de pagamento pode não existir ou sair do formulário
-// no meio do lançamento (já aconteceu antes) — por isso a coluna é encontrada
-// por um trecho do texto ("forma de pagamento"), não pelo nome exato da
-// pergunta (que muda a cada lançamento conforme o preço/oferta do momento).
-function findPrecoKey(headers){
-  return headers.find(h=>/forma de pagamento/i.test(h))||null;
-}
-// Unifica fichas da mesma pessoa (telefone OU e-mail em comum) mantendo só a
-// mais antiga — mesma técnica de Union-Find do modelo original.
+// ── Carrinho: vendas (Base Vendas) ──────────────────────────────────────────
+// O mdi_set26 NÃO tem etapa de fichas de interesse. O carrinho aqui é só
+// TRÁFEGO (aba "Base Carrinho", a mídia da etapa) e VENDA (aba "Base Vendas",
+// a exportação do checkout da Hotmart). A venda já chega com a própria
+// atribuição nos campos de origem do checkout — não existe mais o casamento
+// por telefone/e-mail com uma ficha intermediária.
+//
+// Venda COM origem preenchida  → tráfego (entra em campanha/anúncio).
+// Venda SEM origem preenchida  → orgânica (conta em vendas e faturamento,
+//                                 mas não é atribuída a nenhum anúncio).
+
 // Dedup genérico por contato (telefone OU e-mail, union-find — liga registros
 // transitivamente mesmo quando só um dos dois campos bate) — mantém, de cada
-// grupo, o registro com menor "ms" (a inscrição/ficha mais antiga da pessoa).
+// grupo, o registro com menor "ms" (o registro mais antigo da pessoa).
 // Espera itens com {phone,email,ms} já normalizados (normalizePhone/
-// normalizeEmail). Usado tanto pras fichas do Carrinho quanto pra Base leads.
+// normalizeEmail). Usado pela Base leads (Captação).
 function dedupByContact(items){
   const parent={};
   function find(x){ if(!(x in parent))parent[x]=x; while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];} return x; }
@@ -1585,78 +1578,12 @@ function dedupByContact(items){
   });
   return Object.values(groups);
 }
-function dedupFichasByContact(fichas){ return dedupByContact(fichas); }
-// Processa as 3 bases já parseadas (linhas cruas) e popula todo o estado
-// S.carrinho* de uma vez. Precisa rodar DEPOIS que S.adIdMap (Base Meta) já
-// foi montado, pra conseguir casar as fichas de tráfego com anúncio/campanha.
-function processCarrinhoFichas(trafRowsRaw,orgRowsRaw,dispRowsRaw){
-  const precoKeyTraf=trafRowsRaw.length?findPrecoKey(Object.keys(trafRowsRaw[0])):null;
-  const precoKeyOrg=orgRowsRaw.length?findPrecoKey(Object.keys(orgRowsRaw[0])):null;
-  const precoKeyDisp=dispRowsRaw.length?findPrecoKey(Object.keys(dispRowsRaw[0])):null;
-  S.carrinhoPrecoKeyFound=!!(precoKeyTraf||precoKeyOrg||precoKeyDisp);
-
-  const trafD={}, trafDComPreco={};
-  const orgD={}, orgDComPreco={};
-  const fichaAttrib=[], fichaOrigem=[];
-
-  function processRow(r,tipo,precoKey){
-    const ms=parseFichaDateTimeMs(r["Submitted At"]);
-    if(ms==null)return;
-    const d=msToISO(ms-3*60*60*1000); // mesmo ajuste -3h das demais datas deste dashboard
-    const comPreco=precoKey?!!(r[precoKey]||"").trim():null;
-    const phone=normalizePhone(r["Qual seu WhatsApp?"]);
-    const email=normalizeEmail(r["Qual seu E-mail?"]);
-    const utmSrc=(r["utm_source"]||"").trim();
-    const utmMed=(r["utm_medium"]||"").trim();
-    const utmCont=(r["utm_content"]||r["utm_term"]||"").trim();
-    let adName=null, campName=null;
-    if(tipo==="traf"){
-      // Mesmo padrão de UTM/Ad ID já usado pra atribuir a Base leads (Captação):
-      // utm_medium="{campanha}id{campId}", utm_content="{anúncio}id{adId}".
-      const rawAdId=extractIdSuffix(utmCont);
-      const rawAdName=extractNamePrefix(utmCont);
-      const rawCampName=extractNamePrefix(utmMed);
-      adName=rawAdName; campName=rawCampName;
-      if(rawAdId&&S.adIdMap[rawAdId]){
-        adName=S.adIdMap[rawAdId].adName||rawAdName;
-        campName=S.adIdMap[rawAdId].campName||rawCampName;
-      }
-      trafD[d]=(trafD[d]||0)+1;
-      if(comPreco)trafDComPreco[d]=(trafDComPreco[d]||0)+1;
-      fichaAttrib.push({date:d,adName:adName||"(sem atribuição)",campName:campName||"(sem atribuição)",comPreco:!!comPreco});
-    }else{
-      orgD[d]=(orgD[d]||0)+1;
-      if(comPreco)orgDComPreco[d]=(orgDComPreco[d]||0)+1;
-    }
-    // adName/campName vão junto na fichaOrigem (não só na fichaAttrib) pra dar
-    // pra atribuir uma VENDA casada com esta ficha ao mesmo anúncio/campanha,
-    // sem precisar cruzar duas listas por telefone/e-mail de novo.
-    fichaOrigem.push({date:d,ms,tipo,origem:utmSrc||"(não informado)",canal:utmMed||"(não informado)",phone,email,comPreco,
-      adName:tipo==="traf"?(adName||"(sem atribuição)"):null,campName:tipo==="traf"?(campName||"(sem atribuição)"):null});
-  }
-
-  for(const r of trafRowsRaw)processRow(r,"traf",precoKeyTraf);
-  for(const r of orgRowsRaw)processRow(r,"org",precoKeyOrg);
-  for(const r of dispRowsRaw)processRow(r,"org",precoKeyDisp); // disparo somado com orgânico, mesmo padrão do modelo original
-
-  S.carrinhoTrafego=trafD; S.carrinhoTrafegoComPreco=trafDComPreco;
-  S.carrinhoOrganico=orgD; S.carrinhoOrganicoComPreco=orgDComPreco;
-  S.carrinhoFichaAttrib=fichaAttrib;
-  S.carrinhoFichaOrigem=fichaOrigem;
-  S.carrinhoFichaOrigemUnica=dedupFichasByContact(fichaOrigem);
-}
-// Casa vendas ("Base vendas") com a
-// ficha mais antiga da pessoa (tráfego ou orgânico, o que veio primeiro),
-// batendo por telefone OU e-mail. Precisa rodar DEPOIS de processCarrinhoFichas
-// (usa S.carrinhoFichaOrigem já processado como fonte de verdade de quem
-// preencheu o quê). "Data Correta" já vem certa (sem ajuste de fuso) — mesmo
-// tratamento do modelo original.
-// Busca tolerante de coluna: ignora acento, hífen, espaço e caixa no
-// cabeçalho. Necessário porque a "Base vendas" já veio com "Email" num
-// lançamento e "E-mail" em outro, e "Telefone" ora maiúsculo ora minúsculo —
-// com a busca exata anterior, TODA venda ficava sem atribuição em silêncio.
+// Busca tolerante de coluna: ignora acento, hífen, ponto, espaço e caixa no
+// cabeçalho. Necessária porque a Base Vendas vem com os nomes crus do webhook
+// ("data.purchase.price.value") e, se um dia virar exportação manual, os
+// mesmos campos aparecem como "Valor"/"Preço" — as duas formas passam aqui.
 function getCol(r,...alts){
-  const norm=k=>String(k||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const norm=k=>String(k||"").normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const chaves=Object.keys(r);
   for(const alt of alts){
     const a=norm(alt);
@@ -1665,52 +1592,122 @@ function getCol(r,...alts){
   }
   return "";
 }
-function processCarrinhoVendas(vendasRowsRaw){
-  const earliestByPhone={}, earliestByEmail={};
-  for(const f of S.carrinhoFichaOrigem){
-    if(f.phone&&(!earliestByPhone[f.phone]||f.ms<earliestByPhone[f.phone].ms))earliestByPhone[f.phone]=f;
-    if(f.email&&(!earliestByEmail[f.email]||f.ms<earliestByEmail[f.email].ms))earliestByEmail[f.email]=f;
+// Valor da venda em dólar. A Hotmart entrega o preço na moeda do comprador
+// (MXN, USD, BRL…) numa coluna e a moeda em outra. As taxas são as MESMAS da
+// conversão do investimento (metaSpendToUSD) — se uma mudar, muda a outra.
+function vendaValorUSD(valor,moeda){
+  if(!valor)return 0;
+  const m=String(moeda||"").toUpperCase().trim();
+  if(m==="USD")return valor;
+  if(m==="MXN")return valor/18;
+  if(m==="BRL")return valor/5.50;
+  return valor/18; // padrão: peso mexicano, igual ao das contas de mídia
+}
+// Fuso usado pra transformar o timestamp da venda em DATA. O webhook manda
+// epoch em UTC; o lançamento é no México, então o dia da venda vira no
+// horário de lá — a mesma referência do gerenciador de anúncios. É só mudar
+// esta constante se o corte do dia tiver que ser em outro fuso.
+const VENDAS_TZ_OFFSET_H = -6;
+// Data da venda em milissegundos, aceitando os formatos que já apareceram:
+// epoch em ms (webhook), epoch em segundos, "DD/MM/YYYY HH:MM:SS" e ISO.
+function vendaDataMs(raw){
+  const s=String(raw||"").trim();
+  if(!s)return null;
+  if(/^\d{13}$/.test(s))return parseInt(s,10);
+  if(/^\d{10}$/.test(s))return parseInt(s,10)*1000;
+  const ms=parseFichaDateTimeMs(s);
+  if(ms!=null)return ms;
+  const t=Date.parse(s.replace(" ","T"));
+  return isNaN(t)?null:t;
+}
+// Status da Hotmart. Só os "OK" entram em vendas/faturamento; devolução e
+// chargeback são contados à parte pra aparecer como aviso, e o resto
+// (boleto gerado, aguardando pagamento, checkout abandonado) é ignorado.
+const VENDA_STATUS_OK=["APPROVED","COMPLETE","COMPLETED"];
+const VENDA_STATUS_DEVOLVIDA=["REFUNDED","CHARGEBACK","CANCELED","CANCELLED","DISPUTE"];
+// Atribuição da venda. O checkout carrega a origem em "origin.xcod" (e, como
+// reserva, "origin.sck"). Não há um formato único: o campo pode vir como
+// pares "utm_x=valor", como uma sequência separada por "|" (padrão do src do
+// Meta: campanha|conjunto|anúncio) ou vazio. O parser aceita as três formas
+// pra não depender de como o checkout foi configurado — e campo VAZIO é o
+// sinal de venda orgânica.
+function parseVendaOrigem(xcod,sck){
+  const raw=(String(xcod||"").trim()||String(sck||"").trim());
+  if(!raw)return{tipo:"org",origem:"(orgânico / sem UTM)",canal:"(orgânico / sem UTM)",campName:null,adName:null,raw:""};
+  const partes=raw.split(/[|;]/).map(p=>p.trim()).filter(Boolean);
+  const kv={}, livres=[];
+  for(const p of partes){
+    const i=p.indexOf("=");
+    if(i>0)kv[p.slice(0,i).trim().toLowerCase()]=p.slice(i+1).trim();
+    else livres.push(p);
   }
-  const vendaAttrib=[], vendaOrigem=[], porDia={};
-  let total=0, matched=0, unmatched=0;
-  for(const r of vendasRowsRaw){
-    const nome=String(getCol(r,"Nome","Name")||"").trim();
-    const ph=normalizePhone(getCol(r,"Whatsapp1","Whatsapp","Telefone","Celular","Phone"));
-    const em=normalizeEmail(getCol(r,"E-mail","Email","Mail"));
-    if(!nome&&!ph&&!em)continue; // linha vazia
+  let src=kv["utm_source"]||kv["source"]||kv["src"]||"";
+  let med=kv["utm_medium"]||kv["medium"]||"";
+  let camp=kv["utm_campaign"]||kv["campaign"]||"";
+  let cont=kv["utm_content"]||kv["content"]||kv["utm_term"]||"";
+  // Nenhum par chave=valor: trata como posicional "origem|campanha|…|anúncio".
+  if(!src&&!med&&!camp&&!cont&&livres.length){
+    src=livres[0];
+    camp=livres.length>1?livres[1]:livres[0];
+    cont=livres.length>2?livres[livres.length-1]:"";
+  }
+  // Mesmo padrão "{nome}id{id}" da Base leads: quando o id do anúncio vem
+  // colado no nome, o nome oficial vem da Base Meta (S.adIdMap).
+  const campoCamp=camp||med;
+  let campName=extractNamePrefix(campoCamp)||campoCamp||null;
+  let adName=extractNamePrefix(cont)||cont||null;
+  const adId=extractIdSuffix(cont);
+  if(adId&&S.adIdMap&&S.adIdMap[adId]){
+    adName=S.adIdMap[adId].adName||adName;
+    campName=S.adIdMap[adId].campName||campName;
+  }
+  return{tipo:"traf",
+    origem:src||campName||"(sem identificação)",
+    canal:med||campName||"(sem identificação)",
+    campName:campName||"(sem atribuição)",
+    adName:adName||"(sem atribuição)",
+    raw};
+}
+// Processa a "Base Vendas" inteira e popula o estado S.carrinho* de uma vez.
+// Roda DEPOIS da Base Meta (usa S.adIdMap pra resolver o nome do anúncio).
+function processCarrinhoVendas(rowsRaw){
+  const vendas=[], porDia={}, fatPorDia={};
+  let total=0, aprovadas=0, devolvidas=0, comUtm=0, semUtm=0, faturamento=0, semData=0;
+  for(const r of rowsRaw){
+    const nome=String(getCol(r,"data.buyer.name","Nome","Name","Comprador")||"").trim();
+    const email=normalizeEmail(getCol(r,"data.buyer.email","E-mail","Email","Mail"));
+    const phone=normalizePhone(getCol(r,"data.buyer.checkout_phone","Whatsapp1","Whatsapp","Telefone","Celular","Phone"));
+    const status=String(getCol(r,"data.purchase.status","Status")||"").trim().toUpperCase();
+    if(!nome&&!email&&!phone&&!status)continue; // linha vazia
     total++;
-    // "valor" da venda — agora existe na Base vendas (não existia antes),
-    // então dá pra somar faturamento por origem/anúncio.
-    const valor=parseNum(getCol(r,"valor","Valor","Preço","Price"));
-    const ms=parseFichaDateTimeMs(getCol(r,"Data Correta","Data","Data da venda","created_at"));
-    const d=ms!=null?msToISO(ms):null;
-    // NÃO conta aqui: se a Base vendas não tiver coluna de data (é o caso
-    // hoje), "d" fica null e o gráfico de vendas por dia ficava ZERADO. A
-    // contagem por dia passou pra depois do casamento, usando "vd" — que cai
-    // na data da ficha quando a venda não traz data própria.
-    const candidates=[];
-    if(ph&&earliestByPhone[ph])candidates.push(earliestByPhone[ph]);
-    if(em&&earliestByEmail[em])candidates.push(earliestByEmail[em]);
-    if(candidates.length){
-      candidates.sort((a,b)=>a.ms-b.ms);
-      const best=candidates[0];
-      matched++;
-      const vd=d||best.date; // fallback pra data da ficha se a venda não trouxer data
-      porDia[vd]=(porDia[vd]||0)+1;
-      if(best.tipo==="traf"){
-        vendaAttrib.push({date:vd,valor,adName:best.adName||"(sem atribuição)",campName:best.campName||"(sem atribuição)"});
-      }
-      vendaOrigem.push({date:vd,valor,tipo:best.tipo,origem:best.origem,canal:best.canal,comPreco:best.comPreco});
-    }else{
-      unmatched++;
-      if(d)porDia[d]=(porDia[d]||0)+1; // sem ficha casada, só entra se a venda tiver data própria
-    }
+    if(VENDA_STATUS_DEVOLVIDA.includes(status)){devolvidas++;continue;}
+    if(status&&!VENDA_STATUS_OK.includes(status))continue; // boleto gerado, aguardando pagamento etc.
+    const ms=vendaDataMs(getCol(r,"data.purchase.order_date","Data Correta","Data","Data da venda","created_at"));
+    const date=ms!=null?msToISO(ms+VENDAS_TZ_OFFSET_H*60*60*1000):null;
+    if(date==null)semData++;
+    const moeda=String(getCol(r,"data.purchase.price.currency_value","Moeda","Currency")||"").trim().toUpperCase();
+    const valor=parseNum(getCol(r,"data.purchase.price.value","valor","Valor","Preço","Price"));
+    const valorUSD=vendaValorUSD(valor,moeda);
+    const o=parseVendaOrigem(getCol(r,"data.purchase.origin.xcod","xcod","utm","UTM"),
+                             getCol(r,"data.purchase.origin.sck","sck"));
+    aprovadas++;
+    if(o.tipo==="traf")comUtm++;else semUtm++;
+    faturamento+=valorUSD;
+    if(date){porDia[date]=(porDia[date]||0)+1; fatPorDia[date]=(fatPorDia[date]||0)+valorUSD;}
+    vendas.push({date,ms,nome,email,phone,status,moeda,valor,valorUSD,
+      tipo:o.tipo,origem:o.origem,canal:o.canal,campName:o.campName,adName:o.adName,utmRaw:o.raw,
+      produto:String(getCol(r,"data.product.name","Produto","Product")||"").trim()});
   }
-  S.carrinhoVendaAttrib=vendaAttrib;
-  S.carrinhoVendaOrigem=vendaOrigem;
+  S.carrinhoVendas=vendas;
   S.carrinhoVendasPorDia=porDia;
-  S.carrinhoVendasTotal=total; S.carrinhoVendasMatched=matched; S.carrinhoVendasUnmatched=unmatched;
-  S.carrinhoFaturamento=vendaOrigem.reduce((a,v)=>a+(v.valor||0),0);
+  S.carrinhoFatPorDia=fatPorDia;
+  S.carrinhoVendasLinhas=total;
+  S.carrinhoVendasTotal=aprovadas;
+  S.carrinhoVendasDevolvidas=devolvidas;
+  S.carrinhoVendasComUtm=comUtm;
+  S.carrinhoVendasSemUtm=semUtm;
+  S.carrinhoVendasSemData=semData;
+  S.carrinhoFaturamento=faturamento;
 }
 
 // ── Base GA4 (dados de página) ──────────────────────────────────────────────
@@ -2033,7 +2030,7 @@ async function loadData(){
       S.carrinhoMetaRows = parseStageRows(parseRows(parseCSVText(carrinhoMetaCsv)));
       render();
     }catch(e){
-      console.error("Erro ao carregar a mídia do Carrinho (Base Meta - Carrinho):",e);
+      console.error("Erro ao carregar a mídia do Carrinho (Base Carrinho):",e);
     }
   })();
 
@@ -2048,32 +2045,15 @@ async function loadData(){
     }
   })();
 
-  // Fichas + Vendas do Carrinho (a Vendas depende das Fichas já processadas,
-  // por isso fica encadeada dentro do mesmo bloco — mas o bloco inteiro roda
-  // à parte do resto).
+  // Vendas do Carrinho (aba "Base Vendas"). Roda depois da Base Meta porque
+  // usa S.adIdMap pra resolver o nome do anúncio a partir da UTM da venda.
   (async()=>{
-    try{
-      const [trafCsv, orgCsv, dispCsv] = await Promise.all([
-        fetchSheetCSVOpt(SHEET_CARRINHO_TRAFEGO_NAME),
-        fetchSheetCSVOpt(SHEET_CARRINHO_ORGANICO_NAME),
-        fetchSheetCSVOpt(SHEET_CARRINHO_DISPARO_NAME),
-      ]);
-      processCarrinhoFichas(
-        parseRows(parseCSVText(trafCsv)),
-        parseRows(parseCSVText(orgCsv)),
-        parseRows(parseCSVText(dispCsv)),
-      );
-      render();
-    }catch(e){
-      console.error("Erro ao carregar fichas do Carrinho (Tráfego/Orgânico/Disparo):",e);
-      return;
-    }
     try{
       const vendasCsv = await fetchSheetCSVOpt(SHEET_CARRINHO_VENDAS_NAME);
       processCarrinhoVendas(parseRows(parseCSVText(vendasCsv)));
       render();
     }catch(e){
-      console.error("Erro ao carregar vendas do Carrinho (Base vendas):",e);
+      console.error("Erro ao carregar vendas do Carrinho (Base Vendas):",e);
     }
   })();
 
@@ -2385,7 +2365,7 @@ function getAdRows(start,end,selectedCamps){
 // ── Navigation ────────────────────────────────────────────────────────────
 // "captacao" e "carrinho" são as abas de topo com sub-abas — Captação:
 // Principal, Campanhas e anúncios, Métricas do Tráfego, Análise qualificação;
-// Carrinho: Principal, Fichas, Vendas, Campanhas/Anúncios. As demais
+// Carrinho: Principal, Vendas, Campanhas/Anúncios. As demais
 // (Aquecimento, Lembrete, Aulas, Planejado/Realizado, Resumo diário) são
 // páginas únicas, sem segundo nível.
 function activePageId(){
@@ -2474,7 +2454,6 @@ const SUB_TABS_CAPTACAO=[
 ];
 const SUB_TABS_CARRINHO=[
   ["principal","⊞ Principal"],
-  ["fichas","📝 Fichas"],
   ["vendas","💰 Vendas"],
   ["anuncios","◈ Campanhas/Anúncios"],
 ];
@@ -3565,7 +3544,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
     ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
     ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
-    ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · fichas: ${(S.carrinhoFichaOrigem||[]).length} · vendas: ${(S.carrinhoVendaOrigem||[]).length}`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
+    ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasComUtm||0} c/ UTM · ${S.carrinhoVendasSemUtm||0} orgânica(s))`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
     <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
   el._resumoText=resumoText;
@@ -3863,63 +3842,73 @@ function renderStagePage(pageId,label,planArr){
 }
 
 // ── Carrinho: Principal (KPIs + gráficos) ───────────────────────────────────
-// Investimento/cliques vêm da MESMA Base Meta - captação, filtrada por
-// campanha (via campaignStage==="Carrinho") — o Carrinho não tem uma sheet de
-// mídia própria, suas campanhas só se identificam pelo nome, igual às outras
-// etapas. Fichas vêm das 3 sheets processadas em processCarrinhoFichas().
+// A etapa de Carrinho tem só DUAS pernas no mdi_set26: TRÁFEGO (aba própria
+// "Base Carrinho", com investimento, cliques, impressões e checkouts
+// iniciados) e VENDA (aba "Base Vendas", com o valor e a origem de cada
+// compra). Não existe ficha de interesse no meio — quem clica vai direto pro
+// checkout, e a venda carrega a própria UTM.
 function carrinhoMetaRowsInRange(start,end){
   return carrinhoMetaRows().filter(r=>r.date>=start&&r.date<=end);
 }
-function carrinhoFichasInRange(fichas,start,end){
-  return fichas.filter(f=>f.date>=start&&f.date<=end);
+// Vendas do período. Venda sem data (webhook sem timestamp) fica de fora dos
+// recortes por período, mas continua no consolidado do lançamento.
+function carrinhoVendasInRange(start,end){
+  return (S.carrinhoVendas||[]).filter(v=>v.date&&v.date>=start&&v.date<=end);
 }
-// Só fichas de TRÁFEGO entram aqui (com e sem preço). As orgânicas/disparo
-// ficam restritas à sub-aba "Fichas" — não entram em custo por ficha, nem no
-// Principal, nem no Resumo, porque não há investimento associado a elas e
-// isso distorceria o custo pra baixo.
+// Métricas consolidadas do Carrinho no período. As vendas ORGÂNICAS entram em
+// vendas/faturamento/ROAS (elas existem e foram pagas), mas o custo por venda
+// de tráfego é calculado só sobre as vendas com UTM — senão o investimento
+// ficaria dividido por vendas que ele não gerou.
 function carrinhoMetrics(start,end){
   const metaRows=carrinhoMetaRowsInRange(start,end);
   const spend=metaRows.reduce((a,r)=>a+r.spend,0);
   const clicks=metaRows.reduce((a,r)=>a+r.clicks,0);
   const impressions=metaRows.reduce((a,r)=>a+(r.impressions||0),0);
-  const fichas=carrinhoFichasInRange(S.carrinhoFichaOrigem,start,end).filter(f=>f.tipo==="traf");
-  const fichasTotal=fichas.length;
-  const fichasComPreco=fichas.filter(f=>f.comPreco).length;
-  return{spend,clicks,impressions,fichasTotal,fichasComPreco,
-    custoFicha:fichasTotal>0?spend/fichasTotal:null,
-    custoFichaComPreco:fichasComPreco>0?spend/fichasComPreco:null,
+  const checkouts=metaRows.reduce((a,r)=>a+(r.checkout||0),0);
+  const vendas=carrinhoVendasInRange(start,end);
+  const vendasTotal=vendas.length;
+  const vTraf=vendas.filter(v=>v.tipo==="traf");
+  const vendasTraf=vTraf.length;
+  const vendasOrg=vendasTotal-vendasTraf;
+  const faturamento=vendas.reduce((a,v)=>a+(v.valorUSD||0),0);
+  const faturamentoTraf=vTraf.reduce((a,v)=>a+(v.valorUSD||0),0);
+  return{spend,clicks,impressions,checkouts,vendasTotal,vendasTraf,vendasOrg,
+    faturamento,faturamentoTraf,
+    ticket:vendasTotal>0?faturamento/vendasTotal:null,
+    custoVenda:vendasTotal>0?spend/vendasTotal:null,
+    custoVendaTraf:vendasTraf>0?spend/vendasTraf:null,
+    custoCheckout:checkouts>0?spend/checkouts:null,
+    txCheckoutVenda:checkouts>0?(vendasTotal/checkouts)*100:null,
+    txConvVenda:clicks>0?(vendasTotal/clicks)*100:null,
+    roas:spend>0?faturamento/spend:null,
     cpc:clicks>0?spend/clicks:null,
     ctr:impressions>0?(clicks/impressions)*100:null,
-    cpm:impressions>0?(spend/impressions)*1000:null,
-    // Tx conversão formulário = fichas de tráfego ÷ cliques no link.
-    txConvForm:clicks>0?(fichasTotal/clicks)*100:null};
+    cpm:impressions>0?(spend/impressions)*1000:null};
 }
+// Série diária: mídia (Base Carrinho) + vendas/faturamento (Base Vendas).
 function getCarrinhoDaily(start,end){
   const metaByDate={};
   for(const r of carrinhoMetaRows()){
     if(r.date<start||r.date>end)continue;
-    if(!metaByDate[r.date])metaByDate[r.date]={spend:0,clicks:0};
-    metaByDate[r.date].spend+=r.spend;metaByDate[r.date].clicks+=r.clicks;
+    if(!metaByDate[r.date])metaByDate[r.date]={spend:0,clicks:0,checkout:0};
+    const m=metaByDate[r.date];
+    m.spend+=r.spend;m.clicks+=r.clicks;m.checkout+=(r.checkout||0);
   }
-  // tipo "traf" = ficha com UTM de anúncio; qualquer outro (org/disparo)
-  // entra em orgânico, mesmo critério das tabelas de origem/canal.
-  // fichas/fichasComPreco = só TRÁFEGO (as que entram em custo por ficha).
-  // fichasOrg existe só pro gráfico "Fichas por dia (orgânico)" do Principal:
-  // volume informativo, fora de qualquer custo e fora do Resumo.
-  const fichasByDate={},fichasComPrecoByDate={},fichasOrgByDate={};
-  for(const f of S.carrinhoFichaOrigem){
-    if(f.date<start||f.date>end)continue;
-    if(f.tipo!=="traf"){ fichasOrgByDate[f.date]=(fichasOrgByDate[f.date]||0)+1; continue; }
-    fichasByDate[f.date]=(fichasByDate[f.date]||0)+1;
-    if(f.comPreco)fichasComPrecoByDate[f.date]=(fichasComPrecoByDate[f.date]||0)+1;
+  const vByDate={},vTrafByDate={},fatByDate={};
+  for(const v of (S.carrinhoVendas||[])){
+    if(!v.date||v.date<start||v.date>end)continue;
+    vByDate[v.date]=(vByDate[v.date]||0)+1;
+    if(v.tipo==="traf")vTrafByDate[v.date]=(vTrafByDate[v.date]||0)+1;
+    fatByDate[v.date]=(fatByDate[v.date]||0)+(v.valorUSD||0);
   }
-  const dates=new Set([...Object.keys(metaByDate),...Object.keys(fichasByDate),...Object.keys(fichasOrgByDate)]);
-  return[...dates].sort().map(d=>{
-    const m=metaByDate[d]||{spend:0,clicks:0};
-    const fichas=fichasByDate[d]||0, fichasComPreco=fichasComPrecoByDate[d]||0;
-    return{date:d,label:fDate(d),spend:m.spend,clicks:m.clicks,fichas,fichasComPreco,
-      fichasOrg:fichasOrgByDate[d]||0,
-      custoFichaComPreco:fichasComPreco>0?m.spend/fichasComPreco:null};
+  const dates=new Set([...Object.keys(metaByDate),...Object.keys(vByDate)]);
+  return [...dates].sort().map(d=>{
+    const m=metaByDate[d]||{spend:0,clicks:0,checkout:0};
+    const vendas=vByDate[d]||0, vendasTraf=vTrafByDate[d]||0, faturamento=fatByDate[d]||0;
+    return{date:d,label:fDate(d),spend:m.spend,clicks:m.clicks,checkout:m.checkout,
+      vendas,vendasTraf,vendasOrg:vendas-vendasTraf,faturamento,
+      custoVenda:vendas>0?m.spend/vendas:null,
+      roas:m.spend>0?faturamento/m.spend:null};
   });
 }
 function renderCarrinhoPrincipal(){
@@ -3928,51 +3917,61 @@ function renderCarrinhoPrincipal(){
   const start=S.startDate,end=S.endDate;
   const m=carrinhoMetrics(start,end);
   const daily=getCarrinhoDaily(start,end);
-  const custoColor=m.custoFichaComPreco!=null?statusColor(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false):"var(--text-strong)";
 
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">Carrinho — Principal</div>
-        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · campanhas "Carrinho" (Base Meta - captação) + fichas (Tráfego/Orgânico/Disparo)</div>
+        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · tráfego (Base Carrinho) + vendas (Base Vendas)</div>
       </div>
-      <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-    ${!S.carrinhoPrecoKeyFound?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Não encontrei a coluna de "forma de pagamento" nas bases de fichas — Custo/ficha com preço fica sem dado até a pergunta existir/ser identificada.</div>`:""}
 
-    <div class="g3" style="margin-bottom:13px">
-      ${kpiCard("Investimento",fUSD(m.spend),"","var(--text-strong)")}
-      ${kpiCard("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"só tráfego","var(--text-strong)")}
-      ${kpiCard("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"só tráfego","var(--text-strong)")}
-    </div>
-    <div class="g2" style="margin-bottom:20px">
-      ${kpiCard("Custo por ficha (total)",m.custoFicha!=null?fUSD(m.custoFicha):"—","sem meta definida · só tráfego","var(--text-strong)")}
-      ${kpiCard("Custo por ficha com preço",m.custoFichaComPreco!=null?fUSD(m.custoFichaComPreco):"—",`Meta: ${fUSD(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,custoColor,false,m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)}
+    <div class="g5" style="margin-bottom:18px">
+      ${kpiCard("Investimento",fUSD(m.spend),"verba da etapa de carrinho","var(--text-strong)")}
+      ${kpiCard("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} com UTM · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)`,"#34d399")}
+      ${kpiCard("Faturamento",fUSD(m.faturamento),"todas as vendas do período","#34d399")}
+      ${kpiCard("Ticket médio",m.ticket!=null?fUSD(m.ticket):"—","faturamento ÷ vendas","var(--text-strong)")}
+      ${kpiCard("ROAS (carrinho)",m.roas!=null?m.roas.toFixed(2)+"x":"—","faturamento ÷ investimento do carrinho","var(--text-strong)")}
     </div>
 
-    <div class="cc" style="position:relative;margin-bottom:14px">
+    <div class="g6" style="margin-bottom:18px">
+      ${kpiCard("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"—","sem meta definida · todas as vendas","var(--text-strong)")}
+      ${kpiCard("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"—","só vendas com UTM","var(--text-strong)")}
+      ${kpiCard("Cliques no link",m.clicks.toLocaleString("pt-BR"),"","var(--text-strong)")}
+      ${kpiCard("Tx conversão clique → venda",m.txConvVenda!=null?fPct(m.txConvVenda):"—","vendas ÷ cliques no link","var(--text-strong)")}
+      ${kpiCard("Checkouts iniciados",m.checkouts.toLocaleString("pt-BR"),"reportado pelo gerenciador","var(--text-strong)")}
+      ${kpiCard("Checkout → venda",m.txCheckoutVenda!=null?fPct(m.txCheckoutVenda):"—","vendas ÷ checkouts iniciados","var(--text-strong)")}
+    </div>
+
+    <div class="g4" style="margin-bottom:22px">
+      ${kpiCard("CPC",m.cpc!=null?fUSD(m.cpc):"—","sem meta definida","var(--text-strong)",true)}
+      ${kpiCard("CTR",m.ctr!=null?fPct(m.ctr):"—","sem meta definida","var(--text-strong)",true)}
+      ${kpiCard("CPM",m.cpm!=null?fUSD(m.cpm):"—","sem meta definida","var(--text-strong)",true)}
+      ${kpiCard("Custo por checkout",m.custoCheckout!=null?fUSD(m.custoCheckout):"—","sem meta definida","var(--text-strong)",true)}
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
       <div class="ch">
-        <span class="ct">Investimento × Custo por ficha com preço</span>
+        <span class="ct">Investimento × Custo por venda</span>
         <div class="lg">
-          <span class="li"><span class="ll" style="background:${CHART_INV}"></span>Invest. (esq.)</span>
-          <span class="li"><span class="ll" style="background:${CHART_CPL}"></span>Custo/ficha c/ preço (dir.)</span>
-          <span class="li"><span class="ll" style="background:${CHART_CPL};opacity:.4;border-top:1px dashed ${CHART_CPL}"></span>Meta $${META_CARRINHO_CUSTO_FICHA_COM_PRECO}</span>
+          <span class="li"><span class="ll" style="background:${CHART_INV}"></span>Investimento (esq.)</span>
+          <span class="li"><span class="ll" style="background:${CHART_CPL}"></span>Custo por venda (dir.)</span>
         </div>
       </div>
       <div style="position:relative"><canvas id="c-carrinho-dual"></canvas><div class="tip" id="t-carrinho-dual"></div></div>
     </div>
 
-    <div class="cc" style="position:relative;margin-bottom:20px">
-      <div class="ch"><span class="ct">Fichas por dia (tráfego)</span></div>
-      <div style="position:relative"><canvas id="c-carrinho-fichas"></canvas><div class="tip" id="t-carrinho-fichas"></div></div>
+    <div class="card" style="margin-bottom:18px">
+      <div class="ch"><span class="ct">Vendas por dia</span>
+        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_LEAD}"></span>Total (tráfego + orgânico)</span></div>
+      </div>
+      <div style="position:relative"><canvas id="c-carrinho-vendas-dia"></canvas><div class="tip" id="t-carrinho-vendas-dia"></div></div>
     </div>
 
-    <div class="cc" style="position:relative;margin-bottom:20px">
-      <div class="ch"><span class="ct">Fichas por dia (orgânico)</span>
-        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_QUIZ}"></span>Orgânico + disparo — volume informativo, fora do custo por ficha</span></div>
-      </div>
-      <div style="position:relative"><canvas id="c-carrinho-fichas-org"></canvas><div class="tip" id="t-carrinho-fichas-org"></div></div>
+    <div class="card" style="margin-bottom:18px">
+      <div class="ch"><span class="ct">Faturamento por dia</span></div>
+      <div style="position:relative"><canvas id="c-carrinho-fat"></canvas><div class="tip" id="t-carrinho-fat"></div></div>
     </div>
 
     ${daily.length===0?`<div class="err">Nenhum dado no período selecionado — o Carrinho ainda não começou ou os dados ainda não chegaram na planilha.</div>`:""}
@@ -3980,87 +3979,58 @@ function renderCarrinhoPrincipal(){
 
   requestAnimationFrame(()=>{
     const box1=document.getElementById("c-carrinho-dual")?.parentElement;
-    if(box1)drawDualInvMetric("c-carrinho-dual",daily,box1.clientWidth,220,"custoFichaComPreco",META_CARRINHO_CUSTO_FICHA_COM_PRECO);
+    if(box1)drawDualInvMetric("c-carrinho-dual",daily,box1.clientWidth,220,"custoVenda",null);
     setupTip("c-carrinho-dual","t-carrinho-dual",daily,[
       {name:"Investimento",color:CHART_INV,key:"spend",fmt:fUSD},
-      {name:"Custo/ficha c/ preço",color:CHART_CPL,key:"custoFichaComPreco",fmt:fUSD}],64,12);
+      {name:"Custo por venda",color:CHART_CPL,key:"custoVenda",fmt:fUSD}],64,12);
 
-    const box2=document.getElementById("c-carrinho-fichas")?.parentElement;
-    if(box2)drawBarSingle("c-carrinho-fichas",daily,"fichas",CHART_LEAD,box2.clientWidth,200);
-    setupTip("c-carrinho-fichas","t-carrinho-fichas",daily,[
-      {name:"Fichas totais",color:CHART_LEAD,key:"fichas",fmt:v=>String(v)},
-      {name:"Fichas com preço",color:CHART_CPL,key:"fichasComPreco",fmt:v=>String(v)}],40,12);
+    const box2=document.getElementById("c-carrinho-vendas-dia")?.parentElement;
+    if(box2)drawBarSingle("c-carrinho-vendas-dia",daily,"vendas",CHART_LEAD,box2.clientWidth,200);
+    setupTip("c-carrinho-vendas-dia","t-carrinho-vendas-dia",daily,[
+      {name:"Vendas",color:CHART_LEAD,key:"vendas",fmt:v=>String(v)},
+      {name:"Com UTM",color:CHART_CPL,key:"vendasTraf",fmt:v=>String(v)},
+      {name:"Orgânicas",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)}],40,12);
 
-    const box3=document.getElementById("c-carrinho-fichas-org")?.parentElement;
-    if(box3)drawBarSingle("c-carrinho-fichas-org",daily,"fichasOrg",CHART_QUIZ,box3.clientWidth,200);
-    setupTip("c-carrinho-fichas-org","t-carrinho-fichas-org",daily,[
-      {name:"Fichas orgânicas",color:CHART_QUIZ,key:"fichasOrg",fmt:v=>String(v)}],40,12);
+    const box3=document.getElementById("c-carrinho-fat")?.parentElement;
+    if(box3)drawBarSingle("c-carrinho-fat",daily,"faturamento",CHART_QUIZ,box3.clientWidth,200);
+    setupTip("c-carrinho-fat","t-carrinho-fat",daily,[
+      {name:"Faturamento",color:CHART_QUIZ,key:"faturamento",fmt:fUSD},
+      {name:"ROAS",color:CHART_INV,key:"roas",fmt:v=>v!=null?v.toFixed(2)+"x":"—"}],40,12);
   });
 }
 
-// ── Carrinho: Fichas (Origem / Canal) ───────────────────────────────────────
-function carrinhoPassQual(tipo,qual){ return !qual||qual==="todas"||tipo===qual; }
-// FBAds = tráfego pago reconhecido pela UTM (mesmo critério já usado na Base
-// leads da Captação); qualquer outro utm_source vira sua própria origem —
-// sem de-para inventado, já que o vocabulário desta base pode não ser igual
-// ao de outro projeto.
+// ── Carrinho: Vendas ─────────────────────────────────────────────────────────
+// Cada venda traz a própria origem (UTM do checkout). Venda sem UTM é
+// orgânica — aparece agrupada como "(orgânico / sem UTM)" nas tabelas de
+// origem/canal e fica fora da atribuição por campanha/anúncio.
 function carrinhoNormOrigem(o){
-  if(o&&o.includes("FBAds"))return "Tráfego";
-  return o||"(não informado)";
+  const s=String(o||"").trim();
+  return s||"(não informado)";
 }
 function carrinhoCanalKey(origem,canal){
-  if(origem&&origem.includes("FBAds"))return "Tráfego";
-  return canal||"(não informado)";
+  const c=String(canal||"").trim();
+  return c||carrinhoNormOrigem(origem);
 }
-function getCarrinhoOrigemRows(fichas,start,end,qual,vendas=[]){
-  const byOrigem={};
-  for(const f of fichas){
-    if(f.date<start||f.date>end)continue;
-    if(!carrinhoPassQual(f.tipo,qual))continue;
-    const o=carrinhoNormOrigem(f.origem);
-    if(!byOrigem[o])byOrigem[o]={origem:o,fichas:0,comPreco:0,vendas:0};
-    byOrigem[o].fichas++;
-    if(f.comPreco)byOrigem[o].comPreco++;
+// Agrupa as vendas do período por UTM source (origem) ou por UTM medium
+// (canal), com faturamento e representatividade de cada uma.
+function getCarrinhoVendaGrupos(start,end,keyFn){
+  const by={};
+  for(const v of carrinhoVendasInRange(start,end)){
+    const k=keyFn(v);
+    if(!by[k])by[k]={chave:k,vendas:0,faturamento:0};
+    by[k].vendas++;by[k].faturamento+=(v.valorUSD||0);
   }
-  for(const v of vendas){
-    if(v.date<start||v.date>end)continue;
-    if(!carrinhoPassQual(v.tipo,qual))continue;
-    const o=carrinhoNormOrigem(v.origem);
-    if(!byOrigem[o])byOrigem[o]={origem:o,fichas:0,comPreco:0,vendas:0};
-    byOrigem[o].vendas++;
-  }
-  const total=Object.values(byOrigem).reduce((a,o)=>a+o.fichas,0);
-  return Object.values(byOrigem).map(o=>({...o,
-    pctComPreco:o.fichas>0?(o.comPreco/o.fichas)*100:0,
-    conv:o.fichas>0?(o.vendas/o.fichas)*100:0,
-    repres:total>0?(o.fichas/total)*100:0}));
+  const totV=Object.values(by).reduce((a,x)=>a+x.vendas,0);
+  const totF=Object.values(by).reduce((a,x)=>a+x.faturamento,0);
+  return Object.values(by).map(x=>({...x,
+    ticket:x.vendas>0?x.faturamento/x.vendas:null,
+    repres:totV>0?(x.vendas/totV)*100:0,
+    represFat:totF>0?(x.faturamento/totF)*100:0}));
 }
-function getCarrinhoCanalRows(fichas,start,end,qual,vendas=[]){
-  const byCanal={};
-  for(const f of fichas){
-    if(f.date<start||f.date>end)continue;
-    if(!carrinhoPassQual(f.tipo,qual))continue;
-    const c=carrinhoCanalKey(f.origem,f.canal);
-    if(!byCanal[c])byCanal[c]={canal:c,fichas:0,comPreco:0,vendas:0};
-    byCanal[c].fichas++;
-    if(f.comPreco)byCanal[c].comPreco++;
-  }
-  for(const v of vendas){
-    if(v.date<start||v.date>end)continue;
-    if(!carrinhoPassQual(v.tipo,qual))continue;
-    const c=carrinhoCanalKey(v.origem,v.canal);
-    if(!byCanal[c])byCanal[c]={canal:c,fichas:0,comPreco:0,vendas:0};
-    byCanal[c].vendas++;
-  }
-  const total=Object.values(byCanal).reduce((a,c)=>a+c.fichas,0);
-  return Object.values(byCanal).map(c=>({...c,
-    pctComPreco:c.fichas>0?(c.comPreco/c.fichas)*100:0,
-    conv:c.fichas>0?(c.vendas/c.fichas)*100:0,
-    repres:total>0?(c.fichas/total)*100:0}));
+function getCarrinhoVendasDaily(start,end){
+  return getCarrinhoDaily(start,end).map(d=>({date:d.date,label:d.label,vendas:d.vendas,
+    vendasTraf:d.vendasTraf,vendasOrg:d.vendasOrg,faturamento:d.faturamento}));
 }
-function setCarrinhoFichasQual(v){S.carrinhoFichasQual=v;render();}
-function setCarrinhoFichasPreco(v){S.carrinhoFichasPreco=v;render();}
-function setCarrinhoFichasMode(v){S.carrinhoFichasMode=v;render();}
 function setCarrinhoOrigemSearch(v){S.carrinhoOrigemSearch=v;render();}
 function setCarrinhoCanalSearch(v){S.carrinhoCanalSearch=v;render();}
 function sortCarrinhoOrigem(col){
@@ -4071,198 +4041,9 @@ function sortCarrinhoCanal(col){
   const s=S.carrinhoCSort;if(s.col===col)s.dir=s.dir==="asc"?"desc":"asc";else{s.col=col;s.dir="desc";}
   render();
 }
-function renderCarrinhoFichas(){
-  const el=document.getElementById("page-carrinho-fichas");if(!el)return;
-  const per=getCurrentPeriod();
-  const start=S.startDate,end=S.endDate;
-  let fichasSrc=S.carrinhoFichasMode==="unicas"?S.carrinhoFichaOrigemUnica:S.carrinhoFichaOrigem;
-  let vendasSrc=S.carrinhoVendaOrigem;
-  if(S.carrinhoFichasPreco==="comPreco"){
-    fichasSrc=fichasSrc.filter(f=>f.comPreco);
-    vendasSrc=vendasSrc.filter(v=>v.comPreco);
-  }else if(S.carrinhoFichasPreco==="semPreco"){
-    fichasSrc=fichasSrc.filter(f=>!f.comPreco);
-    vendasSrc=vendasSrc.filter(v=>!v.comPreco);
-  }
-
-  const origemRowsAll=getCarrinhoOrigemRows(fichasSrc,start,end,S.carrinhoFichasQual,vendasSrc);
-  const _oq=S.carrinhoOrigemSearch.trim().toLowerCase();
-  const origemRows=_oq?origemRowsAll.filter(o=>o.origem.toLowerCase().includes(_oq)):origemRowsAll;
-  const{col:oCol,dir:oDir}=S.carrinhoOSort;
-  const sortedOrigens=[...origemRows].sort((a,b)=>{
-    const av=a[oCol]??0,bv=b[oCol]??0;
-    if(typeof av==="string")return oDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
-    return oDir==="asc"?av-bv:bv-av;
-  });
-
-  const canalRowsAll=getCarrinhoCanalRows(fichasSrc,start,end,S.carrinhoFichasQual,vendasSrc);
-  const _cq=S.carrinhoCanalSearch.trim().toLowerCase();
-  const canalRows=_cq?canalRowsAll.filter(c=>c.canal.toLowerCase().includes(_cq)):canalRowsAll;
-  const{col:cCol,dir:cDir}=S.carrinhoCSort;
-  const sortedCanais=[...canalRows].sort((a,b)=>{
-    const av=a[cCol]??0,bv=b[cCol]??0;
-    if(typeof av==="string")return cDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
-    return cDir==="asc"?av-bv:bv-av;
-  });
-
-  const totFichas=origemRowsAll.reduce((a,o)=>a+o.fichas,0);
-  const totComPreco=origemRowsAll.reduce((a,o)=>a+o.comPreco,0);
-  const totVendas=origemRowsAll.reduce((a,o)=>a+o.vendas,0);
-  const pctComPrecoTotal=totFichas>0?(totComPreco/totFichas)*100:0;
-  const totConv=totFichas>0?(totVendas/totFichas)*100:0;
-
-  const totFichasAll=getCarrinhoOrigemRows(S.carrinhoFichaOrigem,start,end,S.carrinhoFichasQual).reduce((a,o)=>a+o.fichas,0);
-  const totFichasUnicas=getCarrinhoOrigemRows(S.carrinhoFichaOrigemUnica,start,end,S.carrinhoFichasQual).reduce((a,o)=>a+o.fichas,0);
-  const duplicadas=totFichasAll-totFichasUnicas;
-  const pctDuplicadas=totFichasAll>0?(duplicadas/totFichasAll)*100:0;
-
-  function thO(colKey,lbl){
-    const active=oCol===colKey;
-    const arrow=active?(oDir==="asc"?" ↑":" ↓"):" ↕";
-    return `<th onclick="MDI.sortCarrinhoOrigem('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
-  }
-  function thC(colKey,lbl){
-    const active=cCol===colKey;
-    const arrow=active?(cDir==="asc"?" ↑":" ↓"):" ↕";
-    return `<th onclick="MDI.sortCarrinhoCanal('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
-  }
-
-  el.innerHTML=`
-    <div class="hdr" style="margin-bottom:6px">
-      <div>
-        <div class="hdr-title">Carrinho — Fichas</div>
-        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · ${sortedOrigens.length} origens · ${sortedCanais.length} canais</div>
-      </div>
-    </div>
-    ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <span style="font-size:11px;color:var(--hint)">Qualificação:</span>
-      <div class="presets">
-        <button class="btn-pre${S.carrinhoFichasQual==="todas"?" on":""}" onclick="MDI.setCarrinhoFichasQual('todas')">Todas</button>
-        <button class="btn-pre${S.carrinhoFichasQual==="traf"?" on":""}" onclick="MDI.setCarrinhoFichasQual('traf')">Tráfego</button>
-        <button class="btn-pre${S.carrinhoFichasQual==="org"?" on":""}" onclick="MDI.setCarrinhoFichasQual('org')">Orgânico</button>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <span style="font-size:11px;color:var(--hint)">Preço:</span>
-      <div class="presets">
-        <button class="btn-pre${S.carrinhoFichasPreco==="total"?" on":""}" onclick="MDI.setCarrinhoFichasPreco('total')">Total</button>
-        <button class="btn-pre${S.carrinhoFichasPreco==="comPreco"?" on":""}" onclick="MDI.setCarrinhoFichasPreco('comPreco')">Com preço</button>
-        <button class="btn-pre${S.carrinhoFichasPreco==="semPreco"?" on":""}" onclick="MDI.setCarrinhoFichasPreco('semPreco')">Sem preço</button>
-      </div>
-      <span style="font-size:10px;color:var(--hint)">"com preço" = respondeu a pergunta de valor/forma de pagamento</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <span style="font-size:11px;color:var(--hint)">Fichas:</span>
-      <div class="presets">
-        <button class="btn-pre${S.carrinhoFichasMode==="totais"?" on":""}" onclick="MDI.setCarrinhoFichasMode('totais')">Totais</button>
-        <button class="btn-pre${S.carrinhoFichasMode==="unicas"?" on":""}" onclick="MDI.setCarrinhoFichasMode('unicas')">Únicas</button>
-      </div>
-      <span style="font-size:10px;color:var(--hint)">${S.carrinhoFichasMode==="unicas"?"deduplicadas por telefone/e-mail — considera só a 1ª ficha de cada pessoa":"toda ficha preenchida conta, mesmo repetida"}</span>
-    </div>
-
-    ${!S.carrinhoPrecoKeyFound?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24;margin-bottom:16px">⚠️ Coluna de "forma de pagamento" não encontrada — filtro Com preço/Sem preço fica sem dado.</div>`:""}
-
-    <div class="g5" style="margin-bottom:20px">
-      ${kpiCard("Fichas",totFichas.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Com preço",totComPreco.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("% com preço",fPct(pctComPrecoTotal),"","var(--text-strong)")}
-      ${kpiCard("Vendas",totVendas.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Conversão ficha→venda",fPct(totConv),"","var(--text-strong)")}
-    </div>
-    <div class="g2" style="margin-bottom:20px">
-      ${kpiCard("Fichas duplicadas",fPct(pctDuplicadas),`${duplicadas.toLocaleString("pt-BR")} fichas`,"var(--text-strong)")}
-      ${kpiCard("Vendas não identificadas",S.carrinhoVendasUnmatched.toLocaleString("pt-BR"),"sem telefone/e-mail batendo com nenhuma ficha","var(--text-strong)")}
-    </div>
-
-    <div class="section-lbl" style="margin-top:0">Origem da ficha (UTM source)</div>
-    <div style="position:relative;margin-bottom:10px">
-      <input oninput="MDI.setCarrinhoOrigemSearch(this.value)" value="${S.carrinhoOrigemSearch}" placeholder="Buscar origem…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
-    </div>
-    <div class="cc" style="padding:0;overflow:hidden;margin-bottom:22px">
-      <div style="overflow-x:auto">
-      <table>
-        <thead><tr>
-          <th onclick="MDI.sortCarrinhoOrigem('origem')" style="cursor:pointer">Origem</th>
-          ${thO("fichas","Fichas")}
-          ${thO("comPreco","Com preço")}
-          ${thO("pctComPreco","% com preço")}
-          ${thO("vendas","Vendas")}
-          ${thO("conv","Conversão")}
-          ${thO("repres","% do total")}
-        </tr></thead>
-        <tbody>
-          ${sortedOrigens.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--hint);padding:20px">Sem fichas no período selecionado</td></tr>`:
-          sortedOrigens.map(o=>`<tr>
-            <td>${o.origem}</td>
-            <td class="mono" style="text-align:right">${o.fichas.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${o.comPreco.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${fPct(o.pctComPreco)}</td>
-            <td class="mono" style="text-align:right">${o.vendas.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${fPct(o.conv)}</td>
-            <td class="mono" style="text-align:right">${fPct(o.repres)}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-      </div>
-    </div>
-
-    <div class="section-lbl">Canal (UTM medium)</div>
-    <div style="position:relative;margin-bottom:10px">
-      <input oninput="MDI.setCarrinhoCanalSearch(this.value)" value="${S.carrinhoCanalSearch}" placeholder="Buscar canal…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
-    </div>
-    <div class="cc" style="padding:0;overflow:hidden">
-      <div style="overflow-x:auto">
-      <table>
-        <thead><tr>
-          <th onclick="MDI.sortCarrinhoCanal('canal')" style="cursor:pointer">Canal</th>
-          ${thC("fichas","Fichas")}
-          ${thC("comPreco","Com preço")}
-          ${thC("pctComPreco","% com preço")}
-          ${thC("vendas","Vendas")}
-          ${thC("conv","Conversão")}
-          ${thC("repres","% do total")}
-        </tr></thead>
-        <tbody>
-          ${sortedCanais.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--hint);padding:20px">Sem fichas no período selecionado</td></tr>`:
-          sortedCanais.map(c=>`<tr>
-            <td>${c.canal}</td>
-            <td class="mono" style="text-align:right">${c.fichas.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${c.comPreco.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${fPct(c.pctComPreco)}</td>
-            <td class="mono" style="text-align:right">${c.vendas.toLocaleString("pt-BR")}</td>
-            <td class="mono" style="text-align:right">${fPct(c.conv)}</td>
-            <td class="mono" style="text-align:right">${fPct(c.repres)}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-      </div>
-    </div>
-    <div class="foot">mdi_set26 · Carrinho · Fichas</div>`;
-}
-
-// ── Carrinho: Vendas ─────────────────────────────────────────────────────────
-// "Base vendas" não tem valor da venda (Nome/Email/Whatsapp1/Data Correta/UTM
-// Source) — por isso não dá pra calcular faturamento/ROAS aqui, só volume e
-// conversão de ficha em venda. Cada venda é casada com a ficha (tráfego ou
-// orgânico) mais antiga da pessoa, batendo por telefone OU e-mail.
-function getCarrinhoVendaOrigemRows(start,end){
-  const by={};
-  for(const v of S.carrinhoVendaOrigem){
-    if(v.date<start||v.date>end)continue;
-    const o=carrinhoNormOrigem(v.origem);
-    by[o]=(by[o]||0)+1;
-  }
-  return Object.entries(by).map(([origem,vendas])=>({origem,vendas})).sort((a,b)=>b.vendas-a.vendas);
-}
-function getCarrinhoVendasDaily(start,end){
-  return Object.keys(S.carrinhoVendasPorDia).filter(d=>d>=start&&d<=end).sort()
-    .map(d=>({date:d,label:fDate(d),vendas:S.carrinhoVendasPorDia[d]}));
-}
 // Investimento TOTAL de tráfego do lançamento inteiro: captação, lives da
 // captação, aquecimento, lembrete, aulas e carrinho. É a base do ROAS do
-// carrinho — a venda no fim do funil é fruto de tudo que foi gasto antes,
+// lançamento — a venda no fim do funil é fruto de tudo que foi gasto antes,
 // não só da verba do próprio carrinho.
 // O filtro na Base Meta - captação evita contar o Carrinho DUAS vezes: se
 // alguma campanha de carrinho ainda estiver naquela aba, ela é descartada
@@ -4274,119 +4055,189 @@ function investimentoTotalLancamento(){
         +soma(carrinhoMetaRows())
         +soma(S.aquecimentoRows)
         +soma(S.lembreteRows)
-        +soma(S.aulasRows);
+        +soma(S.aulasRows)
+        +soma(S.grupoVipRows);
 }
 function renderCarrinhoVendas(){
   const el=document.getElementById("page-carrinho-vendas");if(!el)return;
   const per=getCurrentPeriod();
   const start=S.startDate,end=S.endDate;
-  const fichasNoPeriodo=carrinhoFichasInRange(S.carrinhoFichaOrigem,start,end).length;
-  const vendasNoPeriodo=Object.entries(S.carrinhoVendasPorDia).filter(([d])=>d>=start&&d<=end).reduce((a,[,n])=>a+n,0);
-  const vendasCasadas=S.carrinhoVendaOrigem.filter(v=>v.date>=start&&v.date<=end).length;
-  const conv=fichasNoPeriodo>0?(vendasNoPeriodo/fichasNoPeriodo)*100:0;
-  // Faturamento e ROAS são SEMPRE do lançamento inteiro — ignoram o filtro
-  // de datas do cabeçalho, igual ao investimento total que vai no
-  // denominador. Assim os dois lados da conta falam do mesmo período e o
-  // ROAS não fica subestimado por um filtro curto.
-  const vendasPer=S.carrinhoVendaOrigem;
-  const faturamento=vendasPer.reduce((a,v)=>a+(v.valor||0),0);
-  const ticket=vendasPer.length>0?faturamento/vendasPer.length:null;
+  const m=carrinhoMetrics(start,end);
+
+  // Faturamento/ROAS do LANÇAMENTO INTEIRO (sem o filtro de período) — a
+  // venda é fruto de todo o investimento do funil, não só o do carrinho.
+  const fatTotal=S.carrinhoFaturamento||0;
   const invTotal=investimentoTotalLancamento();
-  const roas=invTotal>0?faturamento/invTotal:null;
+  const roasLanc=invTotal>0?fatTotal/invTotal:null;
+
+  const origemRowsAll=getCarrinhoVendaGrupos(start,end,v=>carrinhoNormOrigem(v.origem));
+  const _oq=S.carrinhoOrigemSearch.trim().toLowerCase();
+  const origemRows=_oq?origemRowsAll.filter(o=>o.chave.toLowerCase().includes(_oq)):origemRowsAll;
+  const{col:oCol,dir:oDir}=S.carrinhoOSort;
+  const sortedOrigens=[...origemRows].sort((a,b)=>{
+    const va=oCol==="chave"?String(a.chave).toLowerCase():(a[oCol]??0);
+    const vb=oCol==="chave"?String(b.chave).toLowerCase():(b[oCol]??0);
+    return (va<vb?-1:va>vb?1:0)*(oDir==="asc"?1:-1);
+  });
+
+  const canalRowsAll=getCarrinhoVendaGrupos(start,end,v=>carrinhoCanalKey(v.origem,v.canal));
+  const _cq=S.carrinhoCanalSearch.trim().toLowerCase();
+  const canalRows=_cq?canalRowsAll.filter(c=>c.chave.toLowerCase().includes(_cq)):canalRowsAll;
+  const{col:cCol,dir:cDir}=S.carrinhoCSort;
+  const sortedCanais=[...canalRows].sort((a,b)=>{
+    const va=cCol==="chave"?String(a.chave).toLowerCase():(a[cCol]??0);
+    const vb=cCol==="chave"?String(b.chave).toLowerCase():(b[cCol]??0);
+    return (va<vb?-1:va>vb?1:0)*(cDir==="asc"?1:-1);
+  });
+
   const daily=getCarrinhoVendasDaily(start,end);
-  const origemRows=getCarrinhoVendaOrigemRows(start,end);
+
+  const thO=(colKey,lbl)=>{
+    const active=S.carrinhoOSort.col===colKey;
+    const arrow=active?(S.carrinhoOSort.dir==="asc"?"▲":"▼"):"⇅";
+    return `<th onclick="MDI.sortCarrinhoOrigem('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
+  };
+  const thC=(colKey,lbl)=>{
+    const active=S.carrinhoCSort.col===colKey;
+    const arrow=active?(S.carrinhoCSort.dir==="asc"?"▲":"▼"):"⇅";
+    return `<th onclick="MDI.sortCarrinhoCanal('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
+  };
 
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">Carrinho — Vendas</div>
-        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · vendas casadas por telefone/e-mail com a ficha mais antiga da pessoa</div>
+        <div class="hdr-sub">${per.s&&per.e?`${fDateBR(per.s)} → ${fDateBR(per.e)}`:""} · atribuição pela UTM da própria venda · venda sem UTM = orgânica</div>
       </div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-    ${S.carrinhoVendasTotal===0?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Nenhuma venda encontrada na aba "Base vendas" ainda.</div>`:""}
-    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Faturamento e ROAS consideram o LANÇAMENTO INTEIRO, sem o filtro de datas do cabeçalho (os demais cartões respeitam o período). ROAS = faturamento ÷ investimento de tráfego do lançamento INTEIRO (captação + lives + aquecimento + lembrete + aulas + carrinho), não só a verba do carrinho.</div>
 
-    <div class="g4" style="margin-bottom:13px">
-      ${kpiCard("Faturamento total",fUSD(faturamento),`${vendasPer.length.toLocaleString("pt-BR")} venda(s) · lançamento inteiro`,"#34d399")}
-      ${kpiCard("Ticket médio",ticket!=null?fUSD(ticket):"—","lançamento inteiro","var(--text-strong)")}
-      ${kpiCard("Investimento total",fUSD(invTotal),"todas as etapas do lançamento","var(--text-strong)")}
-      ${kpiCard("ROAS",roas!=null?roas.toFixed(2).replace(".",","):"—",roas!=null?`${fUSD(faturamento)} ÷ ${fUSD(invTotal)}`:"sem investimento no período",roas!=null?(roas>=1?"#34d399":"#f87171"):"var(--text-strong)")}
+    ${(S.carrinhoVendasTotal||0)===0?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Nenhuma venda aprovada encontrada na aba "Base Vendas" ainda.</div>`:""}
+    ${(S.carrinhoVendasSemData||0)>0?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ ${S.carrinhoVendasSemData} venda(s) sem data de compra — entram no consolidado do lançamento, mas ficam fora dos recortes por período.</div>`:""}
+
+    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Faturamento total e ROAS do lançamento consideram o LANÇAMENTO INTEIRO, sem o filtro de datas do cabeçalho (os demais cartões respeitam o período). ROAS do lançamento = faturamento ÷ investimento de tráfego de todas as etapas (captação + lives + aquecimento + lembrete + aulas + grupo VIP + carrinho), não só a verba do carrinho.</div>
+
+    <div class="g5" style="margin-bottom:18px">
+      ${kpiCard("Faturamento total",fUSD(fatTotal),`${(S.carrinhoVendasTotal||0).toLocaleString("pt-BR")} venda(s) · lançamento inteiro`,"#34d399")}
+      ${kpiCard("Investimento do lançamento",fUSD(invTotal),"todas as etapas","var(--text-strong)")}
+      ${kpiCard("ROAS do lançamento",roasLanc!=null?roasLanc.toFixed(2)+"x":"—","faturamento ÷ investimento total","var(--text-strong)")}
+      ${kpiCard("Vendas com UTM",(S.carrinhoVendasComUtm||0).toLocaleString("pt-BR"),"atribuídas a campanha/anúncio","var(--text-strong)")}
+      ${kpiCard("Vendas orgânicas",(S.carrinhoVendasSemUtm||0).toLocaleString("pt-BR"),"sem UTM no checkout","var(--text-strong)")}
     </div>
 
-    <div class="g4" style="margin-bottom:20px">
-      ${kpiCard("Vendas no período",vendasNoPeriodo.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Vendas casadas c/ ficha",vendasCasadas.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Vendas não identificadas",S.carrinhoVendasUnmatched.toLocaleString("pt-BR"),"sem telefone/e-mail batendo com nenhuma ficha","var(--text-strong)")}
-      ${kpiCard("Conversão ficha → venda",fPct(conv),"","var(--text-strong)")}
+    <div class="g5" style="margin-bottom:22px">
+      ${kpiCard("Vendas no período",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf.toLocaleString("pt-BR")} com UTM · ${m.vendasOrg.toLocaleString("pt-BR")} orgânica(s)`,"var(--text-strong)")}
+      ${kpiCard("Faturamento no período",fUSD(m.faturamento),"","var(--text-strong)")}
+      ${kpiCard("Ticket médio",m.ticket!=null?fUSD(m.ticket):"—","","var(--text-strong)")}
+      ${kpiCard("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"—","investimento do carrinho ÷ vendas","var(--text-strong)")}
+      ${kpiCard("Devoluções/chargebacks",(S.carrinhoVendasDevolvidas||0).toLocaleString("pt-BR"),"fora do faturamento",(S.carrinhoVendasDevolvidas||0)>0?"#f87171":"var(--text-strong)")}
     </div>
 
-    <div class="cc" style="position:relative;margin-bottom:20px">
+    <div class="card" style="margin-bottom:18px">
       <div class="ch"><span class="ct">Vendas por dia</span></div>
       <div style="position:relative"><canvas id="c-carrinho-vendas"></canvas><div class="tip" id="t-carrinho-vendas"></div></div>
     </div>
 
-    <div class="section-lbl" style="margin-top:0">Vendas por origem</div>
-    <div class="cc" style="padding:0;overflow:hidden">
-      <div style="overflow-x:auto">
-      <table>
-        <thead><tr><th>Origem</th><th style="text-align:right">Vendas</th></tr></thead>
+    <div class="section-lbl" style="margin-top:0">Vendas por origem (UTM source)</div>
+    <div style="margin-bottom:10px">
+      <input oninput="MDI.setCarrinhoOrigemSearch(this.value)" value="${S.carrinhoOrigemSearch}" placeholder="Buscar origem…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+    </div>
+    <div class="card" style="margin-bottom:22px;overflow-x:auto">
+      <table class="tb">
+        <thead><tr>
+          <th onclick="MDI.sortCarrinhoOrigem('chave')" style="cursor:pointer">Origem</th>
+          ${thO("vendas","Vendas")}
+          ${thO("repres","% das vendas")}
+          ${thO("faturamento","Faturamento")}
+          ${thO("represFat","% do faturamento")}
+          ${thO("ticket","Ticket médio")}
+        </tr></thead>
         <tbody>
-          ${origemRows.length===0?`<tr><td colspan="2" style="text-align:center;color:var(--hint);padding:20px">Sem vendas casadas no período</td></tr>`:
-          origemRows.map(o=>`<tr><td>${o.origem}</td><td class="mono" style="text-align:right">${o.vendas.toLocaleString("pt-BR")}</td></tr>`).join("")}
+          ${sortedOrigens.length===0?`<tr><td colspan="6" style="text-align:center;color:var(--hint);padding:20px">Sem vendas no período selecionado</td></tr>`:
+          sortedOrigens.map(o=>`<tr>
+            <td>${o.chave}</td>
+            <td class="mono" style="text-align:right">${o.vendas.toLocaleString("pt-BR")}</td>
+            <td class="mono" style="text-align:right">${fPct(o.repres)}</td>
+            <td class="mono" style="text-align:right">${fUSD(o.faturamento)}</td>
+            <td class="mono" style="text-align:right">${fPct(o.represFat)}</td>
+            <td class="mono" style="text-align:right">${o.ticket!=null?fUSD(o.ticket):"—"}</td>
+          </tr>`).join("")}
         </tbody>
       </table>
-      </div>
     </div>
+
+    <div class="section-lbl" style="margin-top:0">Vendas por canal (UTM medium)</div>
+    <div style="margin-bottom:10px">
+      <input oninput="MDI.setCarrinhoCanalSearch(this.value)" value="${S.carrinhoCanalSearch}" placeholder="Buscar canal…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+    </div>
+    <div class="card" style="margin-bottom:22px;overflow-x:auto">
+      <table class="tb">
+        <thead><tr>
+          <th onclick="MDI.sortCarrinhoCanal('chave')" style="cursor:pointer">Canal</th>
+          ${thC("vendas","Vendas")}
+          ${thC("repres","% das vendas")}
+          ${thC("faturamento","Faturamento")}
+          ${thC("represFat","% do faturamento")}
+          ${thC("ticket","Ticket médio")}
+        </tr></thead>
+        <tbody>
+          ${sortedCanais.length===0?`<tr><td colspan="6" style="text-align:center;color:var(--hint);padding:20px">Sem vendas no período selecionado</td></tr>`:
+          sortedCanais.map(c=>`<tr>
+            <td>${c.chave}</td>
+            <td class="mono" style="text-align:right">${c.vendas.toLocaleString("pt-BR")}</td>
+            <td class="mono" style="text-align:right">${fPct(c.repres)}</td>
+            <td class="mono" style="text-align:right">${fUSD(c.faturamento)}</td>
+            <td class="mono" style="text-align:right">${fPct(c.represFat)}</td>
+            <td class="mono" style="text-align:right">${c.ticket!=null?fUSD(c.ticket):"—"}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+
     <div class="foot">mdi_set26 · Carrinho · Vendas</div>`;
 
   requestAnimationFrame(()=>{
     const box=document.getElementById("c-carrinho-vendas")?.parentElement;
     if(box)drawBarSingle("c-carrinho-vendas",daily,"vendas",CHART_CPL,box.clientWidth,200);
-    setupTip("c-carrinho-vendas","t-carrinho-vendas",daily,[{name:"Vendas",color:CHART_CPL,key:"vendas",fmt:v=>String(v)}],40,12);
+    setupTip("c-carrinho-vendas","t-carrinho-vendas",daily,[
+      {name:"Vendas",color:CHART_CPL,key:"vendas",fmt:v=>String(v)},
+      {name:"Com UTM",color:CHART_LEAD,key:"vendasTraf",fmt:v=>String(v)},
+      {name:"Orgânicas",color:CHART_QUIZ,key:"vendasOrg",fmt:v=>String(v)},
+      {name:"Faturamento",color:"#34d399",key:"faturamento",fmt:fUSD}],40,12);
   });
 }
 
 // ── Carrinho: Campanhas/Anúncios ────────────────────────────────────────────
-// Agregação por CAMPANHA (Carrinho) — mesma base de anúncios, só que somada
-// por campName. Fichas/vendas são casadas por campName (cada ficha/venda de
-// tráfego já carrega o campName do anúncio que a originou).
+// Mídia da aba "Base Carrinho" agregada por campanha e por anúncio, cruzada
+// com as vendas que trazem UTM. As vendas ORGÂNICAS não aparecem aqui (não
+// pertencem a nenhum anúncio) — elas estão na aba Vendas.
 function getCarrinhoCampRows(start,end){
   const rows=carrinhoMetaRowsInRange(start,end);
   const byCamp={};
   for(const r of rows){
     const key=r.campName||"(sem campanha)";
-    if(!byCamp[key])byCamp[key]={campName:key,spend:0,clicks:0,impressions:0};
+    if(!byCamp[key])byCamp[key]={campName:key,spend:0,clicks:0,impressions:0,checkout:0};
     const c=byCamp[key];
-    c.spend+=r.spend;c.clicks+=r.clicks;c.impressions+=r.impressions;
+    c.spend+=r.spend;c.clicks+=r.clicks;c.impressions+=r.impressions;c.checkout+=(r.checkout||0);
   }
-  const fichasByCamp={},fichasComPrecoByCamp={};
-  for(const f of S.carrinhoFichaAttrib){
-    if(f.date<start||f.date>end)continue;
-    const cn=f.campName||"(sem campanha)";
-    fichasByCamp[cn]=(fichasByCamp[cn]||0)+1;
-    if(f.comPreco)fichasComPrecoByCamp[cn]=(fichasComPrecoByCamp[cn]||0)+1;
-  }
-  const vendasByCamp={};
-  for(const v of S.carrinhoVendaAttrib){
-    if(v.date<start||v.date>end)continue;
-    const cn=v.campName||"(sem campanha)";
+  const vendasByCamp={}, fatByCamp={};
+  for(const v of carrinhoVendasInRange(start,end)){
+    if(v.tipo!=="traf")continue;
+    const cn=v.campName||"(sem atribuição)";
     vendasByCamp[cn]=(vendasByCamp[cn]||0)+1;
+    fatByCamp[cn]=(fatByCamp[cn]||0)+(v.valorUSD||0);
   }
   return Object.values(byCamp).map(c=>{
-    const fichas=fichasByCamp[c.campName]||0, fichasComPreco=fichasComPrecoByCamp[c.campName]||0;
-    const vendas=vendasByCamp[c.campName]||0;
-    return{...c,
+    const vendas=vendasByCamp[c.campName]||0, faturamento=fatByCamp[c.campName]||0;
+    return{...c,vendas,faturamento,
       cpc:c.clicks>0?c.spend/c.clicks:null,
-      ctr:c.impressions>0?(c.clicks/c.impressions)*100:0,
-      fichas,fichasComPreco,vendas,
-      convFichaVenda:fichas>0?(vendas/fichas)*100:0,
-      custoFichaComPreco:fichasComPreco>0?c.spend/fichasComPreco:null};
+      ctr:c.impressions>0?(c.clicks/c.impressions)*100:null,
+      cpm:c.impressions>0?(c.spend/c.impressions)*1000:null,
+      custoVenda:vendas>0?c.spend/vendas:null,
+      roas:c.spend>0?faturamento/c.spend:null,
+      txConvVenda:c.clicks>0?(vendas/c.clicks)*100:0};
   });
 }
-// selectedCamps (Set opcional) → mesmo esquema de cross-filtering da Captação:
-// se houver campanhas selecionadas, os anúncios são restritos a elas antes de
-// agregar por adName.
 function carrinhoAdRows(start,end,selectedCamps){
   const hasSel=selectedCamps&&selectedCamps.size>0;
   let rows=carrinhoMetaRowsInRange(start,end);
@@ -4394,31 +4245,28 @@ function carrinhoAdRows(start,end,selectedCamps){
   const byAd={};
   for(const r of rows){
     const key=r.adName||"(sem nome)";
-    if(!byAd[key])byAd[key]={adName:key,campName:r.campName,igUrl:r.igUrl||"",spend:0,clicks:0,impressions:0};
+    if(!byAd[key])byAd[key]={adName:key,campName:r.campName,igUrl:r.igUrl||"",spend:0,clicks:0,impressions:0,checkout:0};
     const a=byAd[key];
-    a.spend+=r.spend;a.clicks+=r.clicks;a.impressions+=r.impressions;
+    a.spend+=r.spend;a.clicks+=r.clicks;a.impressions+=r.impressions;a.checkout+=(r.checkout||0);
     if(!a.igUrl&&r.igUrl)a.igUrl=r.igUrl;
   }
-  const fichasByAd={},fichasComPrecoByAd={};
-  for(const f of S.carrinhoFichaAttrib){
-    if(f.date<start||f.date>end)continue;
-    fichasByAd[f.adName]=(fichasByAd[f.adName]||0)+1;
-    if(f.comPreco)fichasComPrecoByAd[f.adName]=(fichasComPrecoByAd[f.adName]||0)+1;
-  }
-  const vendasByAd={};
-  for(const v of S.carrinhoVendaAttrib){
-    if(v.date<start||v.date>end)continue;
-    vendasByAd[v.adName]=(vendasByAd[v.adName]||0)+1;
+  const vendasByAd={}, fatByAd={};
+  for(const v of carrinhoVendasInRange(start,end)){
+    if(v.tipo!=="traf")continue;
+    if(hasSel&&!selectedCamps.has(v.campName))continue;
+    const an=v.adName||"(sem atribuição)";
+    vendasByAd[an]=(vendasByAd[an]||0)+1;
+    fatByAd[an]=(fatByAd[an]||0)+(v.valorUSD||0);
   }
   return Object.values(byAd).map(a=>{
-    const fichas=fichasByAd[a.adName]||0, fichasComPreco=fichasComPrecoByAd[a.adName]||0;
-    const vendas=vendasByAd[a.adName]||0;
-    return{...a,
+    const vendas=vendasByAd[a.adName]||0, faturamento=fatByAd[a.adName]||0;
+    return{...a,vendas,faturamento,
       cpc:a.clicks>0?a.spend/a.clicks:null,
-      ctr:a.impressions>0?(a.clicks/a.impressions)*100:0,
-      fichas,fichasComPreco,vendas,
-      convFichaVenda:fichas>0?(vendas/fichas)*100:0,
-      custoFichaComPreco:fichasComPreco>0?a.spend/fichasComPreco:null};
+      ctr:a.impressions>0?(a.clicks/a.impressions)*100:null,
+      cpm:a.impressions>0?(a.spend/a.impressions)*1000:null,
+      custoVenda:vendas>0?a.spend/vendas:null,
+      roas:a.spend>0?faturamento/a.spend:null,
+      txConvVenda:a.clicks>0?(vendas/a.clicks)*100:0};
   });
 }
 function setCarrinhoAdSearch(v){S.carrinhoAdSearch=v;renderCarrinhoAnuncios();}
@@ -4441,9 +4289,8 @@ function toggleCarrinhoAd(name){
   renderCarrinhoAnuncios();
 }
 function clearCarrinhoAds(){S.carrinhoSelectedAds.clear();renderCarrinhoAnuncios();}
-// Texto copiável do resumo do anúncio — mesmo espírito do adResumoBlock() da
-// Captação, mas com os campos que existem no Carrinho (fichas com preço,
-// custo/ficha com preço vs meta, vendas/conversão) em vez de faixa/quiz.
+// Bloco de texto de UM anúncio pra copiar — mesmo formato do da Captação, com
+// os campos que existem no Carrinho (venda, faturamento, ROAS).
 function carrinhoAdResumoBlock(a){
   const lines=[];
   lines.push(`Nome do ad ⤵️`);
@@ -4453,13 +4300,14 @@ function carrinhoAdResumoBlock(a){
   lines.push(`Investimento:\t${fUSD(a.spend)}`);
   lines.push(`Cliques:\t${a.clicks.toLocaleString("pt-BR")}`);
   lines.push(`CPC:\t${a.cpc!=null?fUSD(a.cpc):"—"}`);
+  lines.push(`CTR:\t${a.ctr!=null?fPct(a.ctr):"—"}`);
+  lines.push(`CPM:\t${a.cpm!=null?fUSD(a.cpm):"—"}`);
   lines.push(``);
-  lines.push(`Fichas:\t${a.fichas}`);
-  lines.push(`Fichas com preço:\t${a.fichasComPreco}`);
-  lines.push(`Custo/ficha com preço:\t${a.custoFichaComPreco!=null?fUSD(a.custoFichaComPreco):"—"} (meta ${fUSD(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})`);
-  lines.push(``);
+  lines.push(`Checkouts iniciados:\t${a.checkout.toLocaleString("pt-BR")}`);
   lines.push(`Vendas:\t${a.vendas}`);
-  lines.push(`Conversão ficha→venda:\t${fPct(a.convFichaVenda)}`);
+  lines.push(`Custo por venda:\t${a.custoVenda!=null?fUSD(a.custoVenda):"—"}`);
+  lines.push(`Faturamento:\t${fUSD(a.faturamento)}`);
+  lines.push(`ROAS:\t${a.roas!=null?a.roas.toFixed(2)+"x":"—"}`);
   lines.push(`__________________________`);
   return lines.join("\n");
 }
@@ -4477,6 +4325,8 @@ function renderCarrinhoAnuncios(){
   const el=document.getElementById("page-carrinho-anuncios");if(!el)return;
   const per=getCurrentPeriod();
   const start=S.startDate,end=S.endDate;
+  // Nome de campanha/anúncio vai dentro de um onclick="…('nome')" — aspa
+  // simples e barra invertida precisam ser escapadas ou o handler quebra.
   const escName=s=>String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
 
   const campRowsAll=getCarrinhoCampRows(start,end);
@@ -4484,45 +4334,39 @@ function renderCarrinhoAnuncios(){
   const campRows=_cq?campRowsAll.filter(c=>c.campName.toLowerCase().includes(_cq)):campRowsAll;
   const{col:cCol,dir:cDir}=S.carrinhoCampSort;
   const sortedCamps=[...campRows].sort((a,b)=>{
-    const av=a[cCol],bv=b[cCol];
-    if(av==null&&bv==null)return 0;
-    if(av==null)return 1;
-    if(bv==null)return -1;
-    if(typeof av==="string")return cDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
-    return cDir==="asc"?av-bv:bv-av;
+    const va=cCol==="campName"?String(a.campName).toLowerCase():(a[cCol]??0);
+    const vb=cCol==="campName"?String(b.campName).toLowerCase():(b[cCol]??0);
+    return (va<vb?-1:va>vb?1:0)*(cDir==="asc"?1:-1);
   });
 
   const adsAll=carrinhoAdRows(start,end,S.carrinhoSelectedCamps);
   const q=S.carrinhoAdSearch.trim().toLowerCase();
-  const adsF=q?adsAll.filter(a=>a.adName.toLowerCase().includes(q)):adsAll;
+  const ads=q?adsAll.filter(a=>a.adName.toLowerCase().includes(q)):adsAll;
   const{col,dir}=S.carrinhoAdSort;
-  const sortedAds=[...adsF].sort((a,b)=>{
-    const av=a[col],bv=b[col];
-    if(av==null&&bv==null)return 0;
-    if(av==null)return 1;
-    if(bv==null)return -1;
-    if(typeof av==="string")return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
-    return dir==="asc"?av-bv:bv-av;
+  const sortedAds=[...ads].sort((a,b)=>{
+    const va=col==="adName"?String(a.adName).toLowerCase():(a[col]??0);
+    const vb=col==="adName"?String(b.adName).toLowerCase():(b[col]??0);
+    return (va<vb?-1:va>vb?1:0)*(dir==="asc"?1:-1);
   });
 
-  const tot=campRowsAll.reduce((a,x)=>({spend:a.spend+x.spend,clicks:a.clicks+x.clicks,fichas:a.fichas+x.fichas,fichasComPreco:a.fichasComPreco+x.fichasComPreco,vendas:a.vendas+x.vendas}),{spend:0,clicks:0,fichas:0,fichasComPreco:0,vendas:0});
-  const totCustoFichaComPreco=tot.fichasComPreco>0?tot.spend/tot.fichasComPreco:null;
-  const totConvFichaVenda=tot.fichas>0?(tot.vendas/tot.fichas)*100:0;
+  const tot=campRowsAll.reduce((a,x)=>({spend:a.spend+x.spend,clicks:a.clicks+x.clicks,checkout:a.checkout+x.checkout,vendas:a.vendas+x.vendas,faturamento:a.faturamento+x.faturamento}),{spend:0,clicks:0,checkout:0,vendas:0,faturamento:0});
+  const totCustoVenda=tot.vendas>0?tot.spend/tot.vendas:null;
+  const totRoas=tot.spend>0?tot.faturamento/tot.spend:null;
 
   const selAds=sortedAds.filter(a=>S.carrinhoSelectedAds.has(a.adName));
   const adResumoText=selAds.length>0?selAds.map(a=>carrinhoAdResumoBlock(a)).join("\n"):"";
   el._carrinhoAdResumoText=adResumoText;
 
-  function thC(colKey,lbl){
-    const active=cCol===colKey;
-    const arrow=active?(cDir==="asc"?" ↑":" ↓"):" ↕";
+  const thC=(colKey,lbl)=>{
+    const active=S.carrinhoCampSort.col===colKey;
+    const arrow=active?(S.carrinhoCampSort.dir==="asc"?"▲":"▼"):"⇅";
     return `<th onclick="MDI.sortCarrinhoCampanhas('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
-  }
-  function th(colKey,lbl){
-    const active=col===colKey;
-    const arrow=active?(dir==="asc"?" ↑":" ↓"):" ↕";
+  };
+  const th=(colKey,lbl)=>{
+    const active=S.carrinhoAdSort.col===colKey;
+    const arrow=active?(S.carrinhoAdSort.dir==="asc"?"▲":"▼"):"⇅";
     return `<th onclick="MDI.sortCarrinhoAds('${colKey}')" style="text-align:right;cursor:pointer">${lbl}<span style="color:${active?"#60a5fa":"var(--hint)"};margin-left:3px">${arrow}</span></th>`;
-  }
+  };
 
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
@@ -4532,115 +4376,108 @@ function renderCarrinhoAnuncios(){
       </div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
-    <div class="g5" style="margin-bottom:20px">
+
+    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Só as vendas COM UTM entram aqui. As ${(S.carrinhoVendasSemUtm||0).toLocaleString("pt-BR")} venda(s) orgânica(s) do lançamento ficam na aba Vendas.</div>
+
+    <div class="g6" style="margin-bottom:18px">
       ${kpiCard("Investimento",fUSD(tot.spend),"","var(--text-strong)")}
-      ${kpiCard("Cliques",tot.clicks.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Fichas com preço",tot.fichasComPreco.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Custo/ficha com preço",totCustoFichaComPreco!=null?fUSD(totCustoFichaComPreco):"—",`Meta: ${fUSD(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,totCustoFichaComPreco!=null?statusColor(totCustoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false):"var(--text-strong)",false,totCustoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)}
-      ${kpiCard("Vendas (conv. ficha→venda)",tot.vendas.toLocaleString("pt-BR"),fPct(totConvFichaVenda),"var(--text-strong)")}
+      ${kpiCard("Checkouts iniciados",tot.checkout.toLocaleString("pt-BR"),"","var(--text-strong)")}
+      ${kpiCard("Vendas atribuídas",tot.vendas.toLocaleString("pt-BR"),"","var(--text-strong)")}
+      ${kpiCard("Custo por venda",totCustoVenda!=null?fUSD(totCustoVenda):"—","sem meta definida","var(--text-strong)")}
+      ${kpiCard("Faturamento atribuído",fUSD(tot.faturamento),"","#34d399")}
+      ${kpiCard("ROAS",totRoas!=null?totRoas.toFixed(2)+"x":"—","","var(--text-strong)")}
     </div>
 
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <div class="section-lbl" style="margin-bottom:0">Campanhas</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:0">
+      <div class="section-lbl" style="margin-bottom:0">Campanhas — clique pra filtrar os anúncios</div>
       ${S.carrinhoSelectedCamps.size>0?`<button onclick="MDI.clearCarrinhoCamps()" style="font-size:10px;padding:3px 9px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;border-radius:5px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.carrinhoSelectedCamps.size})</button>`:""}
-      <span style="font-size:10px;color:var(--hint)">Clique para filtrar os anúncios por campanha</span>
     </div>
-    <div style="position:relative;margin-bottom:10px">
+    <div style="margin:10px 0">
       <input oninput="MDI.setCarrinhoCampSearch(this.value)" value="${S.carrinhoCampSearch}" placeholder="Buscar campanha…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
-    <div class="cc" style="padding:0;overflow:hidden;margin-bottom:22px">
-      <div style="overflow-x:auto">
-      <table>
+    <div class="card" style="margin-bottom:22px;overflow-x:auto">
+      <table class="tb">
         <thead><tr>
-          <th style="width:36px"></th>
           <th onclick="MDI.sortCarrinhoCampanhas('campName')" style="cursor:pointer">Campanha</th>
-          ${thC("spend","Investido")}
+          ${thC("spend","Investimento")}
           ${thC("clicks","Cliques")}
           ${thC("cpc","CPC")}
-          ${thC("fichas","Fichas")}
-          ${thC("fichasComPreco","Fichas c/ preço")}
-          ${thC("custoFichaComPreco","Custo/ficha c/ preço")}
+          ${thC("ctr","CTR")}
+          ${thC("checkout","Checkouts")}
           ${thC("vendas","Vendas")}
-          ${thC("convFichaVenda","Conversão")}
+          ${thC("custoVenda","Custo/venda")}
+          ${thC("faturamento","Faturamento")}
+          ${thC("roas","ROAS")}
         </tr></thead>
         <tbody>
           ${sortedCamps.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem campanhas de Carrinho no período</td></tr>`:
           sortedCamps.map(c=>{
             const sel=S.carrinhoSelectedCamps.has(c.campName);
             return `<tr onclick="MDI.toggleCarrinhoCamp('${escName(c.campName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
-              <td style="text-align:center">${chkBox(sel)}</td>
-              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400}">${c.campName}</td>
+              <td>${sel?"✓ ":""}${c.campName}</td>
               <td class="mono" style="text-align:right">${fUSD(c.spend)}</td>
               <td class="mono" style="text-align:right">${c.clicks.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${c.cpc!=null?fUSD(c.cpc):"—"}</td>
-              <td class="mono" style="text-align:right">${c.fichas.toLocaleString("pt-BR")}</td>
-              <td class="mono" style="text-align:right">${c.fichasComPreco.toLocaleString("pt-BR")}</td>
-              <td style="text-align:right;color:${c.custoFichaComPreco!=null?statusColor(c.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false):"var(--muted)"}">${c.custoFichaComPreco!=null?fUSD(c.custoFichaComPreco):"—"}</td>
+              <td class="mono" style="text-align:right">${c.ctr!=null?fPct(c.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${c.checkout.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${c.vendas.toLocaleString("pt-BR")}</td>
-              <td class="mono" style="text-align:right">${fPct(c.convFichaVenda)}</td>
+              <td class="mono" style="text-align:right">${c.custoVenda!=null?fUSD(c.custoVenda):"—"}</td>
+              <td class="mono" style="text-align:right">${fUSD(c.faturamento)}</td>
+              <td class="mono" style="text-align:right">${c.roas!=null?c.roas.toFixed(2)+"x":"—"}</td>
             </tr>`;
           }).join("")}
         </tbody>
       </table>
-      </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <div class="section-lbl" style="margin-bottom:0">Anúncios${S.carrinhoSelectedCamps.size>0?` — dentro de: ${[...S.carrinhoSelectedCamps].join(", ")}`:" — consolidado (todas as campanhas)"}</div>
       ${S.carrinhoSelectedAds.size>0?`<button onclick="MDI.clearCarrinhoAds()" style="font-size:10px;padding:3px 9px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;border-radius:5px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.carrinhoSelectedAds.size})</button>`:""}
-      <span style="font-size:10px;color:var(--hint)">Clique para selecionar e gerar o resumo</span>
     </div>
-    <div style="position:relative;margin-bottom:10px">
+    <div style="margin:10px 0">
       <input oninput="MDI.setCarrinhoAdSearch(this.value)" value="${S.carrinhoAdSearch}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
-    <div class="cc" style="padding:0;overflow:hidden">
-      <div style="overflow-x:auto">
-      <table>
+    <div class="card" style="margin-bottom:14px;overflow-x:auto">
+      <table class="tb">
         <thead><tr>
-          <th style="width:36px"></th>
           <th onclick="MDI.sortCarrinhoAds('adName')" style="cursor:pointer">Anúncio</th>
-          ${th("spend","Investido")}
+          ${th("spend","Investimento")}
           ${th("clicks","Cliques")}
           ${th("cpc","CPC")}
-          ${th("fichas","Fichas")}
-          ${th("fichasComPreco","Fichas c/ preço")}
-          ${th("custoFichaComPreco","Custo/ficha c/ preço")}
+          ${th("ctr","CTR")}
+          ${th("checkout","Checkouts")}
           ${th("vendas","Vendas")}
-          ${th("convFichaVenda","Conversão")}
-          <th>Ver</th>
+          ${th("custoVenda","Custo/venda")}
+          ${th("faturamento","Faturamento")}
+          ${th("roas","ROAS")}
         </tr></thead>
         <tbody>
-          ${sortedAds.length===0?`<tr><td colspan="11" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
+          ${sortedAds.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
           sortedAds.map(a=>{
             const sel=S.carrinhoSelectedAds.has(a.adName);
             return `<tr onclick="MDI.toggleCarrinhoAd('${escName(a.adName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
-              <td style="text-align:center">${chkBox(sel)}</td>
-              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.adName}">${a.adName}</td>
+              <td>${sel?"✓ ":""}${a.adName}</td>
               <td class="mono" style="text-align:right">${fUSD(a.spend)}</td>
               <td class="mono" style="text-align:right">${a.clicks.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${a.cpc!=null?fUSD(a.cpc):"—"}</td>
-              <td class="mono" style="text-align:right">${a.fichas.toLocaleString("pt-BR")}</td>
-              <td class="mono" style="text-align:right">${a.fichasComPreco.toLocaleString("pt-BR")}</td>
-              <td style="text-align:right;color:${a.custoFichaComPreco!=null?statusColor(a.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false):"var(--muted)"}">${a.custoFichaComPreco!=null?fUSD(a.custoFichaComPreco):"—"}</td>
+              <td class="mono" style="text-align:right">${a.ctr!=null?fPct(a.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${a.checkout.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${a.vendas.toLocaleString("pt-BR")}</td>
-              <td class="mono" style="text-align:right">${fPct(a.convFichaVenda)}</td>
-              <td style="text-align:center" onclick="event.stopPropagation()">${a.igUrl?`<a href="${a.igUrl}" target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;font-size:11px">Ver ↗</a>`:"—"}</td>
+              <td class="mono" style="text-align:right">${a.custoVenda!=null?fUSD(a.custoVenda):"—"}</td>
+              <td class="mono" style="text-align:right">${fUSD(a.faturamento)}</td>
+              <td class="mono" style="text-align:right">${a.roas!=null?a.roas.toFixed(2)+"x":"—"}</td>
             </tr>`;
           }).join("")}
         </tbody>
       </table>
-      </div>
     </div>
 
-    ${selAds.length>0?`
-    <div style="margin-top:22px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="section-lbl" style="margin-bottom:0">Resumo de Anúncios (${selAds.length})</div>
+    ${adResumoText?`<div class="card" style="margin-bottom:22px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <div class="section-lbl" style="margin-bottom:0">Resumo dos anúncios selecionados (${selAds.length})</div>
         <button class="btn-copy-carrinho-ads" onclick="MDI.copyCarrinhoAdResumo()" style="padding:6px 16px;background:rgba(59,130,246,.15);border:1px solid rgba(96,165,250,.35);color:#93c5fd;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif">📋 Copiar resumo</button>
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
-        <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
-      </div>
+      <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>`:""}
     <div class="foot">mdi_set26 · Carrinho · Campanhas/Anúncios</div>`;
 }
@@ -4940,10 +4777,10 @@ ${aulaResumoTextBlock(3,null)}`;
 // dos outros dois) — o feedback "✓ Copiado!" aparece só no botão clicado.
 // ── Resumo do Carrinho (aba Resumo diário) ───────────────────────────────
 // Três blocos, igual ao Resumo consolidado da Captação: Total (lançamento
-// inteiro), Ontem e Hoje. Só fichas de TRÁFEGO entram nos custos — orgânico
-// fica restrito à sub-aba Fichas.
-// Metas: custo/ficha COM PREÇO tem meta (META_CARRINHO_CUSTO_FICHA_COM_PRECO);
-// custo/ficha TOTAL fica sem meta, por decisão do usuário.
+// inteiro), Ontem e Hoje. O Carrinho aqui é só tráfego + venda — sem metas,
+// por decisão do usuário (não há benchmark de custo por venda definido).
+// As vendas ORGÂNICAS entram em vendas/faturamento/ROAS; o custo por venda de
+// tráfego, à parte, divide o investimento só pelas vendas com UTM.
 function carrinhoBloco(s,e){ return carrinhoMetrics(s===null?"0000-01-01":s, e===null?"9999-12-31":e); }
 function carrinhoResumoHtml(){
   const hoje=todayISO(), ontem=yesterdayISO();
@@ -4952,16 +4789,21 @@ function carrinhoResumoHtml(){
                 ["⬇️ Hoje",carrinhoBloco(hoje,hoje),fDateBR(hoje)]];
   return blocos.map(([t,m,d])=>stageResumoCard(`${t}${d?" — "+d:""}`,
       stageRow("Investimento",fUSD(m.spend),"","")+
-      stageRow("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo/ficha com preço",m.custoFichaComPreco!=null?fUSD(m.custoFichaComPreco):"--",`Meta: ${fUSD(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false))+
-      stageRow("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo/ficha total",m.custoFicha!=null?fUSD(m.custoFicha):"--","sem meta definida","")+
+      stageRow("Cliques no link",m.clicks.toLocaleString("pt-BR"),"","")+
       stageRow("CPC",m.cpc!=null?fUSD(m.cpc):fUSD(0),"","")+
+      stageRow("Checkouts iniciados",m.checkouts.toLocaleString("pt-BR"),"","")+
+      stageRow("Custo por checkout",m.custoCheckout!=null?fUSD(m.custoCheckout):"--","","")+
+      stageRow("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf} c/ UTM · ${m.vendasOrg} orgânica(s)`,"")+
+      stageRow("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"--","","")+
+      stageRow("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--","só vendas com UTM","")+
+      stageRow("Faturamento",fUSD(m.faturamento),"","")+
+      stageRow("Ticket médio",m.ticket!=null?fUSD(m.ticket):"--","","")+
+      stageRow("ROAS (carrinho)",m.roas!=null?m.roas.toFixed(2)+"x":"--","","")+
+      stageRow("Tx conversão clique → venda",m.txConvVenda!=null?fPct(m.txConvVenda):fPct(0),"","")+
       stageRow("CTR",m.ctr!=null?fPct(m.ctr):fPct(0),"","")+
-      stageRow("CPM",m.cpm!=null?fUSD(m.cpm):fUSD(0),"","")+
-      stageRow("Tx conversão formulário",m.txConvForm!=null?fPct(m.txConvForm):fPct(0),"","")
+      stageRow("CPM",m.cpm!=null?fUSD(m.cpm):fUSD(0),"","")
     )).join("")+
-    `<div style="font-size:10px;color:var(--hint);max-width:640px">Só fichas de tráfego entram nos custos — as orgânicas/disparo aparecem apenas na sub-aba Fichas. Tx conversão formulário = fichas de tráfego ÷ cliques no link.</div>`;
+    `<div style="font-size:10px;color:var(--hint);max-width:640px">Vendas e faturamento incluem as orgânicas (sem UTM). ROAS (carrinho) = faturamento ÷ investimento da própria etapa; o ROAS do lançamento inteiro fica na sub-aba Vendas.</div>`;
 }
 function carrinhoResumoText(){
   const hoje=todayISO(), ontem=yesterdayISO();
@@ -4969,16 +4811,25 @@ function carrinhoResumoText(){
     return `${titulo}
 
 Investimento:\t${fUSD(m.spend)}
-Fichas com preço:\t${m.fichasComPreco.toLocaleString("pt-BR")}
-Custo/ ficha com preço:\t${m.custoFichaComPreco!=null?fUSD(m.custoFichaComPreco):"--"}\t${metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)} (meta: ${fUSD(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
-
-Fichas totais:\t${m.fichasTotal.toLocaleString("pt-BR")}
-Custo/ficha total:\t${m.custoFicha!=null?fUSD(m.custoFicha):"--"}
-
+Cliques no link:\t${m.clicks.toLocaleString("pt-BR")}
 CPC:\t${m.cpc!=null?fUSD(m.cpc):fUSD(0)}
+
+Checkouts iniciados:\t${m.checkouts.toLocaleString("pt-BR")}
+Custo por checkout:\t${m.custoCheckout!=null?fUSD(m.custoCheckout):"--"}
+
+Vendas:\t${m.vendasTotal.toLocaleString("pt-BR")}
+Vendas com UTM:\t${m.vendasTraf.toLocaleString("pt-BR")}
+Vendas orgânicas:\t${m.vendasOrg.toLocaleString("pt-BR")}
+Custo por venda:\t${m.custoVenda!=null?fUSD(m.custoVenda):"--"}
+Custo por venda (tráfego):\t${m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--"}
+
+Faturamento:\t${fUSD(m.faturamento)}
+Ticket médio:\t${m.ticket!=null?fUSD(m.ticket):"--"}
+ROAS (carrinho):\t${m.roas!=null?m.roas.toFixed(2)+"x":"--"}
+
+Tx conversão clique → venda:\t${m.txConvVenda!=null?fPct(m.txConvVenda):fPct(0)}
 CTR:\t${m.ctr!=null?fPct(m.ctr):fPct(0)}
-CPM:\t${m.cpm!=null?fUSD(m.cpm):fUSD(0)}
-Tx conversão formulário:\t${m.txConvForm!=null?fPct(m.txConvForm):fPct(0)}`;
+CPM:\t${m.cpm!=null?fUSD(m.cpm):fUSD(0)}`;
   }
   return `mdi_set26 | Carrinho
 
@@ -5522,7 +5373,6 @@ function render(){
   else if(S.currentPage==="aulas")renderAulas();
   else if(S.currentPage==="carrinho"){
     if(S.carrinhoSubPage==="principal")renderCarrinhoPrincipal();
-    else if(S.carrinhoSubPage==="fichas")renderCarrinhoFichas();
     else if(S.carrinhoSubPage==="vendas")renderCarrinhoVendas();
     else if(S.carrinhoSubPage==="anuncios")renderCarrinhoAnuncios();
   }
@@ -5575,14 +5425,13 @@ window.MDI = {
   carrinhoAdRows,
   carrinhoBloco,
   carrinhoCanalKey,
-  carrinhoFichasInRange,
   carrinhoMetaRows,
   carrinhoMetaRowsInRange,
   carrinhoMetrics,
   carrinhoNormOrigem,
-  carrinhoPassQual,
   carrinhoResumoHtml,
   carrinhoResumoText,
+  carrinhoVendasInRange,
   channelToggle,
   chkBox,
   cleanUtm,
@@ -5596,7 +5445,6 @@ window.MDI = {
   copyResumo,
   copyStageResumo,
   dedupByContact,
-  dedupFichasByContact,
   diaSemana,
   distinctCount,
   drawBarPercent,
@@ -5622,7 +5470,6 @@ window.MDI = {
   faixaSelButtons,
   fetchSheetCSV,
   fetchSheetCSVOpt,
-  findPrecoKey,
   firstOfMonthISO,
   fontePaginaLabel,
   ga4Metrics,
@@ -5634,10 +5481,8 @@ window.MDI = {
   getAdRows,
   getCampRows,
   getCarrinhoCampRows,
-  getCarrinhoCanalRows,
   getCarrinhoDaily,
-  getCarrinhoOrigemRows,
-  getCarrinhoVendaOrigemRows,
+  getCarrinhoVendaGrupos,
   getCarrinhoVendasDaily,
   getCol,
   getCurrentPeriod,
@@ -5692,6 +5537,7 @@ window.MDI = {
   parseNum,
   parseRows,
   parseStageRows,
+  parseVendaOrigem,
   pathFromUrl,
   periodTotals,
   planForDate,
@@ -5701,7 +5547,6 @@ window.MDI = {
   planoTotalLancamento,
   pontosResposta,
   principalTotals,
-  processCarrinhoFichas,
   processCarrinhoVendas,
   processGA4,
   processPesquisa,
@@ -5712,7 +5557,6 @@ window.MDI = {
   renderAquecimento,
   renderAulas,
   renderCarrinhoAnuncios,
-  renderCarrinhoFichas,
   renderCarrinhoPrincipal,
   renderCarrinhoVendas,
   renderFunilBadge,
@@ -5735,9 +5579,6 @@ window.MDI = {
   setCarrinhoAdSearch,
   setCarrinhoCampSearch,
   setCarrinhoCanalSearch,
-  setCarrinhoFichasMode,
-  setCarrinhoFichasPreco,
-  setCarrinhoFichasQual,
   setCarrinhoOrigemSearch,
   setLeadSearch,
   setLeadsChannel,
@@ -5796,6 +5637,8 @@ window.MDI = {
   totalSpendForStage,
   trafficMetrics,
   updatePageVisibility,
+  vendaDataMs,
+  vendaValorUSD,
   yesterdayISO
 };
 })();
