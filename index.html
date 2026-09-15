@@ -4790,6 +4790,10 @@ ${aulaResumoTextBlock(3,null)}`;
 // Três blocos, igual ao Resumo consolidado da Captação: Total (lançamento
 // inteiro), Ontem e Hoje. O Carrinho aqui é só tráfego + venda — sem metas,
 // por decisão do usuário (não há benchmark de custo por venda definido).
+// Modelo fechado com o usuário: investimento e cliques, depois a quebra de
+// vendas (total / tráfego / orgânicas-outras) e por fim CPC, CTR e CPM.
+// Faturamento, ticket, ROAS, checkouts e custo por venda ficam só na aba
+// Vendas — o resumo diário é enxuto de propósito.
 // As vendas orgânicas/de outras origens entram em vendas/faturamento/ROAS; o
 // custo por venda de tráfego, à parte, divide o investimento só pelas vendas
 // com FBAds na UTM.
@@ -4802,20 +4806,14 @@ function carrinhoResumoHtml(){
   return blocos.map(([t,m,d])=>stageResumoCard(`${t}${d?" — "+d:""}`,
       stageRow("Investimento",fUSD(m.spend),"","")+
       stageRow("Cliques no link",m.clicks.toLocaleString("pt-BR"),"","")+
+      stageRow("Vendas",m.vendasTotal.toLocaleString("pt-BR"),"","")+
+      stageRow("Vendas de tráfego",m.vendasTraf.toLocaleString("pt-BR"),"","")+
+      stageRow("Vendas orgânicas/outras",m.vendasOrg.toLocaleString("pt-BR"),"","")+
       stageRow("CPC",m.cpc!=null?fUSD(m.cpc):fUSD(0),"","")+
-      stageRow("Checkouts iniciados",m.checkouts.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo por checkout",m.custoCheckout!=null?fUSD(m.custoCheckout):"--","","")+
-      stageRow("Vendas",m.vendasTotal.toLocaleString("pt-BR"),`${m.vendasTraf} de tráfego · ${m.vendasOrg} orgânica(s)/outras`,"")+
-      stageRow("Custo por venda",m.custoVenda!=null?fUSD(m.custoVenda):"--","","")+
-      stageRow("Custo por venda (tráfego)",m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--","só UTM com FBAds","")+
-      stageRow("Faturamento",fUSD(m.faturamento),"","")+
-      stageRow("Ticket médio",m.ticket!=null?fUSD(m.ticket):"--","","")+
-      stageRow("ROAS (carrinho)",m.roas!=null?m.roas.toFixed(2)+"x":"--","","")+
-      stageRow("Tx conversão clique → venda",m.txConvVenda!=null?fPct(m.txConvVenda):fPct(0),"","")+
       stageRow("CTR",m.ctr!=null?fPct(m.ctr):fPct(0),"","")+
       stageRow("CPM",m.cpm!=null?fUSD(m.cpm):fUSD(0),"","")
     )).join("")+
-    `<div style="font-size:10px;color:var(--hint);max-width:640px">Tráfego = venda com FBAds na UTM. Vendas e faturamento incluem as orgânicas/outras origens. ROAS (carrinho) = faturamento ÷ investimento da própria etapa; o ROAS do lançamento inteiro fica na sub-aba Vendas.</div>`;
+    `<div style="font-size:10px;color:var(--hint);max-width:640px">Tráfego = venda com FBAds na UTM; o resto (sem UTM ou UTM de outra origem) entra em orgânicas/outras. Faturamento, ticket médio, ROAS e custo por venda ficam na sub-aba Vendas do Carrinho.</div>`;
 }
 function carrinhoResumoText(){
   const hoje=todayISO(), ontem=yesterdayISO();
@@ -4824,22 +4822,12 @@ function carrinhoResumoText(){
 
 Investimento:\t${fUSD(m.spend)}
 Cliques no link:\t${m.clicks.toLocaleString("pt-BR")}
-CPC:\t${m.cpc!=null?fUSD(m.cpc):fUSD(0)}
-
-Checkouts iniciados:\t${m.checkouts.toLocaleString("pt-BR")}
-Custo por checkout:\t${m.custoCheckout!=null?fUSD(m.custoCheckout):"--"}
 
 Vendas:\t${m.vendasTotal.toLocaleString("pt-BR")}
 Vendas de tráfego:\t${m.vendasTraf.toLocaleString("pt-BR")}
 Vendas orgânicas/outras:\t${m.vendasOrg.toLocaleString("pt-BR")}
-Custo por venda:\t${m.custoVenda!=null?fUSD(m.custoVenda):"--"}
-Custo por venda (tráfego):\t${m.custoVendaTraf!=null?fUSD(m.custoVendaTraf):"--"}
 
-Faturamento:\t${fUSD(m.faturamento)}
-Ticket médio:\t${m.ticket!=null?fUSD(m.ticket):"--"}
-ROAS (carrinho):\t${m.roas!=null?m.roas.toFixed(2)+"x":"--"}
-
-Tx conversão clique → venda:\t${m.txConvVenda!=null?fPct(m.txConvVenda):fPct(0)}
+CPC:\t${m.cpc!=null?fUSD(m.cpc):fUSD(0)}
 CTR:\t${m.ctr!=null?fPct(m.ctr):fPct(0)}
 CPM:\t${m.cpm!=null?fUSD(m.cpm):fUSD(0)}`;
   }
@@ -5956,12 +5944,11 @@ function parseUSD(s){ if(!s||s==="-"||s==="0")return 0;return parseFloat(String(
 // Prioridade: novo formato "(MXN)"/"(USD)" no nome → legado por nome exato → default MXN
 function metaSpendToUSD(rawSpend, accountName){
   const acc=(accountName||"").toUpperCase();
-  if(acc.includes("(MXN)")) return rawSpend/18;
+  // Contas explicitamente USD: CA03/CA04/Conta G têm prioridade sobre qualquer sufixo
+  if(/^CA0[34]\b/.test(acc)||acc.startsWith("CONTA G")) return rawSpend;
+  if(acc==="CONTA 2 CARTÃO"||acc==="CONTA 2") return rawSpend/18;  // MXN legado
   if(acc.includes("(USD)")) return rawSpend;
-  // Nomes legados — manter comportamento anterior
-  if(acc==="CONTA 2 CARTÃO"||acc==="CONTA 2") return rawSpend/18;  // MXN
-  if(acc==="CA03"||acc==="CA 03"||acc==="CA04"||acc==="CA 04") return rawSpend; // USD
-  if(acc==="CONTA G") return rawSpend; // USD
+  if(acc.includes("(MXN)")) return rawSpend/18;
   return rawSpend/18; // default: MXN
 }
 
@@ -6561,8 +6548,11 @@ async function loadData(force=false){
         d=parts.length===3?`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`:"";
       } else { d=dRaw; }
       if(!d)continue;
-      const _acc      =(r["Nome da conta"]||"").trim();
-      const spendUSD  =metaSpendToUSD(parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0, _acc);
+      const _acc      =(r["Nome da conta"]||"").toUpperCase();
+      const _rawSpend =parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0;
+      // CA03/CA04 sempre USD independente do sufixo; (MXN) → divide; resto → USD
+      const _isKnownUSD=/^CA0[34]\b/.test(_acc)||_acc.startsWith("CONTA G");
+      const spendUSD  =(!_isKnownUSD&&_acc.includes("(MXN)"))?_rawSpend/18:_rawSpend;
       const clicksV   =piS(r["Cliques no link"]);
       const impressV  =piS(r["Impressões"]);
       const video3sV  =piS(r["Reproduções do vídeo por no mínimo 3 segundos"]);
