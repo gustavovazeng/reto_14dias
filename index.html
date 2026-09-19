@@ -7173,7 +7173,7 @@ function drawLineChart(id,data,key,fmtY,color,refVal,refLabel,cssW,cssH,showInve
   drawLineArea(ctx,xP,yP,vals,color,true);
   // Overlay: investimento (eixo direito)
   if(hasInv){
-    const INVEST_C="#a78bfa";
+    const INVEST_C=CHART_INV; // #3b82f6 — mesmo azul da aba principal
     const invVals=data.map(function(d){return d.invest||0;});
     const invMax=Math.max.apply(null,invVals.concat([0.01]))*1.3;
     const yPI=function(v){return P.t+cH-((v)/(invMax))*cH;};
@@ -7183,7 +7183,7 @@ function drawLineChart(id,data,key,fmtY,color,refVal,refLabel,cssW,cssH,showInve
     for(let i=0;i<=4;i++){
       const lv=invMax-(i/4)*invMax;
       const y=P.t+(i/4)*cH;
-      ctx.fillText(fBRL(lv).replace("R$ ","R$"),P.l+cW+4,y+3);
+      ctx.fillText(fBRLShort(lv),P.l+cW+4,y+3);
     }
   }
   const step=data.length>60?7:data.length>30?3:data.length>14?2:1;
@@ -9281,11 +9281,14 @@ function renderFunil(){
       else if(_pid===s2.id) _dmap[_rd].mapa++;
     }
     // Taxa por dia isolado (igual ao que a célula mostra ao filtrar por aquele dia)
-    var _metaA=getMetaActive();
+    // Spend: mesmo getDaily() usado na aba principal
+    var _dailyInv=getDaily(S.startDate,S.endDate);
+    var _spendByDate={};
+    _dailyInv.forEach(function(d){_spendByDate[d.date]=d.spend||0;});
     for(var _ds2 of _trDays){
       var _dp=_ds2.split("-");
       var _dR=_dmap[_ds2].reto,_dC=_dmap[_ds2].cero,_dM=_dmap[_ds2].mapa;
-      var _dSpend=(_metaA[_ds2]||{}).spend||0;
+      var _dSpend=_spendByDate[_ds2]||0;
       _trPoints.push({label:_dp[2]+"/"+_dp[1],date:_ds2,
         reto:_dR,cero:_dC,mapa:_dM,invest:_dSpend,
         trCero:_dR>0?(_dC/_dR)*100:0,
@@ -9347,8 +9350,8 @@ function renderFunil(){
         <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
           <span class="ct">Take rate Cero (por dia)</span>
           <div style="display:flex;align-items:center;gap:8px">
-            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#a78bfa"><span style="display:inline-block;width:10px;height:2px;background:#a78bfa;border-radius:1px"></span>Invest.</span>`:""}
-            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(167,139,250,.18);border:1px solid rgba(167,139,250,.4);color:#a78bfa`:`background:transparent;border:1px solid rgba(167,139,250,.4);color:#a78bfa`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
+            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#3b82f6"><span style="display:inline-block;width:10px;height:2px;background:#3b82f6;border-radius:1px"></span>Invest.</span>`:""}
+            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);color:#3b82f6`:`background:transparent;border:1px solid rgba(59,130,246,.4);color:#3b82f6`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
           </div>
         </div>
         <div style="position:relative"><canvas id="c-tr-cero"></canvas><div class="tip" id="t-tr-cero"></div></div>
@@ -9357,8 +9360,8 @@ function renderFunil(){
         <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
           <span class="ct">Take rate Mapa (por dia)</span>
           <div style="display:flex;align-items:center;gap:8px">
-            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#a78bfa"><span style="display:inline-block;width:10px;height:2px;background:#a78bfa;border-radius:1px"></span>Invest.</span>`:""}
-            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(167,139,250,.18);border:1px solid rgba(167,139,250,.4);color:#a78bfa`:`background:transparent;border:1px solid rgba(167,139,250,.4);color:#a78bfa`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
+            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#3b82f6"><span style="display:inline-block;width:10px;height:2px;background:#3b82f6;border-radius:1px"></span>Invest.</span>`:""}
+            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);color:#3b82f6`:`background:transparent;border:1px solid rgba(59,130,246,.4);color:#3b82f6`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
           </div>
         </div>
         <div style="position:relative"><canvas id="c-tr-mapa"></canvas><div class="tip" id="t-tr-mapa"></div></div>
@@ -9384,8 +9387,8 @@ function renderFunil(){
         {key:"mapa",color:"#34d399",name:"Vendas Mapa",fmt:function(v){return v+" vdas";}}
       ];
       if(_trShowInv){
-        _tipCero.push({key:"invest",color:"#a78bfa",name:"Investimento",fmt:function(v){return fBRL(v);}});
-        _tipMapa.push({key:"invest",color:"#a78bfa",name:"Investimento",fmt:function(v){return fBRL(v);}});
+        _tipCero.push({key:"invest",color:"#3b82f6",name:"Investimento",fmt:fBRLShort});
+        _tipMapa.push({key:"invest",color:"#3b82f6",name:"Investimento",fmt:fBRLShort});
       }
       var _padR=_trShowInv?52:12;
       setupTip("c-tr-cero","t-tr-cero",_trPoints,_tipCero,52,_padR);
