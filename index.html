@@ -9262,13 +9262,13 @@ function renderFunil(){
       else if(_pid===s1.id) _dmap[_rd].cero++;
       else if(_pid===s2.id) _dmap[_rd].mapa++;
     }
-    var _cumR=0,_cumC=0,_cumM=0;
+    // Taxa por dia isolado (igual ao que a célula mostra ao filtrar por aquele dia)
     for(var _ds2 of _trDays){
-      _cumR+=_dmap[_ds2].reto;_cumC+=_dmap[_ds2].cero;_cumM+=_dmap[_ds2].mapa;
       var _dp=_ds2.split("-");
+      var _dR=_dmap[_ds2].reto,_dC=_dmap[_ds2].cero,_dM=_dmap[_ds2].mapa;
       _trPoints.push({label:_dp[2]+"/"+_dp[1],date:_ds2,
-        trCero:_cumR>0?(_cumC/_cumR)*100:0,
-        trMapa:_cumC>0?(_cumM/_cumC)*100:0});
+        trCero:_dR>0?(_dC/_dR)*100:0,
+        trMapa:_dC>0?(_dM/_dC)*100:0});
     }
   }
   el.innerHTML=`
@@ -9323,11 +9323,11 @@ function renderFunil(){
     ${!isFeoFunil&&_trPoints.length>0?`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
       <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">Take rate Cero (acumulado)</span></div>
+        <div class="ch"><span class="ct">Take rate Cero (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-cero"></canvas><div class="tip" id="t-tr-cero"></div></div>
       </div>
       <div class="cc" style="position:relative">
-        <div class="ch"><span class="ct">Take rate Mapa (acumulado)</span></div>
+        <div class="ch"><span class="ct">Take rate Mapa (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-mapa"></canvas><div class="tip" id="t-tr-mapa"></div></div>
       </div>
     </div>`:""}
