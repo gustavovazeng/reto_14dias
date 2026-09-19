@@ -7852,6 +7852,15 @@ function renderAnuncios(){
     const key=_getCanonical(r);if(!key)continue;
     buyerTotalSpent.set(key,(buyerTotalSpent.get(key)||0)+(parseFloat(r["Valor do produto"])||0));
   }
+  // keyToProds: buyerKey → Set<productId> (compras pagas, sem filtro de data — para take rate por campanha/anúncio)
+  const keyToProds=new Map();
+  for(const r of dd.funilRows){
+    if((r["Status da compra"]||"").trim()!=="Paga") continue;
+    const prodId=classifyProduct(r["Nome do produto"]||"","reto");if(!prodId)continue;
+    const key=_getCanonical(r);if(!key)continue;
+    if(!keyToProds.has(key)) keyToProds.set(key,new Set());
+    keyToProds.get(key).add(prodId);
+  }
 
   // ── 1a. País selecionado → countryAllowedIds (deve ser calculado antes de campRows)
   const hasCountryFilter=S.selectedCountry!=="todos";
@@ -7929,8 +7938,16 @@ function renderAnuncios(){
     }
     let campFunilRev=0;
     for(const ek of campEvKeys) campFunilRev+=(buyerTotalSpent.get(ek)||0);
+    let _cCero=0,_cMapa=0;
+    for(const ek of campEvKeys){
+      const prods=keyToProds.get(ek)||new Set();
+      if(prods.has("cero")) _cCero++;
+      if(prods.has("mapa")) _cMapa++;
+    }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
       qtd:cQtd,valor:campFunilRev,
+      trCero:campEvKeys.size>0?(_cCero/campEvKeys.size)*100:0,
+      trMapa:_cCero>0?(_cMapa/_cCero)*100:0,
       cpc:cClicks>0?cSpend/cClicks:0,
       ctr:cImpr>0?(cClicks/cImpr)*100:0,
       cpm:cImpr>0?(cSpend/cImpr)*1000:0,
@@ -8038,12 +8055,22 @@ function renderAnuncios(){
 
       // Ticket ascensão (funil completo, sem filtro de data)
       let totalAscensoes=0;
+      const adEvKeys=new Set();
       for(const adId of useIds){
         for(const eventKey of (adBuyersMap.get(adId)||new Set())){
           totalAscensoes+=(buyerTotalSpent.get(eventKey)||0);
+          adEvKeys.add(eventKey);
         }
       }
+      let _aCero=0,_aMapa=0;
+      for(const ek of adEvKeys){
+        const prods=keyToProds.get(ek)||new Set();
+        if(prods.has("cero")) _aCero++;
+        if(prods.has("mapa")) _aMapa++;
+      }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
+        trCero:adEvKeys.size>0?(_aCero/adEvKeys.size)*100:0,
+        trMapa:_aCero>0?(_aMapa/_aCero)*100:0,
         cpc:clicks>0?spend/clicks:0,
         ctr:impressions>0?(clicks/impressions)*100:0,
         cpm:impressions>0?(spend/impressions)*1000:0,
@@ -8250,6 +8277,8 @@ function renderAnuncios(){
           ${thC("campStatus","Status","camp")}
           ${thC("spend","Investimento","camp")}
           ${thC("qtd","Vendas","camp")}
+          ${!isFeo?thC("trCero","TR Cero","camp"):""}
+          ${!isFeo?thC("trMapa","TR Mapa","camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
           ${thC("roas","ROAS","camp")}
           ${thC("ticket","Ticket Médio","camp")}
@@ -8282,6 +8311,8 @@ function renderAnuncios(){
               <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
+              ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
+              ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
@@ -8361,6 +8392,8 @@ function renderAnuncios(){
           ${thC("adStatus","Status","ad")}
           ${thC("spend","Investimento","ad")}
           ${thC("qtd","Vendas","ad")}
+          ${!isFeo?thC("trCero","TR Cero","ad"):""}
+          ${!isFeo?thC("trMapa","TR Mapa","ad"):""}
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
           ${thC("ticketAsc","Ticket Médio Ascensões","ad")}
@@ -8377,7 +8410,7 @@ function renderAnuncios(){
           <th style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;white-space:nowrap">Ver</th>
         </tr></thead>
         <tbody>
-          ${filteredAds.length===0?`<tr><td colspan="20" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
+          ${filteredAds.length===0?`<tr><td colspan="${isFeo?20:22}" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
           ${filteredAds.map(r=>{
             const selAd=S.selectedAds.has(r.advCode);
             const bgAd=selAd?"rgba(16,185,129,.10)":"transparent";
@@ -8399,6 +8432,8 @@ function renderAnuncios(){
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
+            ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
+            ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>
