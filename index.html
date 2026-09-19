@@ -880,7 +880,7 @@ const S = {
   leadsTemp:"todos",         // filtro de temperatura exclusivo da aba Análise qualificação
   metricasTemp:"todos",      // filtro de temperatura exclusivo da aba Métricas do Tráfego
   showGapVolume:false,       // liga/desliga a linha de GAP no gráfico "Volume de leads"
-  showTrInvest:false,        // liga/desliga linha de investimento nos gráficos de take rate
+
   faixaSel:{A:true,B:true,C:true,D:true}, // quais faixas aparecem no gráfico "% Faixa por dia"
   currentPage:"captacao",     // "captacao" | "aquecimento" | "lembrete" | "aulas" | "carrinho" | "planoreal" | "resumo"
   currentSubPage:"principal", // só usado quando currentPage==="captacao": "principal" | "anuncios" | "metricas" | "leads"
@@ -2882,7 +2882,7 @@ function barRow(lbl,n,total,color){
 function setPrincipalChannel(c){ S.principalChannel=c; renderPrincipal(); }
 function setPrincipalTemp(t){ S.principalTemp=t; renderPrincipal(); }
 function toggleGapVolume(){ S.showGapVolume=!S.showGapVolume; renderPrincipal(); }
-function toggleTrInvest(){ S.showTrInvest=!S.showTrInvest; renderFunil(); }
+
 function toggleFaixaSel(letter){ S.faixaSel[letter]=!S.faixaSel[letter]; renderPrincipal(); }
 // Botões-seletor de faixa (A/B/C/D) — mesmo padrão visual do botão de
 // GAP, mas em vez de liga/desliga único, cada faixa pode ser ligada/desligada
@@ -9343,23 +9343,11 @@ function renderFunil(){
     ${!isFeoFunil&&_trPoints.length>0?`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
       <div class="cc" style="position:relative">
-        <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
-          <span class="ct">Take rate Cero (por dia)</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#3b82f6"><span style="display:inline-block;width:10px;height:2px;background:#3b82f6;border-radius:1px"></span>Invest.</span>`:""}
-            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);color:#3b82f6`:`background:transparent;border:1px solid rgba(59,130,246,.4);color:#3b82f6`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
-          </div>
-        </div>
+        <div class="ch"><span class="ct">Take rate Cero (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-cero"></canvas><div class="tip" id="t-tr-cero"></div></div>
       </div>
       <div class="cc" style="position:relative">
-        <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
-          <span class="ct">Take rate Mapa (por dia)</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            ${S.showTrInvest?`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#3b82f6"><span style="display:inline-block;width:10px;height:2px;background:#3b82f6;border-radius:1px"></span>Invest.</span>`:""}
-            <button onclick="toggleTrInvest()" style="font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;${S.showTrInvest?`background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);color:#3b82f6`:`background:transparent;border:1px solid rgba(59,130,246,.4);color:#3b82f6`}">${S.showTrInvest?"✕ INV":"+ INV"}</button>
-          </div>
-        </div>
+        <div class="ch"><span class="ct">Take rate Mapa (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-mapa"></canvas><div class="tip" id="t-tr-mapa"></div></div>
       </div>
     </div>`:""}
@@ -9369,32 +9357,18 @@ function renderFunil(){
     requestAnimationFrame(function(){
       const trW1=document.getElementById("c-tr-cero")?.parentElement?.offsetWidth||380;
       const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
-      var _trShowInv=S.showTrInvest;
-      // Monta spend por dia direto do S.meta — mesmo dado que o totalSpend do funil usa
-      var _invByDate={};
-      var _metaRaw=S.retoTempFilter==="todos"?S.meta:(S.metaByTemp[S.retoTempFilter]||{});
-      for(var _md in _metaRaw){_invByDate[_md]=_metaRaw[_md].spend||0;}
-      // Injeta spend nos pontos (drawChartWithOverlay lê d.spend)
-      _trPoints.forEach(function(pt){pt.spend=_invByDate[pt.date]||0;});
-      drawChartWithOverlay("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},20,"Meta 20%",_trShowInv,false,trW1,170,"#f59e0b");
-      drawChartWithOverlay("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},null,null,_trShowInv,false,trW2,170,"#34d399");
-      var _tipCero=[
+      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",20,"Meta 20%",trW1,170);
+      drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170);
+      setupTip("c-tr-cero","t-tr-cero",_trPoints,[
         {key:"trCero",color:"#f59e0b",name:"Take rate Cero",fmt:function(v){return v.toFixed(1)+"%";}},
         {key:"reto",color:"var(--muted)",name:"Vendas Reto",fmt:function(v){return v+" vdas";}},
         {key:"cero",color:"#f59e0b",name:"Vendas Cero",fmt:function(v){return v+" vdas";}}
-      ];
-      var _tipMapa=[
+      ],52,12);
+      setupTip("c-tr-mapa","t-tr-mapa",_trPoints,[
         {key:"trMapa",color:"#34d399",name:"Take rate Mapa",fmt:function(v){return v.toFixed(1)+"%";}},
         {key:"cero",color:"var(--muted)",name:"Vendas Cero",fmt:function(v){return v+" vdas";}},
         {key:"mapa",color:"#34d399",name:"Vendas Mapa",fmt:function(v){return v+" vdas";}}
-      ];
-      if(_trShowInv){
-        _tipCero.push({key:"spend",color:CHART_INV,name:"Investimento",fmt:fBRLShort});
-        _tipMapa.push({key:"spend",color:CHART_INV,name:"Investimento",fmt:fBRLShort});
-      }
-      var _padR=_trShowInv?52:12;
-      setupTip("c-tr-cero","t-tr-cero",_trPoints,_tipCero,52,_padR);
-      setupTip("c-tr-mapa","t-tr-mapa",_trPoints,_tipMapa,52,_padR);
+      ],52,12);
     });
   }
 }
