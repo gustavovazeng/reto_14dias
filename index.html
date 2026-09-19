@@ -9281,16 +9281,11 @@ function renderFunil(){
       else if(_pid===s2.id) _dmap[_rd].mapa++;
     }
     // Taxa por dia isolado (igual ao que a célula mostra ao filtrar por aquele dia)
-    // Spend: mesmo getDaily() usado na aba principal
-    var _dailyInv=getDaily(S.startDate,S.endDate);
-    var _spendByDate={};
-    _dailyInv.forEach(function(d){_spendByDate[d.date]=d.spend||0;});
     for(var _ds2 of _trDays){
       var _dp=_ds2.split("-");
       var _dR=_dmap[_ds2].reto,_dC=_dmap[_ds2].cero,_dM=_dmap[_ds2].mapa;
-      var _dSpend=_spendByDate[_ds2]||0;
       _trPoints.push({label:_dp[2]+"/"+_dp[1],date:_ds2,
-        reto:_dR,cero:_dC,mapa:_dM,invest:_dSpend,
+        reto:_dR,cero:_dC,mapa:_dM,
         trCero:_dR>0?(_dC/_dR)*100:0,
         trMapa:_dC>0?(_dM/_dC)*100:0});
     }
@@ -9374,6 +9369,12 @@ function renderFunil(){
       const trW1=document.getElementById("c-tr-cero")?.parentElement?.offsetWidth||380;
       const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
       var _trShowInv=S.showTrInvest;
+      // Monta spend por dia direto do S.meta (já carregado; mesmo dado do totalSpend do funil)
+      var _invByDate={};
+      var _metaRaw=S.retoTempFilter==="todos"?S.meta:(S.metaByTemp[S.retoTempFilter]||{});
+      for(var _md in _metaRaw){_invByDate[_md]=_metaRaw[_md].spend||0;}
+      // Injeta invest nos pontos
+      _trPoints.forEach(function(pt){pt.invest=_invByDate[pt.date]||0;});
       drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",20,"Meta 20%",trW1,170,_trShowInv);
       drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170,_trShowInv);
       var _tipCero=[
