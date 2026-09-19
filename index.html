@@ -7076,7 +7076,8 @@ function drawLineArea(ctx,xP,yP,vals,color,fill=true){
 }
 
 // Gráfico simples (1 eixo, 1 linha) + overlay opcional nos 2 eixos Y
-function drawChartWithOverlay(id, data, key, fmtY, refVal, refLabel, overlayInv, overlayCpv, cssW, cssH){
+function drawChartWithOverlay(id, data, key, fmtY, refVal, refLabel, overlayInv, overlayCpv, cssW, cssH, lineColor){
+  const mainC=lineColor||CHART_COLOR;
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
   const P={t:12,r:overlayInv||overlayCpv?52:12,b:26,l:52};
   const cW=cssW-P.l-P.r, cH=cssH-P.t-P.b;
@@ -7122,15 +7123,15 @@ function drawChartWithOverlay(id, data, key, fmtY, refVal, refLabel, overlayInv,
   // Linha de referência
   if(refVal!=null){
     const ry=yPL(refVal);
-    ctx.strokeStyle=CHART_COLOR+"55";ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.strokeStyle=mainC+"55";ctx.lineWidth=1;ctx.setLineDash([4,3]);
     ctx.beginPath();ctx.moveTo(P.l,ry);ctx.lineTo(P.l+cW,ry);ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle=CHART_COLOR;ctx.font="8px 'Inter',sans-serif";ctx.textAlign="right";
+    ctx.fillStyle=mainC;ctx.font="8px 'Inter',sans-serif";ctx.textAlign="right";
     ctx.fillText(refLabel||"Meta",P.l+cW,ry-3);
   }
 
   // Linha principal
-  drawLineArea(ctx,xP,yPL,vals,CHART_COLOR,true);
+  drawLineArea(ctx,xP,yPL,vals,mainC,true);
 
   // Overlay
   if(overlayInv) drawLineArea(ctx,xP,yPR,invVals,CHART_INV,false);
@@ -9369,14 +9370,14 @@ function renderFunil(){
       const trW1=document.getElementById("c-tr-cero")?.parentElement?.offsetWidth||380;
       const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
       var _trShowInv=S.showTrInvest;
-      // Monta spend por dia direto do S.meta (já carregado; mesmo dado do totalSpend do funil)
+      // Monta spend por dia direto do S.meta — mesmo dado que o totalSpend do funil usa
       var _invByDate={};
       var _metaRaw=S.retoTempFilter==="todos"?S.meta:(S.metaByTemp[S.retoTempFilter]||{});
       for(var _md in _metaRaw){_invByDate[_md]=_metaRaw[_md].spend||0;}
-      // Injeta invest nos pontos
-      _trPoints.forEach(function(pt){pt.invest=_invByDate[pt.date]||0;});
-      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",20,"Meta 20%",trW1,170,_trShowInv);
-      drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170,_trShowInv);
+      // Injeta spend nos pontos (drawChartWithOverlay lê d.spend)
+      _trPoints.forEach(function(pt){pt.spend=_invByDate[pt.date]||0;});
+      drawChartWithOverlay("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},20,"Meta 20%",_trShowInv,false,trW1,170,"#f59e0b");
+      drawChartWithOverlay("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},null,null,_trShowInv,false,trW2,170,"#34d399");
       var _tipCero=[
         {key:"trCero",color:"#f59e0b",name:"Take rate Cero",fmt:function(v){return v.toFixed(1)+"%";}},
         {key:"reto",color:"var(--muted)",name:"Vendas Reto",fmt:function(v){return v+" vdas";}},
@@ -9388,8 +9389,8 @@ function renderFunil(){
         {key:"mapa",color:"#34d399",name:"Vendas Mapa",fmt:function(v){return v+" vdas";}}
       ];
       if(_trShowInv){
-        _tipCero.push({key:"invest",color:"#3b82f6",name:"Investimento",fmt:fBRLShort});
-        _tipMapa.push({key:"invest",color:"#3b82f6",name:"Investimento",fmt:fBRLShort});
+        _tipCero.push({key:"spend",color:CHART_INV,name:"Investimento",fmt:fBRLShort});
+        _tipMapa.push({key:"spend",color:CHART_INV,name:"Investimento",fmt:fBRLShort});
       }
       var _padR=_trShowInv?52:12;
       setupTip("c-tr-cero","t-tr-cero",_trPoints,_tipCero,52,_padR);
