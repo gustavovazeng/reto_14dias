@@ -9337,7 +9337,7 @@ function renderFunil(){
     requestAnimationFrame(function(){
       const trW1=document.getElementById("c-tr-cero")?.parentElement?.offsetWidth||380;
       const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
-      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",30,"Meta 30%",trW1,170);
+      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",20,"Meta 20%",trW1,170);
       drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170);
       setupTip("c-tr-cero","t-tr-cero",_trPoints,[{key:"trCero",color:"#f59e0b",name:"Take rate Cero",fmt:function(v){return v.toFixed(1)+"%";}}],52,12);
       setupTip("c-tr-mapa","t-tr-mapa",_trPoints,[{key:"trMapa",color:"#34d399",name:"Take rate Mapa",fmt:function(v){return v.toFixed(1)+"%";}}],52,12);
