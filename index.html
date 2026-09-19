@@ -7437,6 +7437,16 @@ function renderPrincipal(){
   const roasSub=isFeo?"":(`meta ${META_ROAS.toFixed(2)}x`);
   const cpvSub=_feoCpvM!==null?("meta "+fBRL(_feoCpvM)):isFeo?"":(`meta ${fBRL(META_CPV)}`);
 
+  // Funil KPIs para aba principal
+  const _funilRowsP=isFeo?getFeoFunilRows():(S.retoTempFilter==="todos"?D().funilRows:(S.funilRowsByTemp[S.retoTempFilter]||[]));
+  let _fdP=null;
+  try{ _fdP=buildFunilData(_funilRowsP||[],S.startDate||"",S.endDate||"",isFeo?"feo":"reto"); } catch(e){ _fdP=null; }
+  const pfat=_fdP?(_fdP.totalFat||0):0;
+  const proas=_fdP?(_fdP.roas||0):0;
+  const plucro=_fdP?(_fdP.lucro||0):0;
+  const proasC=isFeo?"var(--text-strong)":statusColor(proas,META_ROAS,true);
+  const plucroC=plucro>=0?"var(--green)":"var(--red)";
+
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
       <div>
@@ -7452,6 +7462,11 @@ function renderPrincipal(){
       ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
       ${kpiCard("Faturamento",fBRL(tot.faturamento),funilTitle,"var(--text-strong)")}
       ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,(!isFeo||_feoCpvM!==null)?tot.cpv:null,false)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:16px">
+      ${kpiCard("Faturamento do funil",fBRL(pfat),"Reto + Cero + Mapa","var(--text-strong)")}
+      ${kpiCard("ROAS do funil",proas.toFixed(2)+"x","meta "+META_ROAS.toFixed(2)+"x",proasC,false,isFeo?null:proas,isFeo?null:true)}
+      ${kpiCard("Lucro bruto do funil",fBRL(plucro),"fat. – invest. – taxas",plucroC)}
     </div>
     <div class="cc" style="margin-bottom:12px;position:relative">
       <div class="ch">
@@ -9183,6 +9198,83 @@ function renderFunil(){
 
   const gridCols=2+steps.length;
 
+  // Daily take rate data (only for Reto funil)
+  var _trDays=[],_trCeroData=[],_trMapaData=[];
+  if(!isFeoFunil&&s1&&s2&&S.startDate&&S.endDate){
+    var _vbk=new Set();
+    for(var [,_byr] of fd.buyers){
+      if(!_byr.products.some(function(p){return p.id===s0.id&&p.status==="Paga";})) continue;
+      for(var _k of _byr.keys) _vbk.add(_k);
+    }
+    var _cd=new Date(S.startDate);
+    var _eD=new Date(S.endDate);
+    var _dmap={};
+    while(_cd<=_eD){
+      var _ds=_cd.toISOString().slice(0,10);
+      _trDays.push(_ds);
+      _dmap[_ds]={reto:0,cero:0,mapa:0};
+      _cd.setDate(_cd.getDate()+1);
+    }
+    for(var _r of _funilRows){
+      if((_r["Status da compra"]||"")!=="Paga") continue;
+      var _rd=toISO(_r["Data da compra"]||"")||"";
+      if(!_rd||!_dmap[_rd]) continue;
+      var _pid=classifyProduct(_r["Nome do produto"]||"",funil);
+      if(!_pid) continue;
+      if(_pid!==s0.id){
+        var _em=(_r["Email"]||"").toLowerCase().trim();
+        var _tel=(_r["Telefone"]||"").replace(/\D/g,"");
+        if(!(_em&&_vbk.has("e:"+_em))&&!(_tel&&_vbk.has("t:"+_tel))) continue;
+      }
+      if(_pid===s0.id) _dmap[_rd].reto++;
+      else if(_pid===s1.id) _dmap[_rd].cero++;
+      else if(_pid===s2.id) _dmap[_rd].mapa++;
+    }
+    var _cumR=0,_cumC=0,_cumM=0;
+    for(var _ds2 of _trDays){
+      _cumR+=_dmap[_ds2].reto;_cumC+=_dmap[_ds2].cero;_cumM+=_dmap[_ds2].mapa;
+      _trCeroData.push(_cumR>0?(_cumC/_cumR)*100:null);
+      _trMapaData.push(_cumC>0?(_cumM/_cumC)*100:null);
+    }
+  }
+  function svgTRChart(days,pts,color){
+    var W=500,H=110,pl=34,pr=12,pt2=10,pb=28;
+    var iW=W-pl-pr,iH=H-pt2-pb;
+    var vals=pts.filter(function(v){return v!=null;});
+    if(!vals.length||days.length<2) return '<p style="color:var(--hint);font-size:12px;padding:8px 0">Sem dados suficientes para o período selecionado.</p>';
+    var maxY=Math.max(Math.ceil(Math.max.apply(null,vals)/10)*10,20);
+    var xOf=function(i){return pl+Math.round(i/Math.max(days.length-1,1)*iW);};
+    var yOf=function(v){return pt2+Math.round((1-v/maxY)*iH);};
+    var lineP=pts.map(function(v,i){return v!=null?(xOf(i)+","+yOf(v)):null;}).filter(Boolean).join(" ");
+    var n=days.length,step=Math.max(1,Math.ceil(n/6));
+    var labels="";
+    days.forEach(function(d,i){
+      if(i%step!==0&&i!==n-1) return;
+      var p=d.split("-");
+      labels+='<text x="'+xOf(i)+'" y="'+(H-6)+'" font-size="9" fill="var(--hint)" text-anchor="middle">'+p[2]+'/'+p[1]+'</text>';
+    });
+    var yVals=[0,Math.round(maxY/2),maxY];
+    var yLabels=yVals.map(function(v){return '<text x="'+(pl-4)+'" y="'+(yOf(v)+3)+'" font-size="9" fill="var(--hint)" text-anchor="end">'+v+'%</text>';}).join("");
+    var allI=pts.map(function(v,i){return v!=null?i:-1;}).filter(function(i){return i>=0;});
+    var lastI=allI.length?allI[allI.length-1]:-1;
+    var lastV=lastI>=0?pts[lastI]:null;
+    var hasRef30=maxY>=30;
+    var ref30Y=hasRef30?yOf(30):0;
+    var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block">';
+    svg+='<line x1="'+pl+'" y1="'+pt2+'" x2="'+pl+'" y2="'+(H-pb)+'" stroke="var(--border)" stroke-width="1"/>';
+    svg+='<line x1="'+pl+'" y1="'+(H-pb)+'" x2="'+(W-pr)+'" y2="'+(H-pb)+'" stroke="var(--border)" stroke-width="1"/>';
+    if(hasRef30){
+      svg+='<line x1="'+pl+'" y1="'+ref30Y+'" x2="'+(W-pr)+'" y2="'+ref30Y+'" stroke="#34d399" stroke-width="1" stroke-dasharray="4,3" opacity=".4"/>';
+      svg+='<text x="'+(W-pr+2)+'" y="'+(ref30Y+3)+'" font-size="8" fill="#34d399" opacity=".6">30%</text>';
+    }
+    svg+='<polyline points="'+lineP+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    if(lastI>=0&&lastV!=null){
+      svg+='<circle cx="'+xOf(lastI)+'" cy="'+yOf(lastV)+'" r="3.5" fill="'+color+'"/>';
+      svg+='<text x="'+xOf(lastI)+'" y="'+(yOf(lastV)-8)+'" font-size="10" fill="'+color+'" text-anchor="middle" font-weight="700">'+lastV.toFixed(1)+'%</text>';
+    }
+    svg+=yLabels+labels+'</svg>';
+    return svg;
+  }
   el.innerHTML=`
     <div class="hdr">
       <div>
@@ -9232,6 +9324,17 @@ function renderFunil(){
       </div>
       ${anaContent}
     </div>
+    ${!isFeoFunil&&_trDays.length>0?`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px">
+        <div class="section-lbl" style="margin-bottom:14px">Take rate Cero (acumulado)</div>
+        ${svgTRChart(_trDays,_trCeroData,"#f59e0b")}
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px">
+        <div class="section-lbl" style="margin-bottom:14px">Take rate Mapa (acumulado)</div>
+        ${svgTRChart(_trDays,_trMapaData,"#34d399")}
+      </div>
+    </div>\`:""}
     <p style="font-size:10px;color:var(--hint);text-align:center;font-family:'JetBrains Mono',monospace">${s0.label} · Base Vendas (Hotmart) + Base Meta (Meta Ads via Stract)</p>`;
 }
 
