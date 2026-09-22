@@ -845,6 +845,7 @@ const S = {
   leadsRowsRaw:[],       // mesma coisa, SEM dedup — toda submissão do formulário conta, mesmo repetida. Só usado pra mostrar "leads totais" ao lado do número deduplicado (ver kpiCard "Leads captados").
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
+  leadsDescartadas:0, pesquisasDescartadas:0, // linhas anteriores a DATA_INICIO_CAPTACAO
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
@@ -910,6 +911,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
+  S.leadsDescartadas=0; S.pesquisasDescartadas=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null};
@@ -1516,6 +1518,18 @@ const SCORE_LABELS = {
 };
 // Colunas da aba "Base pesquisa" usadas pra cruzar com a lead.
 const PESQUISA_COLS = { email:"email", criadoEm:"Criado em" };
+// ── Corte de data: a captação real começou em 22/09 ───────────────────────
+// A base trazia cadastros e respostas de pesquisa de maio a 21/09 que NÃO são
+// do lançamento (re-etiquetagem de base antiga, testes). Tudo antes desta
+// data é descartado na leitura, ANTES do dedup — se ficasse pra depois, uma
+// lead velha da mesma pessoa "absorveria" a inscrição real de agora (o dedup
+// guarda a mais antiga) e a lead real sumiria do período.
+// Vale pra Base leads e pra Base pesquisa. Para ver a base inteira de novo,
+// basta apagar o valor (deixar em null).
+const DATA_INICIO_CAPTACAO = "2026-09-22";
+function antesDaCaptacao(dataISO){
+  return !!DATA_INICIO_CAPTACAO && !!dataISO && dataISO < DATA_INICIO_CAPTACAO;
+}
 // NFKD + remoção de acentos + barra invertida: "5600 MXN \/ USD $300" vira
 // "5600 mxn / usd $300". Deixa o cruzamento imune a acento, caixa, espaço
 // duplo e ao escape "\/" que a exportação insere — que é o que mais varia
@@ -1572,13 +1586,18 @@ function faixaFromScore(score){
 // a primeira inscrição de cada pessoa.
 function processPesquisa(rowsRaw){
   const byEmail={};
+  let descartadas=0;
   for(const r of rowsRaw){
     const em=normalizeEmail(r[PESQUISA_COLS.email]);
     if(!em)continue;
     const quando=String(r[PESQUISA_COLS.criadoEm]||"").trim();
+    // Respostas anteriores ao início da captação não são deste lançamento.
+    const qISO=(toISOLead(quando)||{}).date||null;
+    if(antesDaCaptacao(qISO)){ descartadas++; continue; }
     const atual=byEmail[em];
     if(!atual||(quando&&quando<atual.__quando)){ byEmail[em]={...r,__quando:quando}; }
   }
+  S.pesquisasDescartadas=descartadas;
   return byEmail;
 }
 
@@ -2068,9 +2087,12 @@ async function loadData(){
     const paginasCaptura=paginasCapturaConhecidas(leadsRowsRaw);
     const campIds=new Set(metaRows.map(m=>m.campId).filter(Boolean));
     const nomesMeta=nomesDaBaseMeta(metaRows);
+    let leadsDescartadas=0;
     for(const r of leadsRowsRaw){
       const parsed=toISOLead(leadCol(r,"criadoEm"));if(!parsed)continue;
       const {date,ms}=parsed;
+      // Cadastro anterior ao início da captação: fora, antes do dedup.
+      if(antesDaCaptacao(date)){ leadsDescartadas++; continue; }
 
       const utm=realinhaLead(r,adIdMap,campIds,paginasCaptura,nomesMeta);
       const utmMed=utm.medium;
@@ -2145,6 +2167,7 @@ async function loadData(){
 
     S.meta=mD; S.metaRows=metaRows; S.adIdMap=adIdMap;
     S.leadsRows=leadsRows; S.leadsRowsRaw=leadsRowsAll; S.leadsByDate=leadsByDate;
+    S.leadsDescartadas=leadsDescartadas;
 
     const allDates=[...new Set([...Object.keys(mD),...Object.keys(leadsByDate)])].sort();
     S.updated=allDates.length?fDateBR(allDates[allDates.length-1]):"—";
@@ -5569,6 +5592,7 @@ window.MDI = {
   accountNameOf,
   activePageId,
   adResumoBlock,
+  antesDaCaptacao,
   applyQuickCurrent,
   aquecimentoResumoHtml,
   aquecimentoResumoText,
