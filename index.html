@@ -2434,18 +2434,28 @@ function leadsInRangeRaw(start,end){
 function getMetaRowsInRange(start,end){
   return S.metaRows.filter(r=>r.date>=start&&r.date<=end);
 }
+// As tabelas de Campanhas e Anúncios contam SÓ lead de TRÁFEGO. Uma lead
+// pode carregar UTM de campanha e mesmo assim não ser tráfego — é o caso de
+// quem se cadastra numa página 100% orgânica (LEAD_PATHS_ORGANICOS) com a UTM
+// de um anúncio ainda grudada no link, ou de quem vem com utm_source próprio
+// (e-mail, WhatsApp). Sem este filtro, essas leads entravam na tabela de
+// campanhas mas não no filtro "Tráfego" da Principal, e a aba de campanhas
+// terminava com MAIS leads que a Principal — o contrário do esperado, já que
+// a Principal é que tem a mais as leads de tráfego SEM UTM.
+function ehLeadDeTrafego(l){ return l.channel==="trafego"; }
 function getLeadsRowsForCamp(start,end,campName){
-  return S.leadsRows.filter(l=>l.date>=start&&l.date<=end&&l.campName===campName);
+  return S.leadsRows.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
 }
 // Mesma coisa, mas na base SEM dedup — usada só pro GAP: o gerenciador do
 // Meta (actionLeads) não deduplica por contato, então comparar contra a
 // contagem já deduplicada infla o GAP artificialmente. Mesmo critério do
 // GAP diário da aba Principal (ver getDaily).
 function getLeadsRawForCamp(start,end,campName){
-  return S.leadsRowsRaw.filter(l=>l.date>=start&&l.date<=end&&l.campName===campName);
+  return S.leadsRowsRaw.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
 }
 function getLeadsRowsForAd(start,end,adName,campFilter){
   return S.leadsRows.filter(l=>{
+    if(!ehLeadDeTrafego(l))return false;
     if(l.date<start||l.date>end)return false;
     if(l.adName!==adName)return false;
     if(campFilter&&campFilter.size>0&&!campFilter.has(l.campName))return false;
@@ -5609,6 +5619,7 @@ window.MDI = {
   drawMetricBar,
   drawMetricLine,
   drawMultiLine,
+  ehLeadDeTrafego,
   ehUrlLead,
   escolheUrlLead,
   extractIdSuffix,
