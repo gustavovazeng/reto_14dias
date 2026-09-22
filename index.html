@@ -258,7 +258,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer;fi
       <div class="funil-opt" id="fopt-dist" onclick="selectFunil('dist')"><span class="fopt-dot"></span>Finanzas - Distribuição conteúdo</div>
       <div class="funil-opt" id="fopt-aquec" onclick="selectFunil('aquec')"><span class="fopt-dot"></span>Finanzas - Aquecimento Base</div>
       <div class="funil-opt" id="fopt-feo" onclick="selectFunil('feo')"><span class="fopt-dot"></span>Finanzas - FEO</div>
-      <div class="funil-opt" id="fopt-mdi" onclick="selectFunil('mdi')"><span class="fopt-dot"></span>MDI - mdi_set26</div>
+      <div class="funil-opt" id="fopt-mdi" onclick="selectFunil('mdi')"><span class="fopt-dot"></span>MDI - mdi_out26</div>
     </div>
   </div>
 
@@ -301,7 +301,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer;fi
   <div id="page-resumo"          class="page"></div>
 </div>
 
-<!-- ═══ mdi_set26 (gerado por mdi_set26/_embed_no_raiz.py — não edite à mão) ═══ -->
+<!-- ═══ mdi_out26 (gerado por mdi_out26/_embed_no_raiz.py — não edite à mão) ═══ -->
 <style>
 #mdi-root *, #mdi-root *::before, #mdi-root *::after{box-sizing:border-box;margin:0;padding:0}
 #mdi-root{
@@ -514,7 +514,7 @@ var document = {
 };
 
 /* ════════════════════════════════════════════════════════════════════════
-   mdi_set26 — Captação de Leads — Dashboard
+   mdi_out26 — Captação de Leads — Dashboard
    Fonte de dados: planilha viva do Google Sheets, buscada em tempo real via
    endpoint público do Google Visualization API (gviz) — sem embutir CSV no
    HTML. A planilha precisa estar compartilhada como "qualquer pessoa com o
@@ -523,7 +523,7 @@ var document = {
      • Base leads            → leads reais capturados no funil (quiz, faixa,
        origem via UTM, dados demográficos)
 
-   Adaptado do dashboard do tdo_ago26. Diferenças do mdi_set26:
+   Adaptado do dashboard do tdo_ago26. Diferenças do mdi_out26:
      • TODOS os valores em DÓLAR — o gasto do Meta Ads é convertido pela
        moeda da conta de anúncios (ver metaSpendToUSD), mesma regra dos
        dashboards do Reto e do FEO.
@@ -531,7 +531,7 @@ var document = {
      • Sem os KPIs "% conhece o Ramon" e "% conhece a Aliança Divergente".
      • Pesquisa de qualificação em espanhol, com 6 perguntas (ver SCORE_COLS).
 
-   Metas do mdi_set26 aplicadas em todas as abas de captação de leads
+   Metas do mdi_out26 aplicadas em todas as abas de captação de leads
    (Principal, Anúncios, Métricas do tráfego, Leads, Planejado/Realizado e
    Resumo diário). Investimento e Cadastros seguem sem meta própria — o
    comparativo vem do planejamento diário (planoDiario).
@@ -545,17 +545,17 @@ var document = {
 // `const`, justamente pra permitir a troca) e recarrega os dados do zero.
 const FUNIS = {
   mdi: {
-    key:"mdi", label:"mdi_set26", status:"ativo",
-    // Planilha "Base dash mdi_set26".
-    sheetId:"1eFVZnUnkI4KpZ5RxpRj-dr1fXEK5nPqEcC1P_5kgp3E",
-    // Metas do lançamento mdi_set26 — TODOS os valores monetários em DÓLAR.
+    key:"mdi", label:"mdi_out26", status:"ativo",
+    // Planilha "Base dash mdi_out26".
+    sheetId:"1fSAStGvXIlHh4_1LKKdZ2cTwQ-iTLYPr7oXRu5SyPQY",
+    // Metas do lançamento mdi_out26 — TODOS os valores monetários em DÓLAR.
     metaCpl:1.25, // Custo por cadastro AC Tráfego, em USD — menor é melhor
     metasResumo:{
       cpc:      {val:0.28,  higher:false}, // USD — menor é melhor
       ctr:      {val:1.10,  higher:true},  // maior é melhor
       cpm:      {val:3.10,  higher:false}, // USD — menor é melhor
       // Temperatura do público (pelo nome da campanha). "quente" e "frio" são
-      // as duas metas oficiais do mdi_set26; "quenteMorno" continua existindo
+      // as duas metas oficiais do mdi_out26; "quenteMorno" continua existindo
       // como leitura complementar, com a meta herdada do lançamento anterior.
       quente:   {val:60.00, higher:true},  // % público quente — maior é melhor
       frio:     {val:40.00, higher:false}, // % público frio — menor é melhor
@@ -577,7 +577,7 @@ const FUNIS = {
     // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas neste
     // lançamento — null-safe em todo o código de renderização.
     // Aquecimento sem meta por enquanto — as que estavam aqui vinham do
-    // oro_jul25, em real, e não valem pro mdi_set26. Com `null` a página
+    // oro_jul25, em real, e não valem pro mdi_out26. Com `null` a página
     // mostra "sem meta definida ainda", os cartões saem sem cor de status e
     // os gráficos sem a linha tracejada. Pra ligar, é só devolver o objeto:
     //   aquecimentoMetas:{ cpc:{val:X,higher:false}, frequencia:{val:X,higher:true},
@@ -585,7 +585,7 @@ const FUNIS = {
     aquecimentoMetas:null,
     // Lembrete sem meta nenhuma — nem as fixas nem o benchmark por dias que
     // faltavam pra Aula 01. Os valores que estavam aqui vinham do oro_jul25 e
-    // não valem pro mdi_set26. A página e o Resumo diário mostram os números
+    // não valem pro mdi_out26. A página e o Resumo diário mostram os números
     // sem cor de status e sem alvo, do mesmo jeito que o Aquecimento.
     lembreteMetas:null,
     aula01Metas:null,
@@ -601,103 +601,104 @@ const FUNIS = {
     },
     // Carrinho sem metas: não há etapa de fichas e não foi definido alvo de
     // custo por venda. Os cartões do carrinho ficam sem farol.
-    // ── Planejamento de investimento do mdi_set26 ─────────────────────────
-    // Verba total: $10.000, dividida por etapa nos percentuais definidos:
-    //   Cadastros 86,0% = $8.600  ·  Aquecimento 3,0% = $300
-    //   Lembretes  2,0% = $200    ·  Aulas gratuitas = $455
-    //   Grupos VIP 3,5% = $350    ·  Carrinho 1,0% = $100
-    // ⚠️ As Aulas passaram de $450 (4,5%) pra $455 — valores definidos à mão
-    // por aula (155/145/155), então o total do lançamento virou $10.005.
+    // ── Planejamento de investimento do mdi_out26 ─────────────────────────
+    // Verba total: $100.000, mesmos percentuais por etapa do set26:
+    //   Cadastros 86,0% = $86.000  ·  Aquecimento 3,0% = $3.000
+    //   Lembretes  2,0% = $2.000   ·  Aulas 4,5%       = $4.500
+    //   Grupos VIP 3,5% = $3.500   ·  Carrinho 1,0%    = $1.000
     //
-    // As AULAS fogem da curva: os três dias têm valor definido à mão
-    // (155/145/155), sem rampa — é uma agenda de eventos, não uma escalada.
+    // Calendário: Captação 22/09→27/10 · Aquecimento 22/10→27/10 ·
+    // Lembrete 23/10→27/10 · Aulas 27, 28 e 29/10 · Grupo VIP 30/10→01/11 ·
+    // Carrinho 02→05/11. Mesma estrutura do set26 em torno das aulas:
+    // Captação, Aquecimento e Lembrete vão até o dia da Aula 01 inclusive; o
+    // Grupo VIP abre no dia seguinte à Aula 03 e o Carrinho logo depois.
     //
-    // Curva dentro de cada etapa: CRESCENTE e LINEAR — o investimento sobe um
-    // valor FIXO em dólar por dia (não um percentual composto), calibrado pra
-    // que o maior salto dia-a-dia seja no máximo 20% (só do 1º pro 2º dia);
-    // dali em diante o percentual de aumento vai caindo sozinho, porque o
-    // incremento é constante e a base cresce. Isso respeita o teto de 20% e
-    // mantém a curva mais próxima de uma reta do que de uma exponencial.
+    // Curvas herdadas do set26, só reescaladas pra nova verba:
+    //   • Aquecimento (6 dias) e Lembrete (5 dias): rampa CRESCENTE e LINEAR,
+    //     incremento fixo em dólar por dia, salto máximo de 20% do 1º pro 2º
+    //     dia — mesmos valores relativos do set26 ×10.
+    //   • Aulas: proporção 155/145/155 do set26 → $1.533 / $1.434 / $1.533.
+    //   • Grupo VIP: 40% / 40% / 20%.
+    //   • Carrinho: DECRESCENTE, 40% / 30% / 20% / 10%.
     //
-    // A CAPTAÇÃO tem duas regras próprias em cima disso:
-    //   • teto de $950/dia na linha de Captação (não no total do dia — com
-    //     Aquecimento e Lembrete somados, 07/09 chega a $1.026,69);
-    //   • o último dia (08/09, dia da Aula 01) é 60% do dia anterior.
-    // Com o teto, a rampa é uma reta de $510 a $950 em 11 dias (incremento
-    // fixo de $44/dia, salto máximo de 8,6%), e o 12º dia fecha em $570.
-    // Resultado: mais verba nos primeiros dias e menos nos últimos, que é o
-    // ajuste pedido — o dia de abertura saiu de $343 pra $510.
-    //
+    // CAPTAÇÃO: $86.000 em 36 dias (22/09→27/10), curva definida pelo usuário
+    // como % diário da verba de cadastros, em degraus:
+    //   22/09 1,75% · 23→29/09 1,74% · 30/09 2,09% · 01→03/10 2,08% ·
+    //   04→07/10 2,49% · 08→11/10 2,99% · 12→26/10 3,59% · 27/10 2,00%
+    // Os % da planilha estão arredondados e somam 100,03%; cada dia foi
+    // reescalado na mesma proporção (×0,9997) pra o total fechar em $86.000
+    // exatos — diferença de centavos por dia.
     // "leads" = investimento do dia ÷ meta de CPL ($1,25), arredondado.
-    // Total planejado de cadastros: 6.880.
-    //
-    // Calendário: Captação 28/08→08/09 · Aquecimento 03/09→08/09 ·
-    // Lembrete 04/09→08/09 · Aulas 08, 09 e 10/09 · Grupo VIP 11→13/09 ·
-    // Carrinho 14→17/09. O Grupo VIP começa no dia SEGUINTE à Aula 03
-    // (10/09) — antes o plano abria em 10/09 e disputava o dia com ela. Captação, Aquecimento e Lembrete vão até o dia da
-    // Aula 01 (08/09) inclusive.
-    //
-    // Replanejamento de 04/09: o Aquecimento só entrou no ar em 03/09 (era
-    // 31/08) e o Lembrete em 04/09 (era 01/09). As duas verbas seguem as
-    // mesmas ($300 e $200), redistribuídas nas janelas mais curtas — por isso
-    // o valor diário subiu: o Aquecimento perdeu 3 dias e o Lembrete 3.
     planoDiario:[
-      {date:"2026-08-28", investimento:510.00, leads:408},
-      {date:"2026-08-29", investimento:554.00, leads:443},
-      {date:"2026-08-30", investimento:598.00, leads:478},
-      {date:"2026-08-31", investimento:642.00, leads:514},
-      {date:"2026-09-01", investimento:686.00, leads:549},
-      {date:"2026-09-02", investimento:730.00, leads:584},
-      {date:"2026-09-03", investimento:774.00, leads:619},
-      {date:"2026-09-04", investimento:818.00, leads:654},
-      {date:"2026-09-05", investimento:862.00, leads:690},
-      {date:"2026-09-06", investimento:906.00, leads:725},
-      {date:"2026-09-07", investimento:950.00, leads:760},
-      {date:"2026-09-08", investimento:570.00, leads:456},
+      {date:"2026-09-22", investimento:1504.55, leads:1204},
+      {date:"2026-09-23", investimento:1495.95, leads:1197},
+      {date:"2026-09-24", investimento:1495.95, leads:1197},
+      {date:"2026-09-25", investimento:1495.95, leads:1197},
+      {date:"2026-09-26", investimento:1495.95, leads:1197},
+      {date:"2026-09-27", investimento:1495.95, leads:1197},
+      {date:"2026-09-28", investimento:1495.95, leads:1197},
+      {date:"2026-09-29", investimento:1495.95, leads:1197},
+      {date:"2026-09-30", investimento:1796.86, leads:1437},
+      {date:"2026-10-01", investimento:1788.26, leads:1431},
+      {date:"2026-10-02", investimento:1788.26, leads:1431},
+      {date:"2026-10-03", investimento:1788.26, leads:1431},
+      {date:"2026-10-04", investimento:2140.76, leads:1713},
+      {date:"2026-10-05", investimento:2140.76, leads:1713},
+      {date:"2026-10-06", investimento:2140.76, leads:1713},
+      {date:"2026-10-07", investimento:2140.76, leads:1713},
+      {date:"2026-10-08", investimento:2570.63, leads:2057},
+      {date:"2026-10-09", investimento:2570.63, leads:2057},
+      {date:"2026-10-10", investimento:2570.63, leads:2057},
+      {date:"2026-10-11", investimento:2570.63, leads:2057},
+      {date:"2026-10-12", investimento:3086.47, leads:2469},
+      {date:"2026-10-13", investimento:3086.47, leads:2469},
+      {date:"2026-10-14", investimento:3086.47, leads:2469},
+      {date:"2026-10-15", investimento:3086.47, leads:2469},
+      {date:"2026-10-16", investimento:3086.47, leads:2469},
+      {date:"2026-10-17", investimento:3086.47, leads:2469},
+      {date:"2026-10-18", investimento:3086.47, leads:2469},
+      {date:"2026-10-19", investimento:3086.47, leads:2469},
+      {date:"2026-10-20", investimento:3086.47, leads:2469},
+      {date:"2026-10-21", investimento:3086.47, leads:2469},
+      {date:"2026-10-22", investimento:3086.47, leads:2469},
+      {date:"2026-10-23", investimento:3086.47, leads:2469},
+      {date:"2026-10-24", investimento:3086.47, leads:2469},
+      {date:"2026-10-25", investimento:3086.47, leads:2469},
+      {date:"2026-10-26", investimento:3086.54, leads:2469},
+      {date:"2026-10-27", investimento:1719.48, leads:1376},
     ],
     planoAquecimento:[
-      {date:"2026-09-03", investimento:33.44},
-      {date:"2026-09-04", investimento:40.07},
-      {date:"2026-09-05", investimento:46.69},
-      {date:"2026-09-06", investimento:53.31},
-      {date:"2026-09-07", investimento:59.93},
-      {date:"2026-09-08", investimento:66.56},
+      {date:"2026-10-22", investimento:334.40},
+      {date:"2026-10-23", investimento:400.70},
+      {date:"2026-10-24", investimento:466.90},
+      {date:"2026-10-25", investimento:533.10},
+      {date:"2026-10-26", investimento:599.30},
+      {date:"2026-10-27", investimento:665.60},
     ],
-    planoAquecimentoTotal:300,
     planoLembrete:[
-      {date:"2026-09-04", investimento:28.65},
-      {date:"2026-09-05", investimento:34.33},
-      {date:"2026-09-06", investimento:40.00},
-      {date:"2026-09-07", investimento:45.67},
-      {date:"2026-09-08", investimento:51.35},
+      {date:"2026-10-23", investimento:286.50},
+      {date:"2026-10-24", investimento:343.30},
+      {date:"2026-10-25", investimento:400.00},
+      {date:"2026-10-26", investimento:456.70},
+      {date:"2026-10-27", investimento:513.50},
     ],
     planoAulas:[
-      {date:"2026-09-08", investimento:155.00},
-      {date:"2026-09-09", investimento:145.00},
-      {date:"2026-09-10", investimento:155.00},
+      {date:"2026-10-27", investimento:1533.00},
+      {date:"2026-10-28", investimento:1434.00},
+      {date:"2026-10-29", investimento:1533.00},
     ],
-    // O CARRINHO é DECRESCENTE: 40% / 30% / 20% / 10% pelos quatro dias. A
-    // abertura carrega o peso e o investimento afunila até o fechamento —
-    // o oposto da rampa das etapas de captação.
-    //
-    // O GRUPO VIP também foge da curva: a verba é rateada em 40% / 40% / 20%
-    // pelos três dias (os dois primeiros carregam o peso e o último afunila
-    // pra abertura do Carrinho), em vez da rampa crescente das demais etapas.
-    //
-    // Grupo VIP: etapa nova do mdi_set26. Entra só no planejamento (linha do
-    // "Resumo por etapa" + tabela diária no Planejado/Realizado); não tem
-    // página própria. O realizado vem das campanhas cujo nome contém "vip"
-    // (ver campaignStage).
+    // Grupo VIP: sem página própria; entra no Resumo por etapa e no
+    // Planejado/Realizado. Realizado = campanhas com "vip" no nome.
     planoGrupoVip:[
-      {date:"2026-09-11", investimento:140.00},
-      {date:"2026-09-12", investimento:140.00},
-      {date:"2026-09-13", investimento:70.00},
+      {date:"2026-10-30", investimento:1400.00},
+      {date:"2026-10-31", investimento:1400.00},
+      {date:"2026-11-01", investimento:700.00},
     ],
     planoCarrinho:[
-      {date:"2026-09-14", investimento:40.00},
-      {date:"2026-09-15", investimento:30.00},
-      {date:"2026-09-16", investimento:20.00},
-      {date:"2026-09-17", investimento:10.00},
+      {date:"2026-11-02", investimento:400.00},
+      {date:"2026-11-03", investimento:300.00},
+      {date:"2026-11-04", investimento:200.00},
+      {date:"2026-11-05", investimento:100.00},
     ],
   },
 };
@@ -705,7 +706,7 @@ const FUNIS = {
 // ── Fonte de dados: Google Sheets (planilha viva) ──────────────────────────
 // Todas `let` (não `const`): switchFunil() reatribui pro funil selecionado.
 let SHEET_ID = FUNIS.mdi.sheetId;
-// Abas que JÁ EXISTEM na planilha do mdi_set26.
+// Abas que JÁ EXISTEM na planilha do mdi_out26.
 const SHEET_META_NAME = "Base meta - Captação";
 // A aba "Base leads" crua sai da exportação com as colunas desalinhadas (os
 // valores de utm caem em colunas com nome de pergunta). A aba "Base leads
@@ -737,7 +738,7 @@ const SHEET_AULAS_NAME = "Base Aulas";
 // Mídia do Grupo VIP — mesmas colunas das demais etapas, com "Account Name".
 const SHEET_GRUPO_VIP_NAME = "Grupo VIP";
 // Carrinho: só DUAS abas — mídia da etapa e vendas do checkout. Não existe
-// etapa de fichas de interesse no mdi_set26.
+// etapa de fichas de interesse no mdi_out26.
 const SHEET_CARRINHO_META_NAME = "Base Carrinho";   // mídia (tráfego) do carrinho
 const SHEET_CARRINHO_VENDAS_NAME = "Base Vendas";   // vendas (webhook do checkout)
 const SHEET_LIVES_CAPTACAO_NAME = null;    // "Base Meta - lives captação"
@@ -789,7 +790,7 @@ async function fetchSheetCSVOpt(sheetName, timeoutMs=20000){
 
 // ── Metas/planejamento do funil ativo ───────────────────────────────────────
 // Todas `let`: switchFunil() reatribui pra copiar os dados do FUNIS[key]
-// selecionado. O valor inicial vem do funil default (mdi_set26).
+// selecionado. O valor inicial vem do funil default (mdi_out26).
 let META_CPL = FUNIS.mdi.metaCpl;
 let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
@@ -880,7 +881,6 @@ const S = {
   leadsTemp:"todos",         // filtro de temperatura exclusivo da aba Análise qualificação
   metricasTemp:"todos",      // filtro de temperatura exclusivo da aba Métricas do Tráfego
   showGapVolume:false,       // liga/desliga a linha de GAP no gráfico "Volume de leads"
-
   faixaSel:{A:true,B:true,C:true,D:true}, // quais faixas aparecem no gráfico "% Faixa por dia"
   currentPage:"captacao",     // "captacao" | "aquecimento" | "lembrete" | "aulas" | "carrinho" | "planoreal" | "resumo"
   currentSubPage:"principal", // só usado quando currentPage==="captacao": "principal" | "anuncios" | "metricas" | "leads"
@@ -1101,7 +1101,7 @@ function toISOLead(s){
     return {ms,date:msToISO(ms-3*60*60*1000)};
   }
   // Formato "YYYY-MM-DD HH:MM:SS" (com espaço, sem "T" nem fuso) — é como a
-  // Base leads do mdi_set26 grava "Fecha de creación". Já vem na hora local
+  // Base leads do mdi_out26 grava "Fecha de creación". Já vem na hora local
   // da conta, então NÃO leva o -3h que o ramo ISO-UTC acima aplica.
   const isoLocal=str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
   if(isoLocal){
@@ -1288,11 +1288,11 @@ function extractNamePrefix(s){
 // resposta vale uma pontuação, a soma das 6 é o score e o score cai numa das
 // 4 faixas (A/B/C/D) pelos cortes de FAIXA_CORTES.
 //
-// A tabela de pontos e os cortes abaixo são os oficiais do mdi_set26.
+// A tabela de pontos e os cortes abaixo são os oficiais do mdi_out26.
 // SCORE_TABELA_PRONTA confere sozinha se não ficou nenhum buraco: se algum
 // ponto ou corte virar null, o dashboard para de classificar e mostra "—" em
 // toda métrica de faixa, em vez de contar todo mundo como não-classificado
-// (a Base leads do mdi_set26 não tem coluna "faixa" pronta pra servir de
+// (a Base leads do mdi_out26 não tem coluna "faixa" pronta pra servir de
 // fallback).
 //
 // As chaves são as respostas JÁ NORMALIZADAS (minúscula, sem acento, sem
@@ -1404,7 +1404,7 @@ function pontosResposta(chave,resposta){
   const alias=SCORE_ALIASES[n];
   return alias!==undefined?tabela[alias]:undefined;
 }
-// Cortes oficiais das faixas do mdi_set26. Limite INFERIOR inclusivo,
+// Cortes oficiais das faixas do mdi_out26. Limite INFERIOR inclusivo,
 // superior exclusivo — é isso que garante que cada lead caia em uma única
 // faixa, sem sobreposição nas bordas (score 225 exato é A, nunca B).
 // Amplitude possível do score: 98,82 (pior resposta em tudo) a 358,71.
@@ -1548,7 +1548,7 @@ function stageMetrics(rows){
 }
 
 // ── Carrinho: vendas (Base Vendas) ──────────────────────────────────────────
-// O mdi_set26 NÃO tem etapa de fichas de interesse. O carrinho aqui é só
+// O mdi_out26 NÃO tem etapa de fichas de interesse. O carrinho aqui é só
 // TRÁFEGO (aba "Base Carrinho", a mídia da etapa) e VENDA (aba "Base Vendas",
 // a exportação do checkout da Hotmart). A venda já chega com a própria
 // atribuição nos campos de origem do checkout — não existe mais o casamento
@@ -1738,7 +1738,7 @@ function processCarrinhoVendas(rowsRaw){
 //  • /mdi-obrigado-forms-newls → pesquisa, acessada só DEPOIS do cadastro
 // Comparação normalizada (sem barra final e sem querystring) pra não
 // escapar por causa de "/mdi-obrigado-forms-newls/" ou "?email=...".
-// Paths do mdi_set26:
+// Paths do mdi_out26:
 //   • página de captura  → /mdi-2026-setp-captura-v1/  (é a que CONTA; é o
 //     único "Page Path" que aparece na Base GA4 hoje)
 //   • página de obrigado → /mdi-obrigado-forms-newls/  (a pesquisa, acessada
@@ -1751,8 +1751,9 @@ const GA4_PATHS_EXCLUIDOS = ["/mdi-obrigado-forms-newls"];
 // verdade ("/mdi-2026-setp-captura-v1/"). Sem esta ponte a tabela por página
 // mostraria as sessões de um lado com 0 cadastros e os cadastros do outro com
 // 0 sessões, e a conversão por página ficaria zerada nas duas linhas.
+// mdi_out26: a ponte jun-v6→setp-v1 era específica das páginas do mdi_out26.
+// Lançamento novo começa sem apelidos; acrescente aqui se reaparecer o caso.
 const GA4_PATH_ALIASES = {
-  "/mdi-2026-jun-captura-v6":"/mdi-2026-setp-captura-v1",
 };
 function ga4PathCanonico(p){
   const v=normPath(p);
@@ -2475,7 +2476,7 @@ const SUB_TABS_CARRINHO=[
 function renderFunilBadge(){
   const wrap=document.getElementById("funil-wrap");if(!wrap)return;
   const cur=FUNIS[S.funilAtivo];
-  // mdi_set26 tem um único funil: o seletor vira um selo estático (sem
+  // mdi_out26 tem um único funil: o seletor vira um selo estático (sem
   // caret nem dropdown). Se um dia entrar outro lançamento em FUNIS, o
   // dropdown volta sozinho.
   const multi=Object.keys(FUNIS).length>1;
@@ -2882,7 +2883,6 @@ function barRow(lbl,n,total,color){
 function setPrincipalChannel(c){ S.principalChannel=c; renderPrincipal(); }
 function setPrincipalTemp(t){ S.principalTemp=t; renderPrincipal(); }
 function toggleGapVolume(){ S.showGapVolume=!S.showGapVolume; renderPrincipal(); }
-
 function toggleFaixaSel(letter){ S.faixaSel[letter]=!S.faixaSel[letter]; renderPrincipal(); }
 // Botões-seletor de faixa (A/B/C/D) — mesmo padrão visual do botão de
 // GAP, mas em vez de liga/desliga único, cada faixa pode ser ligada/desligada
@@ -2946,7 +2946,7 @@ function renderPrincipal(){
   el.innerHTML=`
     <div class="hdr" style="margin-bottom:6px">
       <div>
-        <div class="hdr-title">mdi_set26 — Captação de Leads</div>
+        <div class="hdr-title">mdi_out26 — Captação de Leads</div>
         <div class="hdr-sub">atualizado em: ${S.updated||"—"}${daily.length>0?` · ${daily.length} dias no período`:""} · canal: ${chLabel} · temperatura: ${tempLabel}</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
@@ -3045,7 +3045,7 @@ function renderPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
   requestAnimationFrame(()=>{
     if(ch!=="organico"){
       const box1=document.getElementById("c-dual")?.parentElement;
@@ -3284,7 +3284,7 @@ function renderAnuncios(){
         <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
       </div>
     </div>`:""}
-    <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Leads (Qualidade) ──────────────────────────────────────────────
@@ -3374,7 +3374,7 @@ function renderLeads(){
       ${demoBlock(SCORE_LABELS.tecnica,"tecnica",SCORE_COLS.tecnica)}
       ${demoBlock(SCORE_LABELS.renda,"renda",SCORE_COLS.renda)}
     </div>
-    <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Resumo diário ──────────────────────────────────────────────────
@@ -3522,7 +3522,7 @@ Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}:\t${fPctOrDash(m.txCon
 Connect Rate:\t${fPctOrDash(m.connectRate)}\t${metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher)} (🎯: ${METAS_RESUMO.connectRate.val}%)`}`;
   }
   const resumoText=
-`*mdi_set26 - Resumo consolidado*
+`*mdi_out26 - Resumo consolidado*
 
 ${textBlock("*-> Total*",tot,"",ct,planoAteHoje(),planoTotalLancamento())}
 ---------------------
@@ -3534,7 +3534,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     <div class="hdr" style="margin-bottom:16px">
       <div>
         <div class="hdr-title">Resumo diário</div>
-        <div class="hdr-sub">mdi_set26 · Captação · ontem: ${fDateBR(yest)} · hoje: ${fDateBR(today)}</div>
+        <div class="hdr-sub">mdi_out26 · Captação · ontem: ${fDateBR(yest)} · hoje: ${fDateBR(today)}</div>
       </div>
       <button onclick="MDI.copyResumo()" class="btn-copy-resumo" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:rgba(59,130,246,.18);border:1px solid rgba(96,165,250,.35);color:#93c5fd;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif">
         📋 Copiar resumo
@@ -3558,7 +3558,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
     ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasTrafego||0} de tráfego · ${S.carrinhoVendasOutras||0} orgânica(s)/outras)`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
-    <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
   el._resumoText=resumoText;
   restoreStageFocus(_fid);
 }
@@ -3811,7 +3811,7 @@ function renderMetricasTrafego(){
       <div style="position:relative"><canvas id="c-connect"></canvas><div class="tip" id="t-connect"></div></div>
     </div>
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">mdi_set26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     // Todos os gráficos desta aba em azul (CHART_INV) — antes cada métrica
@@ -3850,11 +3850,11 @@ function renderStagePage(pageId,label,planArr){
         <div class="hdr-sub">em construção</div>
       </div>
     </div>
-    <div class="foot">mdi_set26 · ${label}</div>`;
+    <div class="foot">mdi_out26 · ${label}</div>`;
 }
 
 // ── Carrinho: Principal (KPIs + gráficos) ───────────────────────────────────
-// A etapa de Carrinho tem só DUAS pernas no mdi_set26: TRÁFEGO (aba própria
+// A etapa de Carrinho tem só DUAS pernas no mdi_out26: TRÁFEGO (aba própria
 // "Base Carrinho", com investimento, cliques, impressões e checkouts
 // iniciados) e VENDA (aba "Base Vendas", com o valor e a origem de cada
 // compra). Não existe ficha de interesse no meio — quem clica vai direto pro
@@ -3987,7 +3987,7 @@ function renderCarrinhoPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err">Nenhum dado no período selecionado — o Carrinho ainda não começou ou os dados ainda não chegaram na planilha.</div>`:""}
-    <div class="foot">mdi_set26 · Carrinho · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     const box1=document.getElementById("c-carrinho-dual")?.parentElement;
@@ -4207,7 +4207,7 @@ function renderCarrinhoVendas(){
       </table>
     </div>
 
-    <div class="foot">mdi_set26 · Carrinho · Vendas</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Vendas</div>`;
 
   requestAnimationFrame(()=>{
     const box=document.getElementById("c-carrinho-vendas")?.parentElement;
@@ -4492,7 +4492,7 @@ function renderCarrinhoAnuncios(){
       </div>
       <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>`:""}
-    <div class="foot">mdi_set26 · Carrinho · Campanhas/Anúncios</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Campanhas/Anúncios</div>`;
 }
 
 // ── Helpers compartilhados dos resumos de etapa (Aquecimento/Lembrete/Aulas) ─
@@ -4595,7 +4595,7 @@ function aquecimentoResumoText(){
   const planClicks=(plan!=null&&metas)?Math.round(plan/metas.cpc.val):null;
   const bm=(v,meta,higher,fmt)=>metas?`${metaEmojiGlobal(v,meta,higher)} Plan consolidado: ${fmt(meta)}`:"sem meta ainda";
   const planTxt=plan!=null?`(planej até hoje: ${fUSD(plan)})`:"(sem plano p/ este período)";
-  return `*mdi_set26 - Resumo Aquecimento*${metas?" - benchmark":""}
+  return `*mdi_out26 - Resumo Aquecimento*${metas?" - benchmark":""}
 
 ${first?fDateBR(first):"—"}\t${fDateBR(todayISO())}
 
@@ -4645,7 +4645,7 @@ function lembreteResumoText(){
   const freq=alcance>0?m.impressions/alcance:null;
   const plan=planoAcumAteHoje(PLANO_LEMBRETE);
   const planTxt=plan!=null?`(planej até hoje: ${fUSD(plan)})`:"(sem plano p/ este período)";
-  return `*mdi_set26 - Resumo Lembrete*
+  return `*mdi_out26 - Resumo Lembrete*
 
 Date\t${fDateBR(todayISO())}
 
@@ -4758,7 +4758,7 @@ function grupoVipResumoText(){
   const M=GRUPO_VIP_METAS, m=grupoVipMetrics();
   const num=v=>String(v).replace(".",",");
   const f=(v,k)=>v!=null?metaEmojiGlobal(v,M[k].val,M[k].higher):"⚪";
-  return `*mdi_set26 - Resumo Grupo VIP*
+  return `*mdi_out26 - Resumo Grupo VIP*
 
 Investimento: ${fUSD(m.spend)}
 Cliques no link: ${m.clicks.toLocaleString("pt-BR")}
@@ -4777,7 +4777,7 @@ function aulasResumoHtml(){
   return `${aulaResumoHtml(1,AULA01_METAS)}${aulaResumoHtml(2,null)}${aulaResumoHtml(3,null)}`;
 }
 function aulasResumoText(){
-  return `*mdi_set26 - Resumo Aulas*
+  return `*mdi_out26 - Resumo Aulas*
 3 aulas · identificadas pelo nome da campanha
 
 ${aulaResumoTextBlock(1,AULA01_METAS)}
@@ -4833,7 +4833,7 @@ CPC:\t${m.cpc!=null?fUSD(m.cpc):fUSD(0)}
 CTR:\t${m.ctr!=null?fPct(m.ctr):fPct(0)}
 CPM:\t${m.cpm!=null?fUSD(m.cpm):fUSD(0)}`;
   }
-  return `mdi_set26 | Carrinho
+  return `mdi_out26 | Carrinho
 
 ${bloco("Total - Consolidado",carrinhoBloco(null,null))}
 ---------------------
@@ -5068,7 +5068,7 @@ function renderAquecimento(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aquecimento")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("aquecimento",rows,AQUECIMENTO_METAS,"aquecimento")}
-    <div class="foot">mdi_set26 · Aquecimento</div>`;
+    <div class="foot">mdi_out26 · Aquecimento</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("aquecimento",rows,AQUECIMENTO_METAS));
 }
@@ -5091,7 +5091,7 @@ function renderLembrete(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("lembrete")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("lembrete",rows,LEMBRETE_METAS,"lembrete")}
-    <div class="foot">mdi_set26 · Lembrete</div>`;
+    <div class="foot">mdi_out26 · Lembrete</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("lembrete",rows,LEMBRETE_METAS));
 }
@@ -5144,7 +5144,7 @@ function renderAulas(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aulas")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta aula.</div>`:stageAnalysisHtml(cfg.scope,rows,cfg.metas,cfg.alcanceKey)}
-    <div class="foot">mdi_set26 · Aulas · ${cfg.label}</div>`;
+    <div class="foot">mdi_out26 · Aulas · ${cfg.label}</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts(cfg.scope,rows,cfg.metas,"bar"));
 }
@@ -5354,7 +5354,7 @@ function renderPlanoReal(){
     ${stageTable("Grupo VIP","Grupo VIP",PLANO_GRUPO_VIP)}
     ${stageTable("Carrinho","Carrinho",PLANO_CARRINHO)}
 
-    <div class="foot">mdi_set26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
 }
 
 // ── Main render ───────────────────────────────────────────────────────────
@@ -5645,7 +5645,7 @@ window.MDI = {
 };
 })();
 </script>
-<!-- ═══ fim mdi_set26 ═══ -->
+<!-- ═══ fim mdi_out26 ═══ -->
 
 <script>
 
@@ -5853,14 +5853,14 @@ function renderHeader(){
   const isMdi=S.currentFunil==="mdi";   // MDI_HOOK
   // Funil selector label
   const fn=document.getElementById("funil-name");
-  if(fn) fn.textContent=isMdi?"MDI - mdi_set26":isDist?"Finanzas - Distribuição conteúdo":isAquec?"Finanzas - Aquecimento Base":isFeo?"Planilla Finanzas en Orden":"Finanzas - Reto 14 Dias";
+  if(fn) fn.textContent=isMdi?"MDI - mdi_out26":isDist?"Finanzas - Distribuição conteúdo":isAquec?"Finanzas - Aquecimento Base":isFeo?"Planilla Finanzas en Orden":"Finanzas - Reto 14 Dias";
   const fs=document.getElementById("funil-status"); if(fs) fs.textContent="ativo";
   // Funil dropdown active state
   ["reto","dist","aquec","feo","mdi"].forEach(f=>{
     const el=document.getElementById("fopt-"+f);
     if(el) el.classList.toggle("fopt-active", S.currentFunil===f);
   });
-  // MDI_HOOK — o dashboard do mdi_set26 traz o próprio cabeçalho (abas e
+  // MDI_HOOK — o dashboard do mdi_out26 traz o próprio cabeçalho (abas e
   // seletor de período) dentro do container dele, então aqui a raiz esconde
   // os dela e mantém só o seletor de projeto. Nada disso roda nos outros funis.
   if(isMdi){ mdiChrome(true); return; }
@@ -5885,7 +5885,7 @@ function renderHeader(){
 }
 
 // ── MDI_HOOK ──────────────────────────────────────────────────────────────
-// Liga/desliga o "modo mdi_set26": esconde as abas, os presets de período e o
+// Liga/desliga o "modo mdi_out26": esconde as abas, os presets de período e o
 // botão de atualizar da raiz (o mdi tem os próprios) e troca as páginas da
 // raiz pelo container #mdi-root. Só é chamada quando o funil é "mdi" — os
 // outros quatro seguem exatamente como antes.
@@ -6946,7 +6946,7 @@ function switchFunil(id){
   const aquecPages=["principal","anuncios","resumo"];
   const retoPages=["principal","trafego","funil","anuncios","resumo"];
   const feoPages=["principal","trafego","funil","anuncios","resumo"];
-  // MDI_HOOK — o mdi_set26 tem páginas próprias; renderHeader cuida da troca.
+  // MDI_HOOK — o mdi_out26 tem páginas próprias; renderHeader cuida da troca.
   if(id==="mdi"){ render(); return; }
   if(prev==="mdi") mdiChrome(false);
   const valid=id==="dist"?distPages:id==="aquec"?aquecPages:id==="feo"?feoPages:retoPages;
@@ -6955,7 +6955,7 @@ function switchFunil(id){
 }
 
 function navTo(page){
-  if(S.currentFunil==="mdi") return;   // MDI_HOOK — a navegação do mdi_set26 é própria
+  if(S.currentFunil==="mdi") return;   // MDI_HOOK — a navegação do mdi_out26 é própria
   S.currentPage=page;
   window.scrollTo(0,0);
   document.querySelectorAll(".page").forEach(el=>{
@@ -9646,7 +9646,7 @@ function copyResumo(){
 
 function render(){
   renderHeader();
-  if(S.currentFunil==="mdi") return;   // MDI_HOOK — o mdi_set26 se desenha sozinho
+  if(S.currentFunil==="mdi") return;   // MDI_HOOK — o mdi_out26 se desenha sozinho
   const ld=document.getElementById("loading");
   if(S.firstLoad&&S.loading){ld.style.display="flex";return;}
   ld.style.display="none";
