@@ -6161,7 +6161,8 @@ const SHEET_ID     = "1saA8fl4L70Fmoxj3YuVB3D29fbGGMPU8i0hQpnoldlE";
 const FEO_SHEET_ID = "1FFn_-ISWTj7FBsXxoVIRfFjBhlB2GU1kXK2HeUTtD_o";
 const GAPI_KEY  = "AIzaSyDFyD63YrWNWSX2gjZWdVD5Bq8uoazXzbE";
 const SHEET_META = "Base Meta - Cero";        // dados do gerenciador (Meta Ads)
-const SHEET_CERO = "Vendas Hotmart - Cero";   // vendas reais (Hotmart)
+const SHEET_CERO     = "Vendas Hotmart - Cero";       // upsells + vendas históricas do Cero VSL
+const SHEET_CERO_VSL = "Vendas Hotmart - Cero VSL";  // nova aba dedicada ao Cero VSL (oferta 47eb3ha1)
 
 // Nome do dashboard (usado nos títulos e nos resumos copiáveis)
 const FUNIL_NOME = "Finanzas - Cero";
@@ -6717,7 +6718,7 @@ async function loadData(force=false){
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
   // Meta + abas de vendas dos produtos ativos (cada aba buscada uma vez só)
-  const _salesTabs=[...new Set(FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean))];
+  const _salesTabs=[...new Set([...FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean), SHEET_CERO_VSL])];
   const [mj, ..._salesJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     ..._salesTabs.map(t=>_fetchSafe(t,"Z",5000)),
@@ -6865,8 +6866,11 @@ async function loadData(force=false){
       const ok=new Set(p.offers.map(o=>o.toLowerCase()));
       return _parsedTabs[p.sheet].filter(r=>ok.has((r.offerCode||"").toLowerCase()));
     };
-    // ── Vendas front-end (Cero a Inversor · oferta 3c55807d) ──────────────
-    const retoRows=rowsOf(FUNIL_PRODUTOS[0]);
+    // ── Vendas front-end (Cero a Inversor) ───────────────────────────────
+    // Combina: histórico em SHEET_CERO (oferta 3c55807d) + nova aba SHEET_CERO_VSL (oferta 47eb3ha1)
+    if(!_parsedTabs[SHEET_CERO_VSL]) _parsedTabs[SHEET_CERO_VSL]=parseHotmartRows(salesByTab[SHEET_CERO_VSL]||{values:[]});
+    const _vslRows=_parsedTabs[SHEET_CERO_VSL].filter(r=>!r.offerCode||r.offerCode==="47eb3ha1");
+    const retoRows=[...rowsOf(FUNIL_PRODUTOS[0]),..._vslRows];
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
