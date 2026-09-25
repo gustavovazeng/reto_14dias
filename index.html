@@ -3087,6 +3087,106 @@ function tempToggle(){
   return `<div class="presets">${TP.map(([k,lbl])=>
     `<button class="btn-pre${S.principalTemp===k?" on":""}" onclick="MDI.setPrincipalTemp('${k}')">${lbl}</button>`).join("")}</div>`;
 }
+// ── Funil de performance (aba Principal) ──────────────────────────────────
+// Uma linha só, do investimento ao faturamento, com as taxas de passagem
+// penduradas em cada salto. Respeita os MESMOS filtros da aba Principal
+// (período, canal e temperatura) — não é um consolidado paralelo.
+//
+// De onde vem cada número:
+//   Investimento, impressões e cliques → Base Meta (campanhas de captação)
+//   Page views                         → fonte configurada em FONTE_PAGINA
+//                                        ("gerenciador" = Action Landing Page
+//                                        View; "GA4" = sessões da Base GA4)
+//   Leads                              → Base leads, já deduplicada
+//   Vendas e faturamento               → Base Vendas (checkout), no período
+// Resposta canônica da pesquisa (aplica os apelidos de SCORE_ALIASES) —
+// usada pelos três indicadores de perfil que ficam sob o CPL.
+function respCanonica(v){ const n=normResposta(v); return SCORE_ALIASES[n]||n; }
+const FUNIL_PERFIL = {
+  desempEst:{campo:"situacao",    label:"Desemp.+Est.", respostas:["estoy desempleado","soy un estudiante"]},
+  semConhec:{campo:"conhecimento",label:"No sé nada",   respostas:["no se nada, quiero empezar"]},
+  ate300:   {campo:"renda",       label:"Hasta 300$",   respostas:["no tengo ingresos","hasta mxn 5600 ($300 usd) por mes"]},
+};
+function funilMetrics(start,end,channel,temp){
+  const m=sumMetaRows(metaRowsFiltered(start,end,temp));
+  const rows=leadsForTemp(leadsForChannel(leadsInRange(start,end),channel),temp);
+  const leads=rows.length;
+  const spend=channel==="organico"?0:m.spend;
+  const impressions=m.impressions||0, clicks=m.clicks||0;
+  const pageViews=paginaMetrics(start,end,temp).sessions||0;
+  const vendasArr=carrinhoVendasInRange(start,end);
+  const vendas=vendasArr.length;
+  const faturamento=vendasArr.reduce((a,v)=>a+(v.valorUSD||0),0);
+  // Perfil: sempre sobre quem RESPONDEU a pesquisa (mesma convenção das faixas).
+  const q=rows.filter(l=>l.quizOk);
+  const perfil={};
+  for(const k in FUNIL_PERFIL){
+    const cfg=FUNIL_PERFIL[k];
+    const n=q.filter(l=>cfg.respostas.includes(respCanonica(l[cfg.campo]))).length;
+    perfil[k]=q.length>0?(n/q.length)*100:null;
+  }
+  return{spend,impressions,clicks,pageViews,leads,vendas,faturamento,quizN:q.length,perfil,
+    ctr:impressions>0?(clicks/impressions)*100:null,
+    cpm:impressions>0?(spend/impressions)*1000:null,
+    cpc:clicks>0?spend/clicks:null,
+    connectRate:clicks>0?(pageViews/clicks)*100:null,
+    convPagina:pageViews>0?(leads/pageViews)*100:null,
+    cpl:leads>0?spend/leads:null,
+    convVenda:leads>0?(vendas/leads)*100:null,
+    custoVenda:vendas>0?spend/vendas:null,
+    ticket:vendas>0?faturamento/vendas:null,
+    roas:spend>0?faturamento/spend:null};
+}
+// Caixa principal do funil (valor cheio) e caixa satélite (taxa, tracejada).
+function funilBox(label,valor){
+  return `<div style="min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card)">
+    <div style="font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--hint);white-space:nowrap">${label}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--text-strong);white-space:nowrap">${valor}</div>
+  </div>`;
+}
+function funilSat(label,valor){
+  if(!label)return `<div style="height:46px"></div>`;
+  return `<div style="height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    padding:6px 12px;border:1px dashed rgba(96,165,250,.45);border-radius:9px">
+    <div style="font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:var(--hint);white-space:nowrap">${label}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#93c5fd;white-space:nowrap">${valor}</div>
+  </div>`;
+}
+function funilConector(){
+  return `<div style="display:flex;flex-direction:column;align-self:flex-start;flex:0 0 18px">
+    <div style="height:46px"></div>
+    <div style="height:58px;display:flex;align-items:center"><div style="width:100%;border-top:1px dashed rgba(148,163,184,.35)"></div></div>
+  </div>`;
+}
+function renderFunilHtml(f){
+  const d="—";
+  // [rótulo, valor, satélite de cima, satélite de baixo]
+  const etapas=[
+    ["Gasto dólar", fUSD(f.spend),           null,null, null,null],
+    ["Impressões",  f.impressions.toLocaleString("pt-BR"), null,null, "CPM", f.cpm!=null?fUSD(f.cpm):d],
+    ["Cliques",     f.clicks.toLocaleString("pt-BR"),      "CTR", f.ctr!=null?fPct(f.ctr):d, "CPC", f.cpc!=null?fUSD(f.cpc):d],
+    ["Page views",  f.pageViews.toLocaleString("pt-BR"),   null,null, "Connect rate", f.connectRate!=null?fPct(f.connectRate):d],
+    ["Leads",       f.leads.toLocaleString("pt-BR"),       "Conv. de página", f.convPagina!=null?fPct(f.convPagina):d, null,null],
+    ["CPL",         f.cpl!=null?fUSD(f.cpl):d,             null,null, null,null],
+    ["Vendas",      f.vendas.toLocaleString("pt-BR"),      null,null, "Conversão", f.convVenda!=null?fPct(f.convVenda):d],
+    ["Faturamento", fUSD(f.faturamento),                   null,null, "ROAS", f.roas!=null?f.roas.toFixed(2):d],
+  ];
+  const colunas=etapas.map(([lbl,val,tLbl,tVal,bLbl,bVal],i)=>{
+    // Só a coluna do CPL tem a pilha de perfil pendurada embaixo.
+    const perfil=lbl==="CPL"?`<div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:-6px">
+      <div style="height:14px;border-left:1px dashed rgba(148,163,184,.35)"></div>
+      ${Object.keys(FUNIL_PERFIL).map(k=>funilSat(FUNIL_PERFIL[k].label,f.perfil[k]!=null?fPct(f.perfil[k]):d))
+        .join(`<div style="height:8px;border-left:1px dashed rgba(148,163,184,.35)"></div>`)}
+    </div>`:"";
+    return `<div style="display:flex;flex-direction:column;align-items:stretch;flex:0 0 auto;min-width:118px">
+      ${funilSat(tLbl,tVal)}
+      ${funilBox(lbl,val)}
+      <div style="display:flex;flex-direction:column;align-items:center">${funilSat(bLbl,bVal)}${perfil}</div>
+    </div>`;
+  });
+  return colunas.join(funilConector());
+}
 function renderPrincipal(){
   const el=document.getElementById("page-principal");if(!el)return;
   const ch=S.principalChannel;
@@ -3103,6 +3203,7 @@ function renderPrincipal(){
   // repetida) — só pra referência na observação do card "Leads captados",
   // que mostra o número já deduplicado (S.leadsRows) como valor principal.
   const leadsTotalRaw=leadsForTemp(leadsForChannel(leadsInRangeRaw(S.startDate,S.endDate),ch),temp).length;
+  const funil=funilMetrics(S.startDate,S.endDate,ch,temp);
   const ga4PageRows=getGA4PageRows(S.startDate,S.endDate);
   const ga4PageTotal=ga4PageRows.reduce((a,p)=>({sessions:a.sessions+p.sessions,cadastros:a.cadastros+p.cadastros}),{sessions:0,cadastros:0});
   const ga4PageTotalConv=ga4PageTotal.sessions>0?(ga4PageTotal.cadastros/ga4PageTotal.sessions)*100:null;
@@ -3224,6 +3325,18 @@ function renderPrincipal(){
           </tr>`:""}
         </tbody>
       </table>
+      </div>
+    </div>
+
+    <div class="section-lbl">Funil de performance — ${chLabel}${temp!=="todos"?` · ${tempLabel}`:""}</div>
+    <div class="cc" style="margin-bottom:6px">
+      <div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 2px">
+        ${renderFunilHtml(funil)}
+      </div>
+      <div style="font-size:10px;color:var(--hint);margin-top:10px;line-height:1.6">
+        Mesmo período, canal e temperatura selecionados acima. Page views vêm do ${fontePaginaLabel()}; leads são os já deduplicados; vendas e faturamento saem da Base Vendas no período.
+        Os três indicadores sob o CPL são calculados só sobre quem respondeu a pesquisa (${funil.quizN.toLocaleString("pt-BR")} lead(s)):
+        <b>Desemp.+Est.</b> = desempregado ou estudante · <b>No sé nada</b> = "no sé nada, quiero empezar" · <b>Hasta 300$</b> = sem ingresos ou até MXN 5.600.
       </div>
     </div>
 
@@ -5661,6 +5774,10 @@ window.MDI = {
   fetchSheetCSVOpt,
   firstOfMonthISO,
   fontePaginaLabel,
+  funilBox,
+  funilConector,
+  funilMetrics,
+  funilSat,
   ga4Metrics,
   ga4PathCanonico,
   ga4PathExcluido,
@@ -5753,6 +5870,7 @@ window.MDI = {
   renderCarrinhoPrincipal,
   renderCarrinhoVendas,
   renderFunilBadge,
+  renderFunilHtml,
   renderHeader,
   renderLeads,
   renderLembrete,
@@ -5762,6 +5880,7 @@ window.MDI = {
   renderResumo,
   renderStagePage,
   resetFunilData,
+  respCanonica,
   restoreStageFocus,
   resumoMetrics,
   resumoPreviewBox,
