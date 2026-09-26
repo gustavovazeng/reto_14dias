@@ -854,6 +854,10 @@ const S = {
   livesCaptacaoRows:[],  // linhas da Base Meta - lives captação (só realizado, sem plano)
   aulasRows:[],          // idem, Base Meta - Aulas (uma ou mais campanhas por aula, ver aulaNumberFromCampaign)
   grupoVipRows:[],       // linhas da aba Grupo VIP
+  // Sessões digitadas à mão na tabela de páginas (enquanto o GA4 não está
+  // configurado). Chave = Page Path; valor = número inteiro de sessões.
+  // Vive só na sessão do navegador: recarregou a página, zera.
+  manualSessions:{},
   manualAlcance:{aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null}, // Alcance manual (API não fornece) — usado pra calcular Frequência
   manualEntradasVip:null, // Entradas no Grupo VIP — a API não fornece, é digitado à mão
   // Estado das páginas de análise por etapa (Aquecimento/Lembrete/Aula01/02/03/Consolidado)
@@ -914,6 +918,7 @@ function resetFunilData(){
   S.leadsDescartadas=0; S.pesquisasDescartadas=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
+  S.manualSessions={};
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null,grupoVip:null};
   S.manualEntradasVip=null; S.grupoVipRows=[];
   S.carrinhoVendas=[]; S.carrinhoVendasPorDia={}; S.carrinhoFatPorDia={};
@@ -2011,9 +2016,15 @@ function getGA4PageRows(start,end){
   for(const key in cadastrosByPath){
     if(!byPath[key])byPath[key]={pagePath:key,sessions:0};
   }
+  // Sessão digitada à mão manda no número do GA4 (ver S.manualSessions).
+  // "sessionsGA4" fica guardado pra mostrar de onde veio o valor quando a
+  // pessoa apagar o campo.
   return Object.values(byPath).map(p=>{
     const cadastros=cadastrosByPath[p.pagePath]||0;
-    return{...p,cadastros,convPagina:p.sessions>0?(cadastros/p.sessions)*100:null};
+    const manual=S.manualSessions[p.pagePath];
+    const sessions=(manual!=null&&manual>0)?manual:p.sessions;
+    return{...p,sessions,sessionsGA4:p.sessions,manual:manual!=null&&manual>0,cadastros,
+      convPagina:sessions>0?(cadastros/sessions)*100:null};
   }).sort((a,b)=>b.sessions-a.sessions);
 }
 
@@ -3189,6 +3200,7 @@ function renderFunilHtml(f){
 }
 function renderPrincipal(){
   const el=document.getElementById("page-principal");if(!el)return;
+  const _fid=document.activeElement?.id; // campo de sessões: mantém o cursor
   const ch=S.principalChannel;
   const temp=S.principalTemp;
   const daily=getDaily(S.startDate,S.endDate,ch,temp);
@@ -3299,7 +3311,7 @@ function renderPrincipal(){
       ${Object.values(S.faixaSel).every(v=>!v)?`<div style="font-size:10px;color:var(--hint);margin-top:8px">Selecione ao menos uma faixa pra ver a linha no gráfico.</div>`:""}
     </div>
 
-    <div class="section-lbl">Página (GA4 · ${fDateBR(S.startDate)} a ${fDateBR(S.endDate)})</div>
+    <div class="section-lbl">Página (GA4 · ${fDateBR(S.startDate)} a ${fDateBR(S.endDate)}) — sessões editáveis</div>
     <div class="cc" style="padding:0;overflow:hidden;margin-bottom:6px">
       <div style="overflow-x:auto">
       <table>
@@ -3313,7 +3325,14 @@ function renderPrincipal(){
           ${ga4PageRows.length===0?`<tr><td colspan="4" style="text-align:center;color:var(--hint);padding:20px">Sem dado de GA4 no período (ou só o dia de hoje, que é sempre desconsiderado)</td></tr>`:
           ga4PageRows.map(p=>`<tr>
             <td>${p.pagePath}</td>
-            <td class="mono" style="text-align:right">${p.sessions.toLocaleString("pt-BR")}</td>
+            <td style="text-align:right">
+              <input id="sess-${p.pagePath.replace(/[^a-zA-Z0-9]/g,"_")}"
+                value="${p.manual?p.sessions:""}" placeholder="${p.sessionsGA4>0?p.sessionsGA4.toLocaleString("pt-BR"):"inserir"}"
+                inputmode="numeric" oninput="MDI.setManualSessions('${p.pagePath.replace(/\\/g,"\\\\").replace(/'/g,"\\'")}',this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()"
+                title="${p.manual?`digitado à mão · GA4 marcou ${p.sessionsGA4.toLocaleString("pt-BR")}`:"vazio = usa o número do GA4"}"
+                style="width:100px;text-align:right;background:transparent;border:none;border-bottom:1px solid ${p.manual?"rgba(251,191,36,.45)":"rgba(255,255,255,.14)"};outline:none;padding:2px 0;font-family:'JetBrains Mono',monospace;font-size:12px;color:${p.manual?"#fbbf24":"var(--text-strong)"}"/>
+            </td>
             <td class="mono" style="text-align:right">${Math.round(p.cadastros).toLocaleString("pt-BR")}</td>
             <td class="mono" style="text-align:right">${p.convPagina!=null?fPct(p.convPagina):"—"}</td>
           </tr>`).join("")}
@@ -3327,6 +3346,7 @@ function renderPrincipal(){
       </table>
       </div>
     </div>
+    <div style="font-size:10px;color:var(--hint);margin:-2px 0 6px">Enquanto o GA4 não está configurado, dá pra digitar as sessões de cada página direto na coluna. O valor digitado fica em amarelo e manda na conversão da linha e no total; apagar o campo devolve o número do GA4. É só desta sessão do navegador — recarregou, zera.</div>
 
     <div class="section-lbl">Funil de performance — ${chLabel}${temp!=="todos"?` · ${tempLabel}`:""}</div>
     <div class="cc" style="margin-bottom:6px">
@@ -3342,6 +3362,7 @@ function renderPrincipal(){
 
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
     <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+  restoreStageFocus(_fid);
   requestAnimationFrame(()=>{
     if(ch!=="organico"){
       const box1=document.getElementById("c-dual")?.parentElement;
@@ -4823,6 +4844,14 @@ function stageManualRow(inputId,lbl,value,setterCall,metaStr,emoji){
     <span style="font-size:14px;min-width:90px;text-align:right">${emoji||""}<span style="font-size:10px;color:var(--hint);margin-left:4px">${metaStr||""}</span></span>
   </div>`;
 }
+// Sessões manuais da tabela de páginas. Campo vazio (ou zero) volta a valer
+// o número do GA4 — não fica um zero fantasma no lugar do dado real.
+function setManualSessions(path,v){
+  const n=parseInt(String(v).replace(/\D/g,""),10);
+  if(isNaN(n)||n<=0) delete S.manualSessions[path];
+  else S.manualSessions[path]=n;
+  render();
+}
 function restoreStageFocus(fid){
   if(!fid)return;
   requestAnimationFrame(()=>{
@@ -5897,6 +5926,7 @@ window.MDI = {
   setLeadsTemp,
   setManualAlcance,
   setManualEntradasVip,
+  setManualSessions,
   setManualSpendHoje,
   setMetricasTemp,
   setPrincipalChannel,
