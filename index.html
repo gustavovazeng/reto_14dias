@@ -6540,13 +6540,13 @@ function statusBorder(val,meta,higherIsBetter){
 }
 
 // ── Ad ID / advCode helpers ───────────────────────────────────────────────
-// Extrai código adv/adi/adc + dígitos do nome do anúncio
+// Extrai código adv/adi/adc + dígitos + sufixo de versão opcional (-v1-vnd-2309)
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
   // remove prefixo teste- case-insensitive
   const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+/i);
+  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
   return m ? m[0].toLowerCase() : null;
 }
 
@@ -8226,11 +8226,11 @@ function renderAnuncios(){
       const useIds=allowedAdIds
         ? new Set([...allIds].filter(id=>allowedAdIds.has(id)))
         : allIds;
-      if(useIds.size===0) continue;
+      if(allowedAdIds && useIds.size===0) continue; // pula só com filtro de campanha ativo
 
       // Spend / clicks / impressions — calculado a partir dos adIds filtrados
       let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,landingViews=0,checkouts=0,igUrl="";
-      if(allowedAdIds){
+      if(allowedAdIds && useIds.size>0){
         // Usa metaByAdId para precisão por campanha
         for(const adId of useIds){
           const adData=dd.metaByAdId[adId];if(!adData)continue;
@@ -8244,7 +8244,7 @@ function renderAnuncios(){
           }
         }
       } else {
-        // Sem filtro: usa o agregado por advCode (mais eficiente)
+        // Sem filtro (ou sem adIds): usa o agregado por advCode
         for(const [d,vals] of Object.entries(byDate)){
           if(d>=start&&d<=end){
             spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
@@ -10402,13 +10402,13 @@ function statusBorder(val,meta,higherIsBetter){
 }
 
 // ── Ad ID / advCode helpers ───────────────────────────────────────────────
-// Extrai código adv/adi/adc + dígitos do nome do anúncio
+// Extrai código adv/adi/adc + dígitos + sufixo de versão opcional (-v1-vnd-2309)
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
   // remove prefixo teste- case-insensitive
   const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+/i);
+  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
   return m ? m[0].toLowerCase() : null;
 }
 
