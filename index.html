@@ -846,6 +846,7 @@ const S = {
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   leadsDescartadas:0, pesquisasDescartadas:0, // linhas anteriores a DATA_INICIO_CAPTACAO
+  leadsDaPesquisa:0,     // quantas leads vieram SÓ da Base pesquisa (sem cadastro na Base leads)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
@@ -915,7 +916,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
-  S.leadsDescartadas=0; S.pesquisasDescartadas=0;
+  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualSessions={};
@@ -1374,6 +1375,15 @@ function nomesDaBaseMeta(metaRows){
 // partir da Base Meta (uma linha por campanha/anúncio que existe no
 // gerenciador) e esse rótulo nunca aparece lá, elas ficam de fora sozinhas.
 const SEM_UTM_LABEL = "Tráfego sem UTM";
+// Rótulo de quem respondeu a pesquisa mas NÃO existe na Base leads (ver
+// LEADS_SO_DA_PESQUISA). Conta como tráfego, só que sem UTM nem página.
+const SO_PESQUISA_LABEL = "Tráfego (só na pesquisa)";
+// Quem respondeu a pesquisa e não tem cadastro na Base leads entra como lead
+// mesmo assim, contado como TRÁFEGO. A integração com o ActiveCampaign
+// perdeu essas pessoas, mas elas existem: preencheram o formulário. Sem UTM e
+// sem página, então não entram em campanha/anúncio nem na tabela por página —
+// aparecem como tráfego sem rastreio. Ponha false pra voltar a ignorá-las.
+const LEADS_SO_DA_PESQUISA = true;
 
 // "https://lp.exemplo.com/mdi-2026-jun-captura-v6/?x=1" → "/mdi-2026-jun-captura-v6/"
 // É o formato do "Page Path" da Base GA4, pra quando essa aba existir.
@@ -2172,6 +2182,51 @@ async function loadData(){
         renda:pesq?(pesq[SCORE_COLS.renda]||"").trim():"",
       });
     }
+    // ── Leads que só existem na Base pesquisa ─────────────────────────────
+    // Mesma data de corte e mesmo dedup das demais: entram na lista ANTES de
+    // dedupByContact, então se a pessoa aparecer nas duas bases vale sempre o
+    // cadastro real da Base leads (mais antigo) e nada é duplicado.
+    let leadsDaPesquisa=0;
+    if(LEADS_SO_DA_PESQUISA){
+      // O "já é lead" olha a Base leads INTEIRA, inclusive as linhas que o
+      // corte de data descartou. Sem isso, quem tem cadastro antigo (cortado)
+      // e respondeu a pesquisa depois voltaria pela porta dos fundos, com a
+      // data da pesquisa — seria ressuscitar justamente o que o corte tirou.
+      const jaTemLead=new Set(leadsRowsRaw.map(r=>normalizeEmail(leadCol(r,"email"))).filter(Boolean));
+      for(const em in pesquisaByEmail){
+        if(!em||jaTemLead.has(em))continue;
+        const pq=pesquisaByEmail[em];
+        const parsed=toISOLead(pq[PESQUISA_COLS.criadoEm]);
+        if(!parsed)continue;                      // sem data não dá pra alocar no período
+        const {date,ms}=parsed;
+        if(antesDaCaptacao(date))continue;
+        const scoreQuiz=scoreLead(pq);
+        leadsDaPesquisa++;
+        leadsRowsAll.push({
+          date,ms,
+          path:"",                                // não veio página nenhuma
+          quizOk:true,                            // respondeu a pesquisa, por definição
+          faixa:faixaFromScore(scoreQuiz),
+          score:scoreQuiz,
+          name:"",
+          email:em,
+          phone:normalizePhone(pq["telefone"]),
+          utmSource:SO_PESQUISA_LABEL,
+          platformName:"",
+          channel:"trafego",                      // decisão do usuário: conta como tráfego
+          hasUtm:false,
+          temperatureName:campaignTemperature(SEM_UTM_LABEL),
+          adName:SEM_UTM_LABEL, campName:SEM_UTM_LABEL,
+          soDaPesquisa:true,
+          idade:(pq[SCORE_COLS.idade]||"").trim(),
+          genero:(pq[SCORE_COLS.genero]||"").trim(),
+          situacao:(pq[SCORE_COLS.situacao]||"").trim(),
+          conhecimento:(pq[SCORE_COLS.conhecimento]||"").trim(),
+          tecnica:(pq[SCORE_COLS.tecnica]||"").trim(),
+          renda:(pq[SCORE_COLS.renda]||"").trim(),
+        });
+      }
+    }
     const leadsRows=dedupByContact(leadsRowsAll);
     const leadsByDate={};
     for(const l of leadsRows)leadsByDate[l.date]=(leadsByDate[l.date]||0)+1;
@@ -2179,6 +2234,7 @@ async function loadData(){
     S.meta=mD; S.metaRows=metaRows; S.adIdMap=adIdMap;
     S.leadsRows=leadsRows; S.leadsRowsRaw=leadsRowsAll; S.leadsByDate=leadsByDate;
     S.leadsDescartadas=leadsDescartadas;
+    S.leadsDaPesquisa=leadsDaPesquisa;
 
     const allDates=[...new Set([...Object.keys(mD),...Object.keys(leadsByDate)])].sort();
     S.updated=allDates.length?fDateBR(allDates[allDates.length-1]):"—";
@@ -3211,6 +3267,7 @@ function renderPrincipal(){
   const tempLabel={todos:"Todos",quente:"Quente",morno:"Morno",frio:"Frio"}[temp];
   const rowsCh=leadsForTemp(leadsForChannel(leadsInRange(S.startDate,S.endDate),ch),temp);
   const semUtmN=rowsCh.filter(l=>!l.hasUtm).length;
+  const soPesquisaN=rowsCh.filter(l=>l.soDaPesquisa).length;
   // Leads totais sem dedup (toda submissão do formulário conta, mesmo
   // repetida) — só pra referência na observação do card "Leads captados",
   // que mostra o número já deduplicado (S.leadsRows) como valor principal.
@@ -3255,7 +3312,7 @@ function renderPrincipal(){
 
     <div class="g3" style="margin-bottom:13px">
       ${kpiCard("Investimento",fUSD(pt.spend),ch==="organico"?"sem tráfego pago":`planejado até hoje: ${fUSD(plano.investimento)}`,ch==="organico"?"var(--text-strong)":investPlanoColor,false,ch==="organico"?null:pt.spend,plano.investimento>0?plano.investimento:null,false)}
-      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
+      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""}${soPesquisaN>0?` · ${soPesquisaN} só da pesquisa`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
       ${kpiCard("Custo/lead",pt.cpl!=null?fUSD(pt.cpl):"—",pt.cpl!=null?`meta ${fUSD(META_CPL)}`:"não aplicável",cplC,false,pt.cpl,META_CPL,false)}
     </div>
 
