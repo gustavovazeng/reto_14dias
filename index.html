@@ -2435,19 +2435,26 @@ function qualityMetrics(start,end,channel,temp="todos"){
   const faixaPct=f=>(quizRows.length>0&&SCORE_TABELA_PRONTA)?(quizRows.filter(l=>l.faixa===f).length/quizRows.length)*100:null;
   const faixaPcts=Object.fromEntries(FAIXA_LETTERS.map(l=>[FAIXA_FIELD_KEY[l],faixaPct(l)]));
   // Tx quente / Tx frio: % das leads do período cuja CAMPANHA é de público
-  // quente / frio (ver campaignTemperature). Denominador = todas as leads do
-  // recorte, respondendo o quiz ou não.
+  // quente / frio (ver campaignTemperature). Denominador = só as leads
+  // CLASSIFICADAS (quente, morno ou frio); quem não tem campanha fica fora.
   const t=tempPcts(rows);
   return{total,quizRespondidoN:quizRows.length,quizPct,...faixaPcts,...t};
 }
 // Percentuais por temperatura de campanha, reaproveitados pela aba Principal
 // e pelo Resumo diário (mesma conta nos dois lugares).
 function tempPcts(rows){
-  const n=rows.length;
   const cnt=t=>rows.filter(l=>l.temperatureName===t).length;
   const q=cnt("Quente"), m=cnt("Morno"), f=cnt("Frio");
+  // Denominador = só quem TEM temperatura. Lead sem UTM (e as que vieram só
+  // da pesquisa) não tem campanha, logo não é quente, morno nem frio — ficava
+  // no denominador puxando as três taxas pra baixo e fazendo a soma não
+  // fechar 100%. Agora quente + morno + frio = 100% sempre.
+  // "classificadas" vai junto pra tela poder mostrar sobre quantas leads a
+  // conta foi feita, e "semTemperatura" quantas ficaram de fora.
+  const n=q+m+f, fora=rows.length-n;
   return{
     quenteN:q, mornoN:m, frioN:f,
+    classificadas:n, semTemperatura:fora,
     quentePct:n>0?(q/n)*100:null,
     mornoPct:n>0?(m/n)*100:null,
     frioPct:n>0?(f/n)*100:null,
@@ -3329,7 +3336,7 @@ function renderPrincipal(){
       ${kpiCard("Tx frio",fPctOrDash(qm.frioPct),`${qm.frioN} de ${qm.total} leads · ${metaSub(METAS_RESUMO.frio)}`,frioC,false,qm.frioPct,METAS_RESUMO.frio.val,METAS_RESUMO.frio.higher)}
     </div>
 
-    <div class="section-lbl" style="margin-top:0">% Faixa A/B/C/D e % resposta da pesquisa: calculadas só sobre quem respondeu (não-resposta fica fora do denominador). Tx quente/Tx frio saem da temperatura da campanha e usam todas as leads do recorte como denominador.${SCORE_TABELA_PRONTA?"":" ⚠️ A tabela de pontos da pesquisa ainda não foi preenchida — a faixa está vindo da coluna \"faixa\" da planilha."}</div>
+    <div class="section-lbl" style="margin-top:0">% Faixa A/B/C/D e % resposta da pesquisa: calculadas só sobre quem respondeu (não-resposta fica fora do denominador). Tx quente/Tx frio saem da temperatura da campanha e usam como denominador só as leads classificadas — quem não tem campanha (lead sem UTM) fica fora da conta, então quente + morno + frio fecha 100%.${SCORE_TABELA_PRONTA?"":" ⚠️ A tabela de pontos da pesquisa ainda não foi preenchida — a faixa está vindo da coluna \"faixa\" da planilha."}</div>
 
     ${ch!=="organico"?`
     <div class="cc" style="margin-bottom:12px;position:relative">
