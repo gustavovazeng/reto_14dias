@@ -608,16 +608,16 @@ const FUNIS = {
     //   Lembretes  2,0% = $2.000   ·  Aulas 4,5%       = $4.500
     //   Grupos VIP 3,5% = $3.500   ·  Carrinho 1,0%    = $1.000
     //
-    // Calendário: Captação 22/09→27/10 · Aquecimento 22/10→27/10 ·
+    // Calendário: Captação 22/09→27/10 · Aquecimento 02/10→26/10 ·
     // Lembrete 23/10→27/10 · Aulas 27, 28 e 29/10 · Grupo VIP 30/10→01/11 ·
     // Carrinho 02→05/11. Mesma estrutura do set26 em torno das aulas:
     // Captação, Aquecimento e Lembrete vão até o dia da Aula 01 inclusive; o
     // Grupo VIP abre no dia seguinte à Aula 03 e o Carrinho logo depois.
     //
     // Curvas herdadas do set26, só reescaladas pra nova verba:
-    //   • Aquecimento (6 dias) e Lembrete (5 dias): rampa CRESCENTE e LINEAR,
-    //     incremento fixo em dólar por dia, salto máximo de 20% do 1º pro 2º
-    //     dia — mesmos valores relativos do set26 ×10.
+    //   • Aquecimento (25 dias, 02→26/10) e Lembrete (5 dias): rampa
+    //     CRESCENTE e LINEAR, incremento fixo em dólar por dia, salto máximo
+    //     de ~20% do 1º pro 2º dia.
     //   • Aulas: proporção 155/145/155 do set26 → $1.533 / $1.434 / $1.533.
     //   • Grupo VIP: 40% / 40% / 20%.
     //   • Carrinho: DECRESCENTE, 40% / 30% / 20% / 10%.
@@ -668,13 +668,38 @@ const FUNIS = {
       {date:"2026-10-26", investimento:3086.54, leads:2469},
       {date:"2026-10-27", investimento:1719.48, leads:1376},
     ],
+    // Aquecimento: 02/10 → 26/10 (25 dias), $3.000. Curva em DEGRAUS: o valor
+    // fica igual por 2 ou 3 dias seguidos e só então sobe — mais estável pro
+    // anúncio do que mudar a verba todo dia. São 9 degraus (sete de 3 dias,
+    // dois de 2); o degrau sobe sempre o mesmo valor em dólar, com salto
+    // máximo de 19,8% de um degrau pro seguinte. Encerra na véspera da
+    // Aula 01 (27/10).
     planoAquecimento:[
-      {date:"2026-10-22", investimento:334.40},
-      {date:"2026-10-23", investimento:400.70},
-      {date:"2026-10-24", investimento:466.90},
-      {date:"2026-10-25", investimento:533.10},
-      {date:"2026-10-26", investimento:599.30},
-      {date:"2026-10-27", investimento:665.60},
+      {date:"2026-10-02", investimento:69.10},
+      {date:"2026-10-03", investimento:69.10},
+      {date:"2026-10-04", investimento:69.10},
+      {date:"2026-10-05", investimento:82.78},
+      {date:"2026-10-06", investimento:82.78},
+      {date:"2026-10-07", investimento:82.78},
+      {date:"2026-10-08", investimento:96.47},
+      {date:"2026-10-09", investimento:96.47},
+      {date:"2026-10-10", investimento:96.47},
+      {date:"2026-10-11", investimento:110.15},
+      {date:"2026-10-12", investimento:110.15},
+      {date:"2026-10-13", investimento:110.15},
+      {date:"2026-10-14", investimento:123.83},
+      {date:"2026-10-15", investimento:123.83},
+      {date:"2026-10-16", investimento:123.83},
+      {date:"2026-10-17", investimento:137.51},
+      {date:"2026-10-18", investimento:137.51},
+      {date:"2026-10-19", investimento:137.51},
+      {date:"2026-10-20", investimento:151.20},
+      {date:"2026-10-21", investimento:151.20},
+      {date:"2026-10-22", investimento:151.20},
+      {date:"2026-10-23", investimento:164.88},
+      {date:"2026-10-24", investimento:164.88},
+      {date:"2026-10-25", investimento:178.56},
+      {date:"2026-10-26", investimento:178.56},
     ],
     planoLembrete:[
       {date:"2026-10-23", investimento:286.50},
