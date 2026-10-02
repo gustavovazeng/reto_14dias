@@ -1208,10 +1208,24 @@ function parseCSVText(text){
   if(row.some(v=>v.trim()!=="")) result.push(row);
   return result;
 }
+// ⚠️ Cabeçalhos REPETIDOS: a "Base pesquisa" tem DUAS colunas chamadas
+// "Criado em" (e também "ID de usuário", "Agente de usuário", "IP do
+// usuário", "Referência" em dobro) — são dois blocos de metadados de
+// formulário colados lado a lado. Com Object.fromEntries a ÚLTIMA ganhava, e
+// o dashboard passava a ler o 2º "Criado em", que tem outra hora e vem vazio
+// em ~600 linhas. Efeito prático: as leads que só existem na pesquisa caíam
+// todas no dia errado (546 iam pro dia 28/09 em vez de se espalharem pelos
+// dias reais). Agora vale a PRIMEIRA ocorrência do nome; as repetições ficam
+// acessíveis como "Criado em (2)", "Criado em (3)"… caso um dia precisem.
 function parseRows(rows){
   if(rows.length<2)return[];
   const h=rows[0];
-  return rows.slice(1).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||"").trim()])));
+  const vistos={};
+  const chaves=h.map(k=>{
+    const n=(vistos[k]=(vistos[k]||0)+1);
+    return n===1?k:`${k} (${n})`;
+  });
+  return rows.slice(1).map(r=>Object.fromEntries(chaves.map((k,i)=>[k,(r[i]||"").trim()])));
 }
 // Parser genérico pras 3 bases de etapa (Aquecimento/Lembrete/Aulas) — todas
 // têm o mesmo formato básico (Date, Campaign Name, Spend, Action Link
