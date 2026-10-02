@@ -2860,6 +2860,40 @@ function drawLineArea(ctx,xP,yP,vals,color,fill=true){
   for(let i=1;i<vals.length;i++)ctx.lineTo(xP(i),yP(vals[i]));
   ctx.stroke();
 }
+// Teto do eixo direito à prova de dia fora da curva. Um único dia esquisito
+// (29/09/26: CPL de $312 porque a base de leads veio furada) estica a escala
+// e espreme todos os outros contra o zero — a linha vira uma reta e não dá
+// mais pra ver quem foi bem ou mal. O teto passa a sair de um limite
+// ROBUSTO (mediana e p90 dos dias com CPL, nunca menos que 2× a meta) em vez
+// do máximo bruto. Quando não há outlier, o resultado é o mesmo de antes.
+function tetoRobusto(vals,meta){
+  const v=vals.filter(x=>x>0).sort((a,b)=>a-b);
+  if(!v.length)return Math.max(meta||0,1)*1.4;
+  // Dia fora da curva = acima de 4× a mediana. O teto olha só os demais, e
+  // mantém a folga de 40% e o piso da meta — então, sem outlier nenhum, a
+  // conta é idêntica à de antes (maior valor × 1,4).
+  const mediana=v[Math.floor(v.length/2)];
+  const normais=v.filter(x=>x<=mediana*4);
+  const base=normais.length?normais[normais.length-1]:v[v.length-1];
+  return Math.max(base,meta||0)*1.4;
+}
+// Linha com corte no teto: o que passa do limite é desenhado GRUDADO no topo
+// e ganha um ponto cheio com o valor real escrito ao lado. O pico continua
+// visível e legível — só deixa de mandar na escala.
+function drawLineAreaCap(ctx,xP,yP,vals,color,fill,cap,fmt){
+  const clip=vals.map(v=>Math.min(v,cap));
+  drawLineArea(ctx,xP,yP,clip,color,fill);
+  ctx.save();
+  vals.forEach((v,i)=>{
+    if(v<=cap)return;
+    const x=xP(i),y=yP(cap);
+    ctx.fillStyle=color;
+    ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();
+    ctx.font="9px 'DM Mono',monospace";ctx.textAlign="center";
+    ctx.fillText(fmt?fmt(v):String(Math.round(v)),x,y-7);
+  });
+  ctx.restore();
+}
 function drawDualInvCpl(id,data,cssW,cssH){
   const ctx=initCanvas(id,cssW,cssH);if(!ctx)return;
   const P={t:14,r:58,b:28,l:64};
@@ -2867,7 +2901,7 @@ function drawDualInvCpl(id,data,cssW,cssH){
   const lVals=data.map(d=>d.spend||0);
   const rVals=data.map(d=>d.cpl||0);
   const lMax=Math.max(...lVals,0.01)*1.15;
-  const rMax=Math.max(...rVals,META_CPL,0.01)*1.4;
+  const rMax=tetoRobusto(rVals,META_CPL);
   const xP=i=>P.l+(data.length>1?i/(data.length-1):0.5)*cW;
   const yPL=v=>P.t+cH-((v)/(lMax))*cH;
   const yPR=v=>P.t+cH-((v)/(rMax))*cH;
@@ -2887,7 +2921,7 @@ function drawDualInvCpl(id,data,cssW,cssH){
   ctx.fillStyle=CHART_CPL;ctx.font="9px 'Inter',sans-serif";ctx.textAlign="left";
   ctx.fillText("Meta $"+META_CPL,P.l+cW+4,mY-3);
   drawLineArea(ctx,xP,yPL,lVals,CHART_INV,true);
-  drawLineArea(ctx,xP,yPR,rVals,CHART_CPL,false);
+  drawLineAreaCap(ctx,xP,yPR,rVals,CHART_CPL,false,rMax,v=>fUSD(v));
   const step=data.length>60?7:data.length>30?3:data.length>14?2:1;
   ctx.fillStyle=TICK_C;ctx.font="10px 'DM Mono',monospace";ctx.textAlign="center";ctx.setLineDash([]);
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
@@ -3355,10 +3389,11 @@ function renderPrincipal(){
       ${faixaCard("% Faixa D",qm.faixaD,METAS_RESUMO.faixaD)}
     </div>
 
-    <div class="g3" style="margin-bottom:16px">
+    <div class="g4" style="margin-bottom:16px">
       ${kpiCard("% resposta da pesquisa",fPctOrDash(qm.quizPct),`${qm.quizRespondidoN} de ${qm.total} · meta ${METAS_RESUMO.quiz.val}%`,quizC,false,qm.quizPct,METAS_RESUMO.quiz.val,METAS_RESUMO.quiz.higher)}
-      ${kpiCard("Tx quente",fPctOrDash(qm.quentePct),`${qm.quenteN} de ${qm.total} leads · ${metaSub(METAS_RESUMO.quente)}`,quenteC,false,qm.quentePct,METAS_RESUMO.quente.val,METAS_RESUMO.quente.higher)}
-      ${kpiCard("Tx frio",fPctOrDash(qm.frioPct),`${qm.frioN} de ${qm.total} leads · ${metaSub(METAS_RESUMO.frio)}`,frioC,false,qm.frioPct,METAS_RESUMO.frio.val,METAS_RESUMO.frio.higher)}
+      ${kpiCard("Tx quente",fPctOrDash(qm.quentePct),`${qm.quenteN} de ${qm.classificadas} classificadas · ${metaSub(METAS_RESUMO.quente)}`,quenteC,false,qm.quentePct,METAS_RESUMO.quente.val,METAS_RESUMO.quente.higher)}
+      ${kpiCard("Tx morno",fPctOrDash(qm.mornoPct),`${qm.mornoN} de ${qm.classificadas} classificadas · sem meta definida`,"var(--text-strong)")}
+      ${kpiCard("Tx frio",fPctOrDash(qm.frioPct),`${qm.frioN} de ${qm.classificadas} classificadas · ${metaSub(METAS_RESUMO.frio)}`,frioC,false,qm.frioPct,METAS_RESUMO.frio.val,METAS_RESUMO.frio.higher)}
     </div>
 
     <div class="section-lbl" style="margin-top:0">% Faixa A/B/C/D e % resposta da pesquisa: calculadas só sobre quem respondeu (não-resposta fica fora do denominador). Tx quente/Tx frio saem da temperatura da campanha e usam como denominador só as leads classificadas — quem não tem campanha (lead sem UTM) fica fora da conta, então quente + morno + frio fecha 100%.${SCORE_TABELA_PRONTA?"":" ⚠️ A tabela de pontos da pesquisa ainda não foi preenchida — a faixa está vindo da coluna \"faixa\" da planilha."}</div>
@@ -3374,6 +3409,7 @@ function renderPrincipal(){
         </div>
       </div>
       <div style="position:relative"><canvas id="c-dual"></canvas><div class="tip" id="t-dual"></div></div>
+      <div style="font-size:10px;color:var(--hint);margin-top:8px">A escala do custo/lead é limitada de propósito, pra um dia fora da curva não achatar os outros. Dia acima do teto aparece grudado no topo, com o valor escrito — e no tooltip o número é sempre o real.</div>
     </div>`:""}
     <div class="cc" style="position:relative;margin-bottom:12px">
       <div class="ch">
@@ -5871,6 +5907,7 @@ window.MDI = {
   drawDualInvCpl,
   drawDualInvMetric,
   drawLineArea,
+  drawLineAreaCap,
   drawMetricBar,
   drawMetricLine,
   drawMultiLine,
@@ -6053,6 +6090,7 @@ window.MDI = {
   switchFunil,
   tempPcts,
   tempToggle,
+  tetoRobusto,
   toISO,
   toISODate,
   toISOLead,
