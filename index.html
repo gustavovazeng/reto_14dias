@@ -575,21 +575,31 @@ const FUNIS = {
       indiceConsciencia:{val:42.00, higher:true},
       txConvPgObrigado: {val:35.00, higher:true},
     },
-    // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas neste
-    // lançamento — null-safe em todo o código de renderização.
-    // Aquecimento sem meta por enquanto — as que estavam aqui vinham do
-    // oro_jul25, em real, e não valem pro mdi_out26. Com `null` a página
-    // mostra "sem meta definida ainda", os cartões saem sem cor de status e
-    // os gráficos sem a linha tracejada. Pra ligar, é só devolver o objeto:
-    //   aquecimentoMetas:{ cpc:{val:X,higher:false}, frequencia:{val:X,higher:true},
-    //                      tx75:{val:X,higher:true}, cptx75:{val:X,higher:false} },
-    aquecimentoMetas:null,
-    // Lembrete sem meta nenhuma — nem as fixas nem o benchmark por dias que
-    // faltavam pra Aula 01. Os valores que estavam aqui vinham do oro_jul25 e
-    // não valem pro mdi_out26. A página e o Resumo diário mostram os números
-    // sem cor de status e sem alvo, do mesmo jeito que o Aquecimento.
-    lembreteMetas:null,
-    aula01Metas:null,
+    // Benchmark do mdi_out26 pra Aquecimento/Lembrete/Aula 01 (definido pelo
+    // Gustavo em 03/10). São metas FIXAS de etapa, não curvas dia-a-dia:
+    // valem pro consolidado e pintam o farol dos cartões, dos resumos e a
+    // linha tracejada dos gráficos. `null` em qualquer uma volta ao estado
+    // "sem meta definida ainda" — todo o código de renderização é null-safe.
+    aquecimentoMetas:{
+      cpc:        {val:0.42,  higher:false}, // custo por clique no link — menor é melhor
+      frequencia: {val:16.89, higher:true},  // repetição planejada — alcançar é bom
+      tx75:       {val:9.23,  higher:true},  // % que assistiu 75% do vídeo — maior é melhor
+      cptx75:     {val:0.13,  higher:false}, // custo por Tx 75% — menor é melhor
+    },
+    // Lembrete NÃO tem meta de investimento: o alvo de verba da etapa é a
+    // curva do planoLembrete ($2.000 = 2,0% dos $100.000), mostrada como
+    // "(planej até hoje: …)" no resumo. A chave `investimento` segue
+    // suportada aqui (todo o render é null-safe) caso um dia se queira um
+    // alvo fixo diferente do planejamento.
+    lembreteMetas:{
+      cpc:        {val:0.27,  higher:false}, // CPC no link — menor é melhor
+      frequencia: {val:10.92, higher:true},  // repetição planejada
+    },
+    // Só a Aula 01 tem benchmark; Aulas 02 e 03 seguem sem meta.
+    aula01Metas:{
+      cpc:        {val:0.53, higher:false}, // CPC total — menor é melhor
+      frequencia: {val:4.26, higher:true},  // Frequência FB — repetição planejada
+    },
     // Metas do Grupo VIP. "Custo por entrada" e "Frequência" dependem de
     // números que a API não entrega (entradas no grupo e alcance): os dois
     // são digitados à mão no próprio bloco do Resumo diário.
@@ -5080,6 +5090,9 @@ Facebook Cptx75%:\t${m.cptx75!=null?fUSD(m.cptx75):"—"}\t${bm(m.cptx75,metas&&
 }
 function lembreteResumoHtml(){
   const metas=LEMBRETE_METAS;
+  // Meta de verba da etapa — só o Lembrete tem; `metas&&` porque as outras
+  // etapas passam por aqui com metas=null.
+  const metaInv=metas&&metas.investimento||null;
   const rows=S.lembreteRows;
   const m=stageMetrics(rows);
   const alcance=S.manualAlcance.lembrete;
@@ -5089,12 +5102,12 @@ function lembreteResumoHtml(){
   return `
     <div style="font-size:11px;color:var(--hint);margin-bottom:12px">${metas?"Benchmark definido":"sem meta definida ainda"} · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}</div>
     ${stageResumoCard("Total",
-      stageRow("Investido total",fUSD(m.spend),"","")+
+      stageRow("Investido total",fUSD(m.spend),metaInv?`Meta: ${fUSD(metaInv.val)}`:"",metaInv&&m.spend>0?metaEmojiGlobal(m.spend,metaInv.val,metaInv.higher):"")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
       stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—",metas?`Meta: ${fUSD(metas.cpc.val)}`:"sem meta ainda",metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):"")
     )}
     ${stageResumoCard("Facebook",
-      stageRow("Investimento",fUSD(m.spend),"","")+
+      stageRow("Investimento",fUSD(m.spend),metaInv?`Meta: ${fUSD(metaInv.val)}`:"",metaInv&&m.spend>0?metaEmojiGlobal(m.spend,metaInv.val,metaInv.higher):"")+
       stageRow("Link clicks",m.clicks.toLocaleString("pt-BR"),"","")+
       stageRow("CPC no link",m.cpc!=null?fUSD(m.cpc):"—",metas?`Meta: ${fUSD(metas.cpc.val)}`:"sem meta ainda",metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):"")+
       stageManualRow("manual-alcance-lembrete","Alcance",alcance,`MDI.setManualAlcance('lembrete',this.value)`,"manual 🔧 (API não fornece)","")+
@@ -5103,6 +5116,9 @@ function lembreteResumoHtml(){
     <div style="font-size:10px;color:var(--hint);max-width:640px">Total e Facebook mostram os mesmos números — esta base só tem uma fonte de tráfego (Meta Ads). ${metas?"Metas fixas de benchmark (não é uma curva dia-a-dia).":"Sem meta definida ainda pra esta etapa."}</div>`;
 }
 function lembreteResumoText(){
+  const metas=LEMBRETE_METAS;
+  const metaInv=metas&&metas.investimento||null;
+  const bm=(v,m,higher,fmt)=>m!=null?`${metaEmojiGlobal(v,m,higher)} Meta: ${fmt(m)}`:"sem meta ainda";
   const rows=S.lembreteRows;
   const m=stageMetrics(rows);
   const alcance=S.manualAlcance.lembrete;
@@ -5114,23 +5130,24 @@ function lembreteResumoText(){
 Date\t${fDateBR(todayISO())}
 
 -> Total
-Investido total: ${fUSD(m.spend)}\t${planTxt}
+Investido total: ${fUSD(m.spend)}\t${planTxt}${!metaInv?"":"\t"+(m.spend>0?bm(m.spend,metaInv.val,metaInv.higher,fUSD):`⚪ Meta: ${fUSD(metaInv.val)}`)}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
-CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}
+CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}\t${bm(m.cpc,metas&&metas.cpc.val,metas&&metas.cpc.higher,fUSD)}
 
 ---------------------
 
 -> Facebook
-Investido total: ${fUSD(m.spend)}\t${planTxt}
+Investido total: ${fUSD(m.spend)}\t${planTxt}${!metaInv?"":"\t"+(m.spend>0?bm(m.spend,metaInv.val,metaInv.higher,fUSD):`⚪ Meta: ${fUSD(metaInv.val)}`)}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
-CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}
+CPC:\t${m.cpc!=null?fUSD(m.cpc):"—"}\t${bm(m.cpc,metas&&metas.cpc.val,metas&&metas.cpc.higher,fUSD)}
 Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}
-Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
+Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${bm(freq,metas&&metas.frequencia.val,metas&&metas.frequencia.higher,v=>String(v).replace(".",","))}`;
 }
 // Cada aula é identificada pelo NOME DA CAMPANHA (via aulaNumberFromCampaign)
 // — não por uma coluna própria, já que a Base Meta - Aulas mistura as 3
-// campanhas numa aba só. As Aulas não têm meta neste lançamento — os blocos
-// mostram só os números.
+// campanhas numa aba só. Só a Aula 01 tem benchmark (AULA01_METAS: CPC total
+// e Frequência FB); Aulas 02/03 recebem metas=null e seguem mostrando só os
+// números, sem farol nem linha de meta.
 function aulaResumoHtml(aulaNum,metas){
   const numStr=String(aulaNum);
   const rows=S.aulasRows.filter(r=>aulaNumberFromCampaign(r.campName)===numStr);
@@ -5138,6 +5155,7 @@ function aulaResumoHtml(aulaNum,metas){
   const alcanceKey="aula0"+aulaNum;
   const alcance=S.manualAlcance[alcanceKey];
   const freq=alcance>0?m.impressions/alcance:null;
+  const mCpc=metas&&metas.cpc||null, mFreq=metas&&metas.frequencia||null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   return `
@@ -5145,14 +5163,14 @@ function aulaResumoHtml(aulaNum,metas){
     ${stageResumoCard("Total",
       stageRow("Investimento total",fUSD(m.spend),"","")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
-      stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—","","")
+      stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—",mCpc?`Meta: ${fUSD(mCpc.val)}`:"",mCpc?metaEmojiGlobal(m.cpc,mCpc.val,mCpc.higher):"")
     )}
     ${stageResumoCard("Facebook",
       stageRow("Investimento Facebook",fUSD(m.spend),"","")+
       stageRow("Cliques FB",m.clicks.toLocaleString("pt-BR"),"","")+
-      stageRow("CPC FB",m.cpc!=null?fUSD(m.cpc):"—","","")+
+      stageRow("CPC FB",m.cpc!=null?fUSD(m.cpc):"—",mCpc?`Meta: ${fUSD(mCpc.val)}`:"",mCpc?metaEmojiGlobal(m.cpc,mCpc.val,mCpc.higher):"")+
       stageManualRow(`manual-alcance-aula0${aulaNum}`,"Alcance FB",alcance,`MDI.setManualAlcance('${alcanceKey}',this.value)`,"manual 🔧 (API não fornece)","")+
-      stageRow("Frequência FB",freq!=null?freq.toFixed(2).replace(".",","):"—","","")
+      stageRow("Frequência FB",freq!=null?freq.toFixed(2).replace(".",","):"—",mFreq?`Meta: ${String(mFreq.val).replace(".",",")}`:"",mFreq?(freq!=null?metaEmojiGlobal(freq,mFreq.val,mFreq.higher):"⚪"):"")
     )}`;
 }
 function aulaResumoTextBlock(aulaNum,metas){
@@ -5162,15 +5180,17 @@ function aulaResumoTextBlock(aulaNum,metas){
   const alcanceKey="aula0"+aulaNum;
   const alcance=S.manualAlcance[alcanceKey];
   const freq=alcance>0?m.impressions/alcance:null;
+  const mCpc=metas&&metas.cpc||null, mFreq=metas&&metas.frequencia||null;
+  const bm=(v,mt,fmt)=>mt?`\t${metaEmojiGlobal(v,mt.val,mt.higher)} Meta: ${fmt(mt.val)}`:"";
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   return `Aula 0${aulaNum}${first?` · desde ${fDateBR(first)}`:""}
 
 Investimento total:\t${fUSD(m.spend)}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
-CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}
+CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}${bm(m.cpc,mCpc,fUSD)}
 Alcance FB:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
-Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}`;
+Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}${bm(freq,mFreq,v=>String(v).replace(".",","))}`;
 }
 // ── Resumo do Grupo VIP ────────────────────────────────────────────────────
 // Duas entradas vêm à mão porque a API do Meta não as fornece: o ALCANCE
