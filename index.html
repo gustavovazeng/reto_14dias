@@ -6761,7 +6761,7 @@ function extractPriceFromCamp(name){
 }
 // Fallback por código de oferta (quando não há UTM com nome de campanha)
 function extractPriceFromOffer(offerCode){
-  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos"};
+  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos","mwwdt723":"85pesos","cjinn4wy":"220pesos"};
   return FEO_OFFER_TIER[(offerCode||"").toLowerCase().trim()]||null;
 }
 // Fallback: infere price tier pelo valor da compra quando não há UTM
@@ -10625,7 +10625,7 @@ function extractPriceFromCamp(name){
 }
 // Fallback por código de oferta (quando não há UTM com nome de campanha)
 function extractPriceFromOffer(offerCode){
-  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos"};
+  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos","mwwdt723":"85pesos","cjinn4wy":"220pesos"};
   return FEO_OFFER_TIER[(offerCode||"").toLowerCase().trim()]||null;
 }
 // Fallback: infere price tier pelo valor da compra quando não há UTM
@@ -11391,8 +11391,8 @@ async function loadData(force=false){
         const em=(r["Email"]||"").toLowerCase().trim(); if(!em) continue;
         const adId=r["Ad Id"];
         const adData=adId?fmByAdId[adId]:null;
-        const pt=extractPriceFromCamp(adData?.campName)
-              ||extractPriceFromOffer(r.offerCode)
+        const pt=extractPriceFromOffer(r.offerCode)
+              ||extractPriceFromCamp(adData?.campName)
               ||inferPriceTierFromValue(r["Valor do produto"]);
         if(!pt) continue;
         emailToPriceTier[em]=pt;
@@ -11405,8 +11405,8 @@ async function loadData(force=false){
           // Garante _priceTier nas rows FEO também (usado em getFeoFunilRows para filtro de preço)
           const adId=r["Ad Id"];
           const adData=adId?fmByAdId[adId]:null;
-          const _priceTier=extractPriceFromCamp(adData?.campName)
-                          ||extractPriceFromOffer(r.offerCode)
+          const _priceTier=extractPriceFromOffer(r.offerCode)
+                          ||extractPriceFromCamp(adData?.campName)
                           ||inferPriceTierFromValue(r["Valor do produto"]);
           return {...r,"Nome do produto":"FEO - Planilla Finanzas en Ordem",_priceTier};
         }),
