@@ -3327,7 +3327,7 @@ function renderFunilHtml(f){
     ["Leads",       f.leads.toLocaleString("pt-BR"),       "Conv. de página", f.convPagina!=null?fPct(f.convPagina):d, null,null],
     ["CPL",         f.cpl!=null?fUSD(f.cpl):d,             null,null, null,null],
     ["Vendas",      f.vendas.toLocaleString("pt-BR"),      null,null, "Conversão", f.convVenda!=null?fPct(f.convVenda):d],
-    ["Faturamento", fUSD(f.faturamento),                   null,null, "ROAS", f.roas!=null?f.roas.toFixed(2):d],
+    ["Faturamento", fUSD(f.faturamento),                   null,null, "ROAS do front", f.roas!=null?f.roas.toFixed(2):d],
   ];
   const colunas=etapas.map(([lbl,val,tLbl,tVal,bLbl,bVal],i)=>{
     // Só a coluna do CPL tem a pilha de perfil pendurada embaixo.
@@ -4473,7 +4473,7 @@ function renderCarrinhoPrincipal(){
     if(box3)drawBarSingle("c-carrinho-fat",daily,"faturamento",CHART_QUIZ,box3.clientWidth,200);
     setupTip("c-carrinho-fat","t-carrinho-fat",daily,[
       {name:"Faturamento",color:CHART_QUIZ,key:"faturamento",fmt:fUSD},
-      {name:"ROAS",color:CHART_INV,key:"roas",fmt:v=>v!=null?v.toFixed(2)+"x":"—"}],40,12);
+      {name:"ROAS do front",color:CHART_INV,key:"roas",fmt:v=>v!=null?v.toFixed(2)+"x":"—"}],40,12);
   });
 }
 
@@ -4864,7 +4864,7 @@ function renderCarrinhoAnuncios(){
       ${kpiCard("Vendas atribuídas",tot.vendas.toLocaleString("pt-BR"),"","var(--text-strong)")}
       ${kpiCard("Custo por venda",totCustoVenda!=null?fUSD(totCustoVenda):"—","sem meta definida","var(--text-strong)")}
       ${kpiCard("Faturamento atribuído",fUSD(tot.faturamento),"","#34d399")}
-      ${kpiCard("ROAS",totRoas!=null?totRoas.toFixed(2)+"x":"—","","var(--text-strong)")}
+      ${kpiCard("ROAS do front",totRoas!=null?totRoas.toFixed(2)+"x":"—","","var(--text-strong)")}
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:0">
@@ -4886,7 +4886,7 @@ function renderCarrinhoAnuncios(){
           ${thC("vendas","Vendas")}
           ${thC("custoVenda","Custo/venda")}
           ${thC("faturamento","Faturamento")}
-          ${thC("roas","ROAS")}
+          ${thC("roas","ROAS do front")}
         </tr></thead>
         <tbody>
           ${sortedCamps.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem campanhas de Carrinho no período</td></tr>`:
@@ -4928,7 +4928,7 @@ function renderCarrinhoAnuncios(){
           ${th("vendas","Vendas")}
           ${th("custoVenda","Custo/venda")}
           ${th("faturamento","Faturamento")}
-          ${th("roas","ROAS")}
+          ${th("roas","ROAS do front")}
         </tr></thead>
         <tbody>
           ${sortedAds.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
@@ -7925,7 +7925,7 @@ function renderPrincipal(){
     ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
+      ${kpiCard("ROAS do front",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
       ${kpiCard("Faturamento",fBRL(tot.faturamento),FUNIL_PRODUTOS[0].label,"var(--text-strong)")}
       ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,(!isFeo||_feoCpvM!==null)?tot.cpv:null,false)}
     </div>
@@ -7983,7 +7983,7 @@ function renderPrincipal(){
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
     ]);
-    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
+    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS do front",fmt:v=>v.toFixed(2)+"x"}]);
     setupTip("c-fat","t-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
   });
 }
@@ -8109,7 +8109,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8147,7 +8147,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8696,7 +8696,7 @@ function renderAnuncios(){
           ${!isFeo&&ASCENSOES_ATIVAS?thC("trCero","TR "+shortLbl(ASC1),"camp"):""}
           ${!isFeo&&ASCENSOES_ATIVAS?thC("trMapa","TR "+shortLbl(ASC2),"camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
-          ${thC("roas","ROAS","camp")}
+          ${thC("roas","ROAS do front","camp")}
           ${thC("ticket","Ticket Médio","camp")}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
@@ -8814,7 +8814,7 @@ function renderAnuncios(){
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
           ${ASCENSOES_ATIVAS?thC("ticketAsc","Ticket Médio Ascensões","ad"):""}
-          ${thC("roas","ROAS","ad")}
+          ${thC("roas","ROAS do front","ad")}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -9975,7 +9975,7 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
-      ${row("ROAS", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
+      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
@@ -12105,7 +12105,7 @@ function renderPrincipal(){
     ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
+      ${kpiCard("ROAS do front",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
       ${kpiCard("Faturamento",fBRL(tot.faturamento),funilTitle,"var(--text-strong)")}
       ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,(!isFeo||_feoCpvM!==null)?tot.cpv:null,false)}
     </div>
@@ -12163,7 +12163,7 @@ function renderPrincipal(){
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
     ]);
-    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
+    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS do front",fmt:v=>v.toFixed(2)+"x"}]);
     setupTip("c-fat","t-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
   });
 }
@@ -12289,7 +12289,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -12327,7 +12327,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -12876,7 +12876,7 @@ function renderAnuncios(){
           ${!isFeo?thC("trCero","TR Cero","camp"):""}
           ${!isFeo?thC("trMapa","TR Mapa","camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
-          ${thC("roas","ROAS","camp")}
+          ${thC("roas","ROAS do front","camp")}
           ${thC("ticket","Ticket Médio","camp")}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
@@ -12994,7 +12994,7 @@ function renderAnuncios(){
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
           ${thC("ticketAsc","Ticket Médio Ascensões","ad")}
-          ${thC("roas","ROAS","ad")}
+          ${thC("roas","ROAS do front","ad")}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -14161,7 +14161,7 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
-      ${row("ROAS", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
+      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
