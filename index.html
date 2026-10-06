@@ -6569,7 +6569,8 @@ const SHEET_ID     = "1saA8fl4L70Fmoxj3YuVB3D29fbGGMPU8i0hQpnoldlE";
 const FEO_SHEET_ID = "1FFn_-ISWTj7FBsXxoVIRfFjBhlB2GU1kXK2HeUTtD_o";
 const GAPI_KEY  = "AIzaSyDFyD63YrWNWSX2gjZWdVD5Bq8uoazXzbE";
 const SHEET_META = "Base Meta - Cero";        // dados do gerenciador (Meta Ads)
-const SHEET_CERO = "Vendas Hotmart - Cero";   // vendas reais (Hotmart)
+const SHEET_CERO     = "Vendas Hotmart - Cero";       // upsells + vendas históricas do Cero VSL
+const SHEET_CERO_VSL = "Vendas Hotmart - Cero VSL";  // nova aba dedicada ao Cero VSL (oferta 47eb3ha1)
 const SHEET_MAPA_ASC = "Vendas Hotmart - Mapa Ascensao";  // ascensão 1 (Mapa)
 
 // Nome do dashboard (usado nos títulos e nos resumos copiáveis)
@@ -6613,12 +6614,12 @@ const TAXA_IMPOSTO=1.0;
 
 // Metas aba Tráfego
 const METAS_T = {
-  cpc:      {val:0.24,  higher:false},
+  cpc:      {val:0.54,  higher:false},
   ctr:      {val:2.5,   higher:true},
-  cpm:      {val:5.96,  higher:false},
-  txPagChk: {val:5.3,   higher:true},
-  txChkVnd: {val:18.3,  higher:true},
-  connect:  {val:70,    higher:true},
+  cpm:      {val:13.50, higher:false},
+  txPagChk: {val:10.0,  higher:true},
+  txChkVnd: {val:18.5,  higher:true},
+  connect:  {val:80,    higher:true},
 };
 
 // Chart colors — dark mode
@@ -6839,13 +6840,13 @@ function statusBorder(val,meta,higherIsBetter){
 }
 
 // ── Ad ID / advCode helpers ───────────────────────────────────────────────
-// Extrai código adv/adi/adc + dígitos do nome do anúncio
+// Extrai código adv/adi/adc + dígitos + sufixo de versão opcional (-v1-vnd-2309)
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
   // remove prefixo teste- case-insensitive
   const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+/i);
+  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
   return m ? m[0].toLowerCase() : null;
 }
 
@@ -6869,7 +6870,7 @@ function extractPriceFromCamp(name){
 }
 // Fallback por código de oferta (quando não há UTM com nome de campanha)
 function extractPriceFromOffer(offerCode){
-  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos"};
+  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos","mwwdt723":"85pesos","cjinn4wy":"220pesos"};
   return FEO_OFFER_TIER[(offerCode||"").toLowerCase().trim()]||null;
 }
 // Fallback: infere price tier pelo valor da compra quando não há UTM
@@ -6926,7 +6927,7 @@ function tsToISO(ts){
   // Timestamp em milissegundos
   const n=parseInt(ts);
   if(!n||isNaN(n)) return null;
-  const d=new Date(n-3*60*60*1000);
+  const d=new Date(n-6*60*60*1000);
   return d.toISOString().split("T")[0];
 }
 
@@ -7136,7 +7137,7 @@ async function loadData(force=false){
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
   // Meta + abas de vendas dos produtos ativos (cada aba buscada uma vez só)
-  const _salesTabs=[...new Set(FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean))];
+  const _salesTabs=[...new Set([...FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean), SHEET_CERO_VSL])];
   const [mj, ..._salesJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     ..._salesTabs.map(t=>_fetchSafe(t,"Z",5000)),
@@ -7287,8 +7288,11 @@ async function loadData(force=false){
         console.warn(`[funil] "${p.sheet}" tem ${_parsedTabs[p.sheet].length} linhas, mas nenhuma na oferta ${p.offers.join("/")} — confira o código da oferta e a coluna data.purchase.offer.code`);
       return rows;
     };
-    // ── Vendas front-end (Cero a Inversor · oferta 3c55807d) ──────────────
-    const retoRows=rowsOf(FUNIL_PRODUTOS[0]);
+    // ── Vendas front-end (Cero a Inversor) ───────────────────────────────
+    // Combina: histórico em SHEET_CERO (oferta 3c55807d) + nova aba SHEET_CERO_VSL (oferta 47eb3ha1)
+    if(!_parsedTabs[SHEET_CERO_VSL]) _parsedTabs[SHEET_CERO_VSL]=parseHotmartRows(salesByTab[SHEET_CERO_VSL]||{values:[]});
+    const _vslRows=_parsedTabs[SHEET_CERO_VSL].filter(r=>!r.offerCode||r.offerCode==="47eb3ha1");
+    const retoRows=[...rowsOf(FUNIL_PRODUTOS[0]),..._vslRows];
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
@@ -8034,7 +8038,7 @@ function renderPrincipal(){
     ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
+      ${kpiCard("ROAS do front",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
       ${kpiCard("Faturamento",fBRL(tot.faturamento),FUNIL_PRODUTOS[0].label,"var(--text-strong)")}
       ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,(!isFeo||_feoCpvM!==null)?tot.cpv:null,false)}
     </div>
@@ -8092,7 +8096,7 @@ function renderPrincipal(){
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
     ]);
-    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
+    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS do front",fmt:v=>v.toFixed(2)+"x"}]);
     setupTip("c-fat","t-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
   });
 }
@@ -8218,7 +8222,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8256,7 +8260,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8526,11 +8530,11 @@ function renderAnuncios(){
       const useIds=allowedAdIds
         ? new Set([...allIds].filter(id=>allowedAdIds.has(id)))
         : allIds;
-      if(useIds.size===0) continue;
+      if(allowedAdIds && useIds.size===0) continue; // pula só com filtro de campanha ativo
 
       // Spend / clicks / impressions — calculado a partir dos adIds filtrados
       let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,landingViews=0,checkouts=0,igUrl="";
-      if(allowedAdIds){
+      if(allowedAdIds && useIds.size>0){
         // Usa metaByAdId para precisão por campanha
         for(const adId of useIds){
           const adData=dd.metaByAdId[adId];if(!adData)continue;
@@ -8544,7 +8548,7 @@ function renderAnuncios(){
           }
         }
       } else {
-        // Sem filtro: usa o agregado por advCode (mais eficiente)
+        // Sem filtro (ou sem adIds): usa o agregado por advCode
         for(const [d,vals] of Object.entries(byDate)){
           if(d>=start&&d<=end){
             spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
@@ -8795,6 +8799,7 @@ function renderAnuncios(){
       <span style="font-size:10px;color:var(--hint)">Clique para filtrar anúncios por campanha</span>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
+      <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           ${thC("campName","Campanha","camp")}
@@ -8804,7 +8809,7 @@ function renderAnuncios(){
           ${!isFeo&&ASC1?thC("trCero","TR "+shortLbl(ASC1),"camp"):""}
           ${!isFeo&&ASC2?thC("trMapa","TR "+shortLbl(ASC2),"camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
-          ${thC("roas","ROAS","camp")}
+          ${thC("roas","ROAS do front","camp")}
           ${thC("ticket","Ticket Médio","camp")}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
@@ -8851,6 +8856,7 @@ function renderAnuncios(){
           }).join("")}
         </tbody>
       </table>
+      </div>
     </div>
 
     ${(()=>{
@@ -8921,7 +8927,7 @@ function renderAnuncios(){
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
           ${TEM_ASC?thC("ticketAsc","Ticket Médio Ascensões","ad"):""}
-          ${thC("roas","ROAS","ad")}
+          ${thC("roas","ROAS do front","ad")}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -8988,7 +8994,7 @@ function renderAnuncios(){
       const selRows=[...adRows].filter(r=>S.selectedAds.has(r.advCode)).sort((a,b)=>b.qtd-a.qtd);
       const hdr=`*Melhores ads - Finanzas con Proposito - ${FUNIL_NOME}*\n_${fDM(start)} a ${fDM(end)}_`;
       const blocks=selRows.map(r=>{
-        const lines=["Nome do ad  ⤵️",r.advCode];
+        const lines=["Nome do ad  ⤵️",r.adName||r.advCode];
         if(r.igUrl) lines.push(r.igUrl);
         lines.push("Investimento:\t"+fD(r.spend));
         lines.push("Vendas:\t"+r.qtd);
@@ -10084,7 +10090,7 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
-      ${row("ROAS", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
+      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
