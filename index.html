@@ -881,6 +881,7 @@ const S = {
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   leadsDescartadas:0, pesquisasDescartadas:0, // linhas anteriores a DATA_INICIO_CAPTACAO
+  leadsDataCorrigida:0,  // leads cuja data veio da Base pesquisa por ser mais antiga
   leadsDaPesquisa:0,     // quantas leads vieram SÓ da Base pesquisa (sem cadastro na Base leads)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
@@ -951,7 +952,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
-  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0;
+  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0; S.leadsDataCorrigida=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualSessions={};
@@ -2157,12 +2158,30 @@ async function loadData(){
     const paginasCaptura=paginasCapturaConhecidas(leadsRowsRaw);
     const campIds=new Set(metaRows.map(m=>m.campId).filter(Boolean));
     const nomesMeta=nomesDaBaseMeta(metaRows);
-    let leadsDescartadas=0;
+    let leadsDescartadas=0, leadsDataCorrigida=0;
     for(const r of leadsRowsRaw){
       const parsed=toISOLead(leadCol(r,"criadoEm"));if(!parsed)continue;
-      const {date,ms}=parsed;
+      // ── Data da lead: a MAIS ANTIGA entre a Base leads e a Base pesquisa ──
+      // Quando a mesma pessoa existe nas duas bases, vale a data mais antiga
+      // das duas. A Base leads não é confiável como fonte de data: importação
+      // manual grava a lista inteira com a data da importação, não a do
+      // cadastro, e aí o dia da importação ganha centenas de "leads novas"
+      // enquanto os dias de origem ficam vazios.
+      // No caminho normal a pesquisa é respondida DEPOIS do cadastro, então a
+      // data dela é igual ou posterior e nada muda — ela só vence quando é
+      // anterior.
+      // ⚠️ Roda ANTES do corte de data e ANTES do dedup: a data corrigida é
+      // que vale pras duas coisas.
+      const emailLead=normalizeEmail(leadCol(r,"email"));
+      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
+      let date=parsed.date, ms=parsed.ms, dataDaPesquisa=false;
+      if(pesq){
+        const pq=toISOLead(pesq[PESQUISA_COLS.criadoEm]);
+        if(pq&&pq.ms<ms){ date=pq.date; ms=pq.ms; dataDaPesquisa=true; }
+      }
       // Cadastro anterior ao início da captação: fora, antes do dedup.
       if(antesDaCaptacao(date)){ leadsDescartadas++; continue; }
+      if(dataDaPesquisa)leadsDataCorrigida++;
 
       const utm=realinhaLead(r,adIdMap,campIds,paginasCaptura,nomesMeta);
       const utmMed=utm.medium;
@@ -2197,14 +2216,14 @@ async function loadData(){
       // utm_source FBAds ou sem UTM (ver LEAD_PATHS_ORGANICOS).
       const channel=pathOrganico(pathLead)?"organico"
         :((!hasUtm||utmSourceRaw.startsWith("FBAds"))?"trafego":"organico");
-      // Pesquisa da lead (cruzada por e-mail). Responder a pesquisa É o
-      // critério de "quiz respondido" — a Base leads não tem coluna pra isso.
-      const emailLead=normalizeEmail(leadCol(r,"email"));
-      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
+      // Pesquisa da lead (cruzada por e-mail, já buscada no topo do laço).
+      // Responder a pesquisa É o critério de "quiz respondido" — a Base leads
+      // não tem coluna pra isso.
       const scoreQuiz=scoreLead(pesq);
 
       leadsRowsAll.push({
         date,ms,
+        dataDaPesquisa,  // true = a data veio da pesquisa (era mais antiga)
         path:pathLead, // página onde a lead se cadastrou (bate com "Page Path" da Base GA4)
         quizOk:!!pesq,
         // faixa: só existe quando a tabela de pontos estiver preenchida
@@ -2283,6 +2302,7 @@ async function loadData(){
     S.meta=mD; S.metaRows=metaRows; S.adIdMap=adIdMap;
     S.leadsRows=leadsRows; S.leadsRowsRaw=leadsRowsAll; S.leadsByDate=leadsByDate;
     S.leadsDescartadas=leadsDescartadas;
+    S.leadsDataCorrigida=leadsDataCorrigida;
     S.leadsDaPesquisa=leadsDaPesquisa;
 
     const allDates=[...new Set([...Object.keys(mD),...Object.keys(leadsByDate)])].sort();
