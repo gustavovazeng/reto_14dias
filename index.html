@@ -881,7 +881,7 @@ const S = {
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   leadsDescartadas:0, pesquisasDescartadas:0, // linhas anteriores a DATA_INICIO_CAPTACAO
-  leadsSemAtribuicao:0,  // linhas da Base leads sem NENHUMA UTM/URL (ver semAtribuicaoNenhuma)
+  leadsDataCorrigida:0,  // leads cuja data veio da Base pesquisa por ser mais antiga
   leadsDaPesquisa:0,     // quantas leads vieram SÓ da Base pesquisa (sem cadastro na Base leads)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
@@ -952,7 +952,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
-  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0; S.leadsSemAtribuicao=0;
+  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0; S.leadsDataCorrigida=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualSessions={};
@@ -1281,33 +1281,6 @@ const LEADS_COLS = {
   utmTerm:["Term","utm_term"],             // nome do CONJUNTO + _id_<adset_id>
   url:["URL","url"],                       // página de captura (vira o path)
 };
-// ── Linhas SEM NENHUM dado de atribuição ──────────────────────────────────
-// Em 06/10/2026 entraram 7.136 linhas na Base leads com Source, Campaign,
-// Medium, Term, Content e URL TODOS vazios: uma lista de e-mails em ordem
-// alfabética, inteira gravada entre 15:24 e 15:26, colada pra tapar o buraco
-// de 28–29/09. O problema é que veio com a data da COLAGEM, não a do
-// cadastro. Consequências que isso causava:
-//   · 6.594 dessas pessoas já estavam na base → o dedup descartava (ok);
-//   · 542 não tinham outro registro e passavam a contar como cadastro NOVO
-//     do dia da colagem, sem UTM — o custo por lead do dia caía de $1,96
-//     pra $1,29;
-//   · pior: a regra LEADS_SO_DA_PESQUISA passava a enxergar essas 542 como
-//     "já é lead" (548 → 6), devolvendo 28/09 e 29/09 pro buraco.
-// Uma linha sem nenhum dado de atribuição não é um cadastro: a data não é
-// confiável e não há origem pra atribuir. Descartando, as mesmas 542 pessoas
-// voltam pela Base pesquisa — que tem a data real delas no "Criado em" — e
-// caem em 28/09 e 29/09, onde pertencem. Conferido: esse padrão (os 6 campos
-// vazios ao mesmo tempo) não aparece em NENHUM outro dia da base.
-// ⚠️ O filtro roda ANTES de leadsRowsRaw existir, senão o "já é lead" da
-// regra da pesquisa continua enxergando essas linhas.
-const LEAD_CAMPOS_ATRIBUICAO = ["Source","utm_source","Campaign","utm_campaign",
-  "Medium","utm_medium","Term","utm_term","Content","utm_content","URL","url"];
-function semAtribuicaoNenhuma(r){
-  return LEAD_CAMPOS_ATRIBUICAO.every(c=>{
-    const v=r[c];
-    return v==null||String(v).trim()==="";
-  });
-}
 // Primeiro cabeçalho preenchido, na ordem em que LEADS_COLS lista.
 function leadCol(r,chave){
   for(const c of LEADS_COLS[chave]){
@@ -2134,12 +2107,7 @@ async function loadData(){
       fetchSheetCSVOpt(SHEET_PESQUISA_NAME),
     ]);
     const metaRowsRaw = parseRows(parseCSVText(metaCsv));
-    const leadsRowsBrutas = parseRows(parseCSVText(leadsCsv));
-    const leadsRowsRaw = leadsRowsBrutas.filter(r=>!semAtribuicaoNenhuma(r));
-    // Só conta como "descartada" a linha que tinha contato (e-mail ou
-    // telefone) — linha totalmente vazia é separador de exportação, não dado.
-    S.leadsSemAtribuicao = leadsRowsBrutas.filter(r=>semAtribuicaoNenhuma(r)
-      &&(leadCol(r,"email")||leadCol(r,"telefone"))).length;
+    const leadsRowsRaw = parseRows(parseCSVText(leadsCsv));
     const pesquisaByEmail = processPesquisa(parseRows(parseCSVText(pesquisaCsv)));
     S.pesquisaByEmail = pesquisaByEmail;
 
@@ -2190,12 +2158,32 @@ async function loadData(){
     const paginasCaptura=paginasCapturaConhecidas(leadsRowsRaw);
     const campIds=new Set(metaRows.map(m=>m.campId).filter(Boolean));
     const nomesMeta=nomesDaBaseMeta(metaRows);
-    let leadsDescartadas=0;
+    let leadsDescartadas=0, leadsDataCorrigida=0;
     for(const r of leadsRowsRaw){
       const parsed=toISOLead(leadCol(r,"criadoEm"));if(!parsed)continue;
-      const {date,ms}=parsed;
+      // ── Data da lead: a MAIS ANTIGA entre a Base leads e a Base pesquisa ──
+      // A Base leads não é confiável como fonte de data: importações manuais
+      // gravam a lista inteira com a data da importação, não a do cadastro
+      // (em 06/10/2026 foram 7.136 linhas assim, de gente cadastrada entre 22
+      // e 29/09 — o dia da importação ganhava centenas de "leads novas" e os
+      // dias de origem ficavam vazios).
+      // A pesquisa é respondida DEPOIS do cadastro, então no caminho normal a
+      // data dela é igual ou posterior e nada muda. Ela só vence quando é
+      // ANTERIOR — e aí é porque a linha da Base leads foi reescrita. Pegar a
+      // mais antiga das duas conserta exatamente esses casos e não toca em
+      // nenhum outro.
+      // ⚠️ Roda ANTES do corte de data e antes do dedup: a data corrigida é
+      // que vale pras duas coisas.
+      const emailLead=normalizeEmail(leadCol(r,"email"));
+      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
+      let date=parsed.date, ms=parsed.ms, dataDaPesquisa=false;
+      if(pesq){
+        const pq=toISOLead(pesq[PESQUISA_COLS.criadoEm]);
+        if(pq&&pq.ms<ms){ date=pq.date; ms=pq.ms; dataDaPesquisa=true; }
+      }
       // Cadastro anterior ao início da captação: fora, antes do dedup.
       if(antesDaCaptacao(date)){ leadsDescartadas++; continue; }
+      if(dataDaPesquisa)leadsDataCorrigida++;
 
       const utm=realinhaLead(r,adIdMap,campIds,paginasCaptura,nomesMeta);
       const utmMed=utm.medium;
@@ -2230,14 +2218,14 @@ async function loadData(){
       // utm_source FBAds ou sem UTM (ver LEAD_PATHS_ORGANICOS).
       const channel=pathOrganico(pathLead)?"organico"
         :((!hasUtm||utmSourceRaw.startsWith("FBAds"))?"trafego":"organico");
-      // Pesquisa da lead (cruzada por e-mail). Responder a pesquisa É o
-      // critério de "quiz respondido" — a Base leads não tem coluna pra isso.
-      const emailLead=normalizeEmail(leadCol(r,"email"));
-      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
+      // Pesquisa da lead (cruzada por e-mail, já buscada no topo do laço).
+      // Responder a pesquisa É o critério de "quiz respondido" — a Base leads
+      // não tem coluna pra isso.
       const scoreQuiz=scoreLead(pesq);
 
       leadsRowsAll.push({
         date,ms,
+        dataDaPesquisa,  // true = data veio da pesquisa (linha da Base leads tinha data posterior)
         path:pathLead, // página onde a lead se cadastrou (bate com "Page Path" da Base GA4)
         quizOk:!!pesq,
         // faixa: só existe quando a tabela de pontos estiver preenchida
@@ -2316,6 +2304,7 @@ async function loadData(){
     S.meta=mD; S.metaRows=metaRows; S.adIdMap=adIdMap;
     S.leadsRows=leadsRows; S.leadsRowsRaw=leadsRowsAll; S.leadsByDate=leadsByDate;
     S.leadsDescartadas=leadsDescartadas;
+    S.leadsDataCorrigida=leadsDataCorrigida;
     S.leadsDaPesquisa=leadsDaPesquisa;
 
     const allDates=[...new Set([...Object.keys(mD),...Object.keys(leadsByDate)])].sort();
@@ -3441,6 +3430,7 @@ function renderPrincipal(){
   const rowsCh=leadsForTemp(leadsForChannel(leadsInRange(S.startDate,S.endDate),ch),temp);
   const semUtmN=rowsCh.filter(l=>!l.hasUtm).length;
   const soPesquisaN=rowsCh.filter(l=>l.soDaPesquisa).length;
+  const dataCorrigidaN=rowsCh.filter(l=>l.dataDaPesquisa).length;
   // Leads totais sem dedup (toda submissão do formulário conta, mesmo
   // repetida) — só pra referência na observação do card "Leads captados",
   // que mostra o número já deduplicado (S.leadsRows) como valor principal.
@@ -3485,7 +3475,7 @@ function renderPrincipal(){
 
     <div class="g3" style="margin-bottom:13px">
       ${kpiCard("Investimento",fUSD(pt.spend),ch==="organico"?"sem tráfego pago":`planejado até hoje: ${fUSD(plano.investimento)}`,ch==="organico"?"var(--text-strong)":investPlanoColor,false,ch==="organico"?null:pt.spend,plano.investimento>0?plano.investimento:null,false)}
-      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""}${soPesquisaN>0?` · ${soPesquisaN} só da pesquisa`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)${S.leadsSemAtribuicao>0?` · ⚠️ ${S.leadsSemAtribuicao.toLocaleString("pt-BR")} linhas sem origem ignoradas na base`:""}`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
+      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""}${soPesquisaN>0?` · ${soPesquisaN} só da pesquisa`:""}${dataCorrigidaN>0?` · ${dataCorrigidaN.toLocaleString("pt-BR")} com data corrigida pela pesquisa`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
       ${kpiCard("Custo/lead",pt.cpl!=null?fUSD(pt.cpl):"—",pt.cpl!=null?`meta ${fUSD(META_CPL)}`:"não aplicável",cplC,false,pt.cpl,META_CPL,false)}
     </div>
 
@@ -6204,7 +6194,6 @@ window.MDI = {
   resumoMetrics,
   resumoPreviewBox,
   scoreLead,
-  semAtribuicaoNenhuma,
   setAdSearch,
   setAulasSubTab,
   setCampSearch,
