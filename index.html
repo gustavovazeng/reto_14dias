@@ -828,10 +828,6 @@ async function fetchSheetCSVOpt(sheetName, timeoutMs=20000){
 // Todas `let`: switchFunil() reatribui pra copiar os dados do FUNIS[key]
 // selecionado. O valor inicial vem do funil default (mdi_out26).
 let META_CPL = FUNIS.mdi.metaCpl;
-// Selo de versão: aparece no rodapé de todas as páginas. Serve pra responder
-// "a página carregada é a última?" sem adivinhar — se o rodapé não mostra o
-// selo esperado, o navegador está com uma versão antiga em cache.
-const BUILD_TAG = "build 06/10 22:40";
 let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
@@ -885,7 +881,6 @@ const S = {
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
   pesquisaByEmail:{},    // e-mail normalizado → linha da Base pesquisa (1ª resposta de cada pessoa)
   leadsDescartadas:0, pesquisasDescartadas:0, // linhas anteriores a DATA_INICIO_CAPTACAO
-  leadsDataCorrigida:0,  // leads cuja data veio da Base pesquisa por ser mais antiga
   leadsDaPesquisa:0,     // quantas leads vieram SÓ da Base pesquisa (sem cadastro na Base leads)
   ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   stageErrors:{},        // chave da etapa → motivo da falha ao buscar a aba (aparece na página da etapa)
@@ -956,7 +951,7 @@ function toggleFunilDropdown(){
 function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};S.pesquisaByEmail={};
-  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0; S.leadsDataCorrigida=0;
+  S.leadsDescartadas=0; S.pesquisasDescartadas=0; S.leadsDaPesquisa=0;
   S.ga4Rows=[];
   S.stageErrors={};S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualSessions={};
@@ -1285,18 +1280,6 @@ const LEADS_COLS = {
   utmTerm:["Term","utm_term"],             // nome do CONJUNTO + _id_<adset_id>
   url:["URL","url"],                       // página de captura (vira o path)
 };
-// Uma linha da Base leads tem ALGUM dado de atribuição? É o que separa um
-// cadastro de verdade (veio com UTM e/ou página) de uma linha de importação
-// manual (todas as colunas de origem em branco). Usado pela regra de data —
-// ver o laço de leads em loadData().
-const LEAD_CAMPOS_ATRIBUICAO = ["Source","utm_source","Campaign","utm_campaign",
-  "Medium","utm_medium","Term","utm_term","Content","utm_content","URL","url"];
-function temAtribuicao(r){
-  return LEAD_CAMPOS_ATRIBUICAO.some(c=>{
-    const v=r[c];
-    return v!=null&&String(v).trim()!=="";
-  });
-}
 // Primeiro cabeçalho preenchido, na ordem em que LEADS_COLS lista.
 function leadCol(r,chave){
   for(const c of LEADS_COLS[chave]){
@@ -2174,38 +2157,12 @@ async function loadData(){
     const paginasCaptura=paginasCapturaConhecidas(leadsRowsRaw);
     const campIds=new Set(metaRows.map(m=>m.campId).filter(Boolean));
     const nomesMeta=nomesDaBaseMeta(metaRows);
-    let leadsDescartadas=0, leadsDataCorrigida=0;
+    let leadsDescartadas=0;
     for(const r of leadsRowsRaw){
       const parsed=toISOLead(leadCol(r,"criadoEm"));if(!parsed)continue;
-      // ── Data da lead: a MAIS ANTIGA entre a Base leads e a Base pesquisa ──
-      // A Base leads não é confiável como fonte de data: importações manuais
-      // gravam a lista inteira com a data da importação, não a do cadastro
-      // (em 06/10/2026 foram 7.136 linhas assim, de gente cadastrada entre 22
-      // e 29/09 — o dia da importação ganhava centenas de "leads novas" e os
-      // dias de origem ficavam vazios).
-      // A pesquisa é respondida DEPOIS do cadastro, então no caminho normal a
-      // data dela é igual ou posterior e nada muda. Ela só vence quando é
-      // ANTERIOR — e aí é porque a linha da Base leads foi reescrita. Pegar a
-      // mais antiga das duas conserta exatamente esses casos e não toca em
-      // nenhum outro.
-      // ⚠️ Roda ANTES do corte de data e antes do dedup: a data corrigida é
-      // que vale pras duas coisas.
-      const emailLead=normalizeEmail(leadCol(r,"email"));
-      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
-      // ⚠️ TRAVA: a data da pesquisa só substitui a da Base leads quando a
-      // linha NÃO tem nenhum dado de atribuição — a assinatura da importação
-      // manual. Sem isso a regra seria perigosa: quem se recadastra agora e
-      // já tinha respondido a pesquisa numa leva anterior teria a lead jogada
-      // semanas pra trás, esvaziando o dia de hoje. Linha com UTM ou página é
-      // cadastro de verdade e a data dela manda, ponto.
-      let date=parsed.date, ms=parsed.ms, dataDaPesquisa=false;
-      if(pesq&&!temAtribuicao(r)){
-        const pq=toISOLead(pesq[PESQUISA_COLS.criadoEm]);
-        if(pq&&pq.ms<ms){ date=pq.date; ms=pq.ms; dataDaPesquisa=true; }
-      }
+      const {date,ms}=parsed;
       // Cadastro anterior ao início da captação: fora, antes do dedup.
       if(antesDaCaptacao(date)){ leadsDescartadas++; continue; }
-      if(dataDaPesquisa)leadsDataCorrigida++;
 
       const utm=realinhaLead(r,adIdMap,campIds,paginasCaptura,nomesMeta);
       const utmMed=utm.medium;
@@ -2240,14 +2197,14 @@ async function loadData(){
       // utm_source FBAds ou sem UTM (ver LEAD_PATHS_ORGANICOS).
       const channel=pathOrganico(pathLead)?"organico"
         :((!hasUtm||utmSourceRaw.startsWith("FBAds"))?"trafego":"organico");
-      // Pesquisa da lead (cruzada por e-mail, já buscada no topo do laço).
-      // Responder a pesquisa É o critério de "quiz respondido" — a Base leads
-      // não tem coluna pra isso.
+      // Pesquisa da lead (cruzada por e-mail). Responder a pesquisa É o
+      // critério de "quiz respondido" — a Base leads não tem coluna pra isso.
+      const emailLead=normalizeEmail(leadCol(r,"email"));
+      const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
       const scoreQuiz=scoreLead(pesq);
 
       leadsRowsAll.push({
         date,ms,
-        dataDaPesquisa,  // true = data veio da pesquisa (linha da Base leads tinha data posterior)
         path:pathLead, // página onde a lead se cadastrou (bate com "Page Path" da Base GA4)
         quizOk:!!pesq,
         // faixa: só existe quando a tabela de pontos estiver preenchida
@@ -2326,7 +2283,6 @@ async function loadData(){
     S.meta=mD; S.metaRows=metaRows; S.adIdMap=adIdMap;
     S.leadsRows=leadsRows; S.leadsRowsRaw=leadsRowsAll; S.leadsByDate=leadsByDate;
     S.leadsDescartadas=leadsDescartadas;
-    S.leadsDataCorrigida=leadsDataCorrigida;
     S.leadsDaPesquisa=leadsDaPesquisa;
 
     const allDates=[...new Set([...Object.keys(mD),...Object.keys(leadsByDate)])].sort();
@@ -2470,16 +2426,12 @@ function getDaily(start,end,channel="total",temp="todos"){
     const m=sumMetaRows(metaRowsFiltered(date,date,temp));
     const dayLeadsAll=S.leadsRows.filter(l=>l.date===date);
     const leads=leadsForTemp(leadsForChannel(dayLeadsAll,channel),temp).length;
-    // GAP usa a contagem DEDUPLICADA da planilha.
-    // Antes usava a contagem crua, com o argumento de que o gerenciador do
-    // Meta também não deduplica por contato. Na prática a diferença entre as
-    // duas é de 2 a 15 linhas por dia (0,1% a 1% do GAP) — e a contagem crua
-    // fica refém de qualquer importação manual na planilha: a de 06/10/2026
-    // duplicou ~7.000 pessoas e jogou o GAP do dia pra −35%, quando o número
-    // real era +8%. Decisão do Gustavo (06/10): o GAP ignora as duplicações
-    // entre a Base pesquisa e a Base leads.
-    const dayLeadsDed=S.leadsRows.filter(l=>l.date===date);
-    const leadsTotal=leadsForTemp(leadsForChannel(dayLeadsDed,channel),temp).length;
+    // GAP usa leads TOTAIS (sem dedup) — o gerenciador do Meta (actionLeads)
+    // também não deduplica por contato, então comparar contra a contagem já
+    // deduplicada infla o GAP artificialmente. O gráfico de volume continua
+    // mostrando "leads" (deduplicado) normalmente — só o GAP muda a base.
+    const dayLeadsAllRaw=S.leadsRowsRaw.filter(l=>l.date===date);
+    const leadsTotal=leadsForTemp(leadsForChannel(dayLeadsAllRaw,channel),temp).length;
     const spend=channel==="organico"?0:m.spend;
     const actionLeads=m.actionLeads||0;
     // GAP % = diferença entre o que o gerenciador (Meta) reportou e os leads
@@ -2644,11 +2596,8 @@ function getLeadsRowsForCamp(start,end,campName){
 // Meta (actionLeads) não deduplica por contato, então comparar contra a
 // contagem já deduplicada infla o GAP artificialmente. Mesmo critério do
 // GAP diário da aba Principal (ver getDaily).
-// Base do GAP por campanha — deduplicada, pelo mesmo motivo do GAP diário
-// (ver getDaily): a contagem crua quebra quando a planilha recebe importação
-// manual, e a diferença em dia normal é de poucas linhas.
 function getLeadsRawForCamp(start,end,campName){
-  return S.leadsRows.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
+  return S.leadsRowsRaw.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
 }
 function getLeadsRowsForAd(start,end,adName,campFilter){
   return S.leadsRows.filter(l=>{
@@ -3459,7 +3408,6 @@ function renderPrincipal(){
   const rowsCh=leadsForTemp(leadsForChannel(leadsInRange(S.startDate,S.endDate),ch),temp);
   const semUtmN=rowsCh.filter(l=>!l.hasUtm).length;
   const soPesquisaN=rowsCh.filter(l=>l.soDaPesquisa).length;
-  const dataCorrigidaN=rowsCh.filter(l=>l.dataDaPesquisa).length;
   // Leads totais sem dedup (toda submissão do formulário conta, mesmo
   // repetida) — só pra referência na observação do card "Leads captados",
   // que mostra o número já deduplicado (S.leadsRows) como valor principal.
@@ -3504,7 +3452,7 @@ function renderPrincipal(){
 
     <div class="g3" style="margin-bottom:13px">
       ${kpiCard("Investimento",fUSD(pt.spend),ch==="organico"?"sem tráfego pago":`planejado até hoje: ${fUSD(plano.investimento)}`,ch==="organico"?"var(--text-strong)":investPlanoColor,false,ch==="organico"?null:pt.spend,plano.investimento>0?plano.investimento:null,false)}
-      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""}${soPesquisaN>0?` · ${soPesquisaN} só da pesquisa`:""}${dataCorrigidaN>0?` · ${dataCorrigidaN.toLocaleString("pt-BR")} com data corrigida pela pesquisa`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
+      ${kpiCard("Leads captados",pt.leads.toLocaleString("pt-BR"),`atingimento da meta: ${pctAtingimento!=null?fPct(pctAtingimento):"—"}${plano.leads>0?` (${pt.leads}/${plano.leads} planejados)`:""}${ch!=="organico"&&semUtmN>0?` · ${semUtmN} sem UTM`:""}${soPesquisaN>0?` · ${soPesquisaN} só da pesquisa`:""} · ${leadsTotalRaw.toLocaleString("pt-BR")} leads totais (sem dedup)`,leadsPlanoColor,false,plano.leads>0?pt.leads:null,plano.leads>0?plano.leads:null,true)}
       ${kpiCard("Custo/lead",pt.cpl!=null?fUSD(pt.cpl):"—",pt.cpl!=null?`meta ${fUSD(META_CPL)}`:"não aplicável",cplC,false,pt.cpl,META_CPL,false)}
     </div>
 
@@ -3612,7 +3560,7 @@ function renderPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
   restoreStageFocus(_fid);
   requestAnimationFrame(()=>{
     if(ch!=="organico"){
@@ -3898,7 +3846,7 @@ function renderAnuncios(){
         <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
       </div>
     </div>`:""}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Leads (Qualidade) ──────────────────────────────────────────────
@@ -3988,7 +3936,7 @@ function renderLeads(){
       ${demoBlock(SCORE_LABELS.tecnica,"tecnica",SCORE_COLS.tecnica)}
       ${demoBlock(SCORE_LABELS.renda,"renda",SCORE_COLS.renda)}
     </div>
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Resumo diário ──────────────────────────────────────────────────
@@ -4172,7 +4120,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
     ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasTrafego||0} de tráfego · ${S.carrinhoVendasOutras||0} orgânica(s)/outras)`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
   el._resumoText=resumoText;
   restoreStageFocus(_fid);
 }
@@ -4425,7 +4373,7 @@ function renderMetricasTrafego(){
       <div style="position:relative"><canvas id="c-connect"></canvas><div class="tip" id="t-connect"></div></div>
     </div>
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     // Todos os gráficos desta aba em azul (CHART_INV) — antes cada métrica
@@ -4464,7 +4412,7 @@ function renderStagePage(pageId,label,planArr){
         <div class="hdr-sub">em construção</div>
       </div>
     </div>
-    <div class="foot">${BUILD_TAG} · mdi_out26 · ${label}</div>`;
+    <div class="foot">mdi_out26 · ${label}</div>`;
 }
 
 // ── Carrinho: Principal (KPIs + gráficos) ───────────────────────────────────
@@ -4601,7 +4549,7 @@ function renderCarrinhoPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err">Nenhum dado no período selecionado — o Carrinho ainda não começou ou os dados ainda não chegaram na planilha.</div>`:""}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     const box1=document.getElementById("c-carrinho-dual")?.parentElement;
@@ -4821,7 +4769,7 @@ function renderCarrinhoVendas(){
       </table>
     </div>
 
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Vendas</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Vendas</div>`;
 
   requestAnimationFrame(()=>{
     const box=document.getElementById("c-carrinho-vendas")?.parentElement;
@@ -5106,7 +5054,7 @@ function renderCarrinhoAnuncios(){
       </div>
       <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>`:""}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Campanhas/Anúncios</div>`;
+    <div class="foot">mdi_out26 · Carrinho · Campanhas/Anúncios</div>`;
 }
 
 // ── Helpers compartilhados dos resumos de etapa (Aquecimento/Lembrete/Aulas) ─
@@ -5700,7 +5648,7 @@ function renderAquecimento(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aquecimento")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("aquecimento",rows,AQUECIMENTO_METAS,"aquecimento")}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Aquecimento</div>`;
+    <div class="foot">mdi_out26 · Aquecimento</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("aquecimento",rows,AQUECIMENTO_METAS));
 }
@@ -5723,7 +5671,7 @@ function renderLembrete(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("lembrete")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("lembrete",rows,LEMBRETE_METAS,"lembrete")}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Lembrete</div>`;
+    <div class="foot">mdi_out26 · Lembrete</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("lembrete",rows,LEMBRETE_METAS));
 }
@@ -5776,7 +5724,7 @@ function renderAulas(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aulas")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta aula.</div>`:stageAnalysisHtml(cfg.scope,rows,cfg.metas,cfg.alcanceKey)}
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Aulas · ${cfg.label}</div>`;
+    <div class="foot">mdi_out26 · Aulas · ${cfg.label}</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts(cfg.scope,rows,cfg.metas,"bar"));
 }
@@ -5986,7 +5934,7 @@ function renderPlanoReal(){
     ${stageTable("Grupo VIP","Grupo VIP",PLANO_GRUPO_VIP)}
     ${stageTable("Carrinho","Carrinho",PLANO_CARRINHO)}
 
-    <div class="foot">${BUILD_TAG} · mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
+    <div class="foot">mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
 }
 
 // ── Main render ───────────────────────────────────────────────────────────
@@ -6272,7 +6220,6 @@ window.MDI = {
   sumMetaRows,
   sumStageRows,
   switchFunil,
-  temAtribuicao,
   tempPcts,
   tempToggle,
   tetoRobusto,
