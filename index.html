@@ -2633,6 +2633,29 @@ function gapTd(gapPct,actionLeads,leadsRaw){
   const sinal=gapPct>0?"+":"";
   return `<td class="mono" style="text-align:right;color:${cor}" title="gerenciador: ${actionLeads} · planilha (sem dedup): ${leadsRaw}">${sinal}${fPct(gapPct)}</td>`;
 }
+// Agregação de um CONJUNTO de linhas das tabelas de Campanhas/Anúncios —
+// usada na linha de TOTAL. Soma os absolutos (investimento, cliques,
+// impressões, leads do gerenciador) e RECALCULA as taxas a partir dos totais;
+// nunca tira média das linhas, que daria o mesmo peso a uma campanha de $5 e
+// a uma de $5.000. As % de faixa e de resposta da pesquisa saem da mesma
+// função que as linhas usam, aplicada ao conjunto de leads somado.
+function somaLinhas(rows){
+  const t=rows.reduce((a,r)=>({
+    spend:a.spend+r.spend, clicks:a.clicks+r.clicks,
+    impressions:a.impressions+r.impressions, actionLeads:a.actionLeads+(r.actionLeads||0),
+    leadsRaw:a.leadsRaw+(r.leadsRaw||0),
+  }),{spend:0,clicks:0,impressions:0,actionLeads:0,leadsRaw:0});
+  const leadsArr=rows.reduce((a,r)=>a.concat(r._leadsArr||[]),[]);
+  const leads=leadsArr.length;
+  const q=qualityFromLeadsArray(leadsArr);
+  const temRaw=rows.some(r=>r.leadsRaw!=null);
+  return {...t,leads,...q,
+    gapPct:(temRaw&&t.leadsRaw>0)?((t.actionLeads-t.leadsRaw)/t.leadsRaw)*100:null,
+    cpc:t.clicks>0?t.spend/t.clicks:0,
+    ctr:t.impressions>0?(t.clicks/t.impressions)*100:0,
+    cpm:t.impressions>0?(t.spend/t.impressions)*1000:0,
+    cpl:leads>0?t.spend/leads:0};
+}
 function getCampRows(start,end){
   // As linhas vêm da Base Meta, então "Tráfego sem UTM" já não apareceria
   // aqui; o filtro é uma trava explícita, caso um dia a tabela passe a ser
@@ -2653,7 +2676,9 @@ function getCampRows(start,end){
     // não há lead real no período (divisão por zero).
     const leadsRaw=getLeadsRawForCamp(start,end,c.campName).length;
     const gapPct=leadsRaw>0?((c.actionLeads-leadsRaw)/leadsRaw)*100:null;
-    return {...c,leads,leadsRaw,gapPct,...q,
+    // _leadsArr fica na linha só pra linha de TOTAL poder recalcular as % de
+    // faixa/pesquisa sobre o conjunto, sem varrer a base de leads de novo.
+    return {...c,leads,leadsRaw,gapPct,_leadsArr:leadsArr,...q,
       cpc:c.clicks>0?c.spend/c.clicks:0, ctr:c.impressions>0?(c.clicks/c.impressions)*100:0,
       cpm:c.impressions>0?(c.spend/c.impressions)*1000:0, cpl:leads>0?c.spend/leads:0};
   });
@@ -2674,7 +2699,7 @@ function getAdRows(start,end,selectedCamps){
     const leadsArr=getLeadsRowsForAd(start,end,a.adName,hasSel?selectedCamps:null);
     const leads=leadsArr.length;
     const q=qualityFromLeadsArray(leadsArr);
-    return {...a,leads,...q,campNames:[...a.camps].join(", "),
+    return {...a,leads,_leadsArr:leadsArr,...q,campNames:[...a.camps].join(", "),
       cpc:a.clicks>0?a.spend/a.clicks:0, ctr:a.impressions>0?(a.clicks/a.impressions)*100:0,
       cpm:a.impressions>0?(a.spend/a.impressions)*1000:0, cpl:leads>0?a.spend/leads:0};
   });
@@ -2727,19 +2752,44 @@ function onDCCurrent(w,v){
 }
 function getCurrentPeriod(){return{s:S.startDate,e:S.endDate,q:S.activeQuick};}
 
+// ── Foco nos campos de digitação ──────────────────────────────────────────
+// Todo render reescreve o innerHTML da página inteira, e isso DESTRÓI o
+// <input> que acabou de disparar o oninput: o nó novo nasce sem foco, então o
+// usuário digitava uma letra e tinha que clicar de novo pra digitar a
+// próxima. preservaFoco() anota qual input estava focado (pelo id) e onde
+// estava o cursor, roda o render e devolve foco + cursor no nó novo.
+// ⚠️ Só funciona se o input tiver id — todos os campos de busca e os de
+// digitação manual têm.
+function preservaFoco(fn){
+  const a=document.activeElement;
+  let f=null;
+  if(a&&a.tagName==="INPUT"&&a.id){
+    f={id:a.id,s:null,e:null};
+    // selectionStart estoura em input[type=number]/date em alguns browsers —
+    // nesse caso só devolvemos o foco, sem reposicionar o cursor.
+    try{ f.s=a.selectionStart; f.e=a.selectionEnd; }catch(_){}
+  }
+  fn();
+  if(!f)return;
+  const el=document.getElementById(f.id);
+  if(!el)return;
+  try{ el.focus({preventScroll:true}); }catch(_){ try{ el.focus(); }catch(__){} }
+  if(f.s!=null){ try{ el.setSelectionRange(f.s,f.e); }catch(_){} }
+}
+
 // ── Cross-filtering: Campanhas / Anúncios ──────────────────────────────────
 function toggleCamp(name){
   if(S.selectedCamps.has(name))S.selectedCamps.delete(name);else S.selectedCamps.add(name);
   renderAnuncios();
 }
 function clearCamps(){S.selectedCamps.clear();renderAnuncios();}
-function setCampSearch(v){S.campSearch=v;renderAnuncios();}
+function setCampSearch(v){S.campSearch=v;preservaFoco(()=>renderAnuncios());}
 function toggleAd(name){
   if(S.selectedAds.has(name))S.selectedAds.delete(name);else S.selectedAds.add(name);
   renderAnuncios();
 }
 function clearAds(){S.selectedAds.clear();renderAnuncios();}
-function setAdSearch(v){S.adSearch=v;renderAnuncios();}
+function setAdSearch(v){S.adSearch=v;preservaFoco(()=>renderAnuncios());}
 function sortCampanhas(col){
   if(S.cSort.col===col)S.cSort.dir=S.cSort.dir==="asc"?"desc":"asc";else{S.cSort.col=col;S.cSort.dir="desc";}
   renderAnuncios();
@@ -2762,7 +2812,7 @@ function sortLeads(col){
   if(S.lSort.col===col)S.lSort.dir=S.lSort.dir==="asc"?"desc":"asc";else{S.lSort.col=col;S.lSort.dir="desc";}
   renderLeads();
 }
-function setLeadSearch(v){S.leadSearch=v;renderLeads();}
+function setLeadSearch(v){S.leadSearch=v;preservaFoco(()=>renderLeads());}
 
 const SUB_TABS_CAPTACAO=[
   ["principal","⊞ Principal"],
@@ -3327,7 +3377,7 @@ function renderFunilHtml(f){
     ["Leads",       f.leads.toLocaleString("pt-BR"),       "Conv. de página", f.convPagina!=null?fPct(f.convPagina):d, null,null],
     ["CPL",         f.cpl!=null?fUSD(f.cpl):d,             null,null, null,null],
     ["Vendas",      f.vendas.toLocaleString("pt-BR"),      null,null, "Conversão", f.convVenda!=null?fPct(f.convVenda):d],
-    ["Faturamento", fUSD(f.faturamento),                   null,null, "ROAS do front", f.roas!=null?f.roas.toFixed(2):d],
+    ["Faturamento", fUSD(f.faturamento),                   null,null, "ROAS", f.roas!=null?f.roas.toFixed(2):d],
   ];
   const colunas=etapas.map(([lbl,val,tLbl,tVal,bLbl,bVal],i)=>{
     // Só a coluna do CPL tem a pilha de perfil pendurada embaixo.
@@ -3604,6 +3654,20 @@ function renderAnuncios(){
     return dir==="asc"?av-bv:bv-av;
   });
 
+  // ── Linha de TOTAL das duas tabelas ────────────────────────────────────
+  // Sem seleção: soma todas as linhas visíveis (ou seja, respeita a busca).
+  // Com seleção: soma SÓ o que está marcado — e aí a busca é ignorada, pra
+  // uma campanha marcada e depois escondida pelo filtro não sair da conta.
+  const campSelMode=S.selectedCamps.size>0;
+  const campTotRows=campSelMode?campRowsAll.filter(c=>S.selectedCamps.has(c.campName)):sortedCamps;
+  const campTot=somaLinhas(campTotRows);
+  const adSelMode=S.selectedAds.size>0;
+  const adTotRows=adSelMode?adRowsAll.filter(a=>S.selectedAds.has(a.adName)):sortedAds;
+  const adTot=somaLinhas(adTotRows);
+  const rotuloTotal=(selMode,n,sing,plur)=>`${selMode?"TOTAL da seleção":"TOTAL"} · ${n} ${n===1?sing:plur}`;
+  // Célula da linha de total — mesma formatação das linhas, só mais forte.
+  const tdT=(html,extra="")=>`<td class="mono" style="text-align:right;font-weight:700;color:var(--text-strong);${extra}">${html}</td>`;
+
   const tot=campRowsAll.reduce((a,c)=>({spend:a.spend+c.spend,clicks:a.clicks+c.clicks,impressions:a.impressions+c.impressions,leads:a.leads+c.leads}),{spend:0,clicks:0,impressions:0,leads:0});
   const totCpl=tot.leads>0?tot.spend/tot.leads:0;
   const totCtr=tot.impressions>0?(tot.clicks/tot.impressions)*100:0;
@@ -3640,7 +3704,7 @@ function renderAnuncios(){
       <span style="font-size:10px;color:var(--hint)">Clique para filtrar os anúncios por campanha</span>
     </div>
     <div style="position:relative;margin-bottom:10px">
-      <input oninput="MDI.setCampSearch(this.value)" value="${S.campSearch}" placeholder="Buscar campanha…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-campanha" oninput="MDI.setCampSearch(this.value)" value="${S.campSearch}" placeholder="Buscar campanha…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="cc" style="padding:0;overflow:hidden;margin-bottom:22px">
       <div style="overflow-x:auto">
@@ -3683,6 +3747,22 @@ function renderAnuncios(){
             </tr>`;
           }).join("")}
         </tbody>
+        ${campTotRows.length===0?"":`<tfoot><tr style="background:rgba(148,163,184,.10);border-top:2px solid var(--border)">
+          <td></td>
+          <td style="font-weight:700;color:var(--text-strong)">${rotuloTotal(campSelMode,campTotRows.length,"campanha","campanhas")}</td>
+          ${tdT(fUSD(campTot.spend))}
+          ${tdT(campTot.leads.toLocaleString("pt-BR"))}
+          ${tdT(campTot.cpl>0?fUSD(campTot.cpl):"—",`color:${campTot.cpl>0?statusColor(campTot.cpl,META_CPL,false):"var(--muted)"}`)}
+          ${tdT(fPctOrDash(campTot.faixaA))}
+          ${tdT(fPctOrDash(campTot.faixaB))}
+          ${tdT(fPctOrDash(campTot.faixaC))}
+          ${tdT(fPctOrDash(campTot.faixaD))}
+          ${tdT(fPctOrDash(campTot.quizPct))}
+          ${tdT(fUSD(campTot.cpm))}
+          ${tdT(fUSD(campTot.cpc))}
+          ${tdT(fPct(campTot.ctr))}
+          ${tdT(campTot.gapPct==null?"—":`${campTot.gapPct>0?"+":""}${fPct(campTot.gapPct)}`,`color:${campTot.gapPct==null?"var(--hint)":(Math.abs(campTot.gapPct)<=10?"#34d399":Math.abs(campTot.gapPct)<=20?"#fbbf24":"#f87171")}`)}
+        </tr></tfoot>`}
       </table>
       </div>
     </div>
@@ -3693,7 +3773,7 @@ function renderAnuncios(){
       <span style="font-size:10px;color:var(--hint)">Clique para selecionar e gerar o resumo</span>
     </div>
     <div style="position:relative;margin-bottom:10px">
-      <input oninput="MDI.setAdSearch(this.value)" value="${S.adSearch}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-anuncio" oninput="MDI.setAdSearch(this.value)" value="${S.adSearch}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="cc" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto">
@@ -3736,6 +3816,22 @@ function renderAnuncios(){
             </tr>`;
           }).join("")}
         </tbody>
+        ${adTotRows.length===0?"":`<tfoot><tr style="background:rgba(148,163,184,.10);border-top:2px solid var(--border)">
+          <td></td>
+          <td style="font-weight:700;color:var(--text-strong)">${rotuloTotal(adSelMode,adTotRows.length,"anúncio","anúncios")}</td>
+          ${tdT(fUSD(adTot.spend))}
+          ${tdT(adTot.leads.toLocaleString("pt-BR"))}
+          ${tdT(adTot.cpl>0?fUSD(adTot.cpl):"—",`color:${adTot.cpl>0?statusColor(adTot.cpl,META_CPL,false):"var(--muted)"}`)}
+          ${tdT(fPctOrDash(adTot.faixaA))}
+          ${tdT(fPctOrDash(adTot.faixaB))}
+          ${tdT(fPctOrDash(adTot.faixaC))}
+          ${tdT(fPctOrDash(adTot.faixaD))}
+          ${tdT(fPctOrDash(adTot.quizPct))}
+          ${tdT(fUSD(adTot.cpm))}
+          ${tdT(fUSD(adTot.cpc))}
+          ${tdT(fPct(adTot.ctr))}
+          <td></td>
+        </tr></tfoot>`}
       </table>
       </div>
     </div>
@@ -4473,7 +4569,7 @@ function renderCarrinhoPrincipal(){
     if(box3)drawBarSingle("c-carrinho-fat",daily,"faturamento",CHART_QUIZ,box3.clientWidth,200);
     setupTip("c-carrinho-fat","t-carrinho-fat",daily,[
       {name:"Faturamento",color:CHART_QUIZ,key:"faturamento",fmt:fUSD},
-      {name:"ROAS do front",color:CHART_INV,key:"roas",fmt:v=>v!=null?v.toFixed(2)+"x":"—"}],40,12);
+      {name:"ROAS",color:CHART_INV,key:"roas",fmt:v=>v!=null?v.toFixed(2)+"x":"—"}],40,12);
   });
 }
 
@@ -4510,8 +4606,8 @@ function getCarrinhoVendasDaily(start,end){
   return getCarrinhoDaily(start,end).map(d=>({date:d.date,label:d.label,vendas:d.vendas,
     vendasTraf:d.vendasTraf,vendasOrg:d.vendasOrg,faturamento:d.faturamento}));
 }
-function setCarrinhoOrigemSearch(v){S.carrinhoOrigemSearch=v;render();}
-function setCarrinhoCanalSearch(v){S.carrinhoCanalSearch=v;render();}
+function setCarrinhoOrigemSearch(v){S.carrinhoOrigemSearch=v;preservaFoco(()=>render());}
+function setCarrinhoCanalSearch(v){S.carrinhoCanalSearch=v;preservaFoco(()=>render());}
 function sortCarrinhoOrigem(col){
   const s=S.carrinhoOSort;if(s.col===col)s.dir=s.dir==="asc"?"desc":"asc";else{s.col=col;s.dir="desc";}
   render();
@@ -4619,7 +4715,7 @@ function renderCarrinhoVendas(){
 
     <div class="section-lbl" style="margin-top:0">Vendas por origem (UTM source)</div>
     <div style="margin-bottom:10px">
-      <input oninput="MDI.setCarrinhoOrigemSearch(this.value)" value="${S.carrinhoOrigemSearch}" placeholder="Buscar origem…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-car-origem" oninput="MDI.setCarrinhoOrigemSearch(this.value)" value="${S.carrinhoOrigemSearch}" placeholder="Buscar origem…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="card" style="margin-bottom:22px;overflow-x:auto">
       <table class="tb">
@@ -4647,7 +4743,7 @@ function renderCarrinhoVendas(){
 
     <div class="section-lbl" style="margin-top:0">Vendas por canal (UTM medium)</div>
     <div style="margin-bottom:10px">
-      <input oninput="MDI.setCarrinhoCanalSearch(this.value)" value="${S.carrinhoCanalSearch}" placeholder="Buscar canal…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-car-canal" oninput="MDI.setCarrinhoCanalSearch(this.value)" value="${S.carrinhoCanalSearch}" placeholder="Buscar canal…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="card" style="margin-bottom:22px;overflow-x:auto">
       <table class="tb">
@@ -4748,7 +4844,7 @@ function carrinhoAdRows(start,end,selectedCamps){
       txConvVenda:a.clicks>0?(vendas/a.clicks)*100:0};
   });
 }
-function setCarrinhoAdSearch(v){S.carrinhoAdSearch=v;renderCarrinhoAnuncios();}
+function setCarrinhoAdSearch(v){S.carrinhoAdSearch=v;preservaFoco(()=>renderCarrinhoAnuncios());}
 function sortCarrinhoAds(col){
   const s=S.carrinhoAdSort;if(s.col===col)s.dir=s.dir==="asc"?"desc":"asc";else{s.col=col;s.dir="desc";}
   renderCarrinhoAnuncios();
@@ -4758,7 +4854,7 @@ function toggleCarrinhoCamp(name){
   renderCarrinhoAnuncios();
 }
 function clearCarrinhoCamps(){S.carrinhoSelectedCamps.clear();renderCarrinhoAnuncios();}
-function setCarrinhoCampSearch(v){S.carrinhoCampSearch=v;renderCarrinhoAnuncios();}
+function setCarrinhoCampSearch(v){S.carrinhoCampSearch=v;preservaFoco(()=>renderCarrinhoAnuncios());}
 function sortCarrinhoCampanhas(col){
   const s=S.carrinhoCampSort;if(s.col===col)s.dir=s.dir==="asc"?"desc":"asc";else{s.col=col;s.dir="desc";}
   renderCarrinhoAnuncios();
@@ -4864,7 +4960,7 @@ function renderCarrinhoAnuncios(){
       ${kpiCard("Vendas atribuídas",tot.vendas.toLocaleString("pt-BR"),"","var(--text-strong)")}
       ${kpiCard("Custo por venda",totCustoVenda!=null?fUSD(totCustoVenda):"—","sem meta definida","var(--text-strong)")}
       ${kpiCard("Faturamento atribuído",fUSD(tot.faturamento),"","#34d399")}
-      ${kpiCard("ROAS do front",totRoas!=null?totRoas.toFixed(2)+"x":"—","","var(--text-strong)")}
+      ${kpiCard("ROAS",totRoas!=null?totRoas.toFixed(2)+"x":"—","","var(--text-strong)")}
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:0">
@@ -4872,7 +4968,7 @@ function renderCarrinhoAnuncios(){
       ${S.carrinhoSelectedCamps.size>0?`<button onclick="MDI.clearCarrinhoCamps()" style="font-size:10px;padding:3px 9px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;border-radius:5px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.carrinhoSelectedCamps.size})</button>`:""}
     </div>
     <div style="margin:10px 0">
-      <input oninput="MDI.setCarrinhoCampSearch(this.value)" value="${S.carrinhoCampSearch}" placeholder="Buscar campanha…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-car-campanha" oninput="MDI.setCarrinhoCampSearch(this.value)" value="${S.carrinhoCampSearch}" placeholder="Buscar campanha…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="card" style="margin-bottom:22px;overflow-x:auto">
       <table class="tb">
@@ -4886,7 +4982,7 @@ function renderCarrinhoAnuncios(){
           ${thC("vendas","Vendas")}
           ${thC("custoVenda","Custo/venda")}
           ${thC("faturamento","Faturamento")}
-          ${thC("roas","ROAS do front")}
+          ${thC("roas","ROAS")}
         </tr></thead>
         <tbody>
           ${sortedCamps.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem campanhas de Carrinho no período</td></tr>`:
@@ -4914,7 +5010,7 @@ function renderCarrinhoAnuncios(){
       ${S.carrinhoSelectedAds.size>0?`<button onclick="MDI.clearCarrinhoAds()" style="font-size:10px;padding:3px 9px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;border-radius:5px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpar seleção (${S.carrinhoSelectedAds.size})</button>`:""}
     </div>
     <div style="margin:10px 0">
-      <input oninput="MDI.setCarrinhoAdSearch(this.value)" value="${S.carrinhoAdSearch}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-car-anuncio" oninput="MDI.setCarrinhoAdSearch(this.value)" value="${S.carrinhoAdSearch}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="card" style="margin-bottom:14px;overflow-x:auto">
       <table class="tb">
@@ -4928,7 +5024,7 @@ function renderCarrinhoAnuncios(){
           ${th("vendas","Vendas")}
           ${th("custoVenda","Custo/venda")}
           ${th("faturamento","Faturamento")}
-          ${th("roas","ROAS do front")}
+          ${th("roas","ROAS")}
         </tr></thead>
         <tbody>
           ${sortedAds.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
@@ -4965,12 +5061,12 @@ function renderCarrinhoAnuncios(){
 function setManualEntradasVip(v){
   const n=parseInt(String(v).replace(/\D/g,""),10);
   S.manualEntradasVip=(isNaN(n)||n<=0)?null:n;
-  renderResumo();
+  preservaFoco(()=>renderResumo());
 }
 function setManualAlcance(key,v){
   const n=parseInt(String(v).replace(/\D/g,""));
   S.manualAlcance[key]=(isNaN(n)||n<=0)?null:n;
-  render();
+  preservaFoco(()=>render());
 }
 // Linha label/valor/meta+emoji — mesmo padrão visual do Resumo diário.
 function stageRow(lbl,val,metaStr,emoji){
@@ -4999,7 +5095,7 @@ function setManualSessions(path,v){
   const n=parseInt(String(v).replace(/\D/g,""),10);
   if(isNaN(n)||n<=0) delete S.manualSessions[path];
   else S.manualSessions[path]=n;
-  render();
+  preservaFoco(()=>render());
 }
 function restoreStageFocus(fid){
   if(!fid)return;
@@ -5386,7 +5482,7 @@ function stageAdAgg(rows){
     cptx75:a.video75>0?a.spend/a.video75:null}));
 }
 function setStageChartMetric(scope,metric){S.stageChartMetric[scope]=metric;render();}
-function setStageAdSearch(scope,v){S.stageAdSearch[scope]=v;render();}
+function setStageAdSearch(scope,v){S.stageAdSearch[scope]=v;preservaFoco(()=>render());}
 function sortStageAds(scope,col){
   const s=S.stageAdSort[scope];
   if(s.col===col)s.dir=s.dir==="asc"?"desc":"asc";else{s.col=col;s.dir="desc";}
@@ -5476,7 +5572,7 @@ function stageAnalysisHtml(scope,rows,metas,alcanceKey){
       <span style="font-size:10px;color:var(--hint)">${adsSorted.length} anúncio(s)</span>
     </div>
     <div style="position:relative;margin-bottom:10px">
-      <input oninput="MDI.setStageAdSearch('${scope}',this.value)" value="${S.stageAdSearch[scope]||""}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
+      <input id="busca-anuncio-${scope}" oninput="MDI.setStageAdSearch('${scope}',this.value)" value="${S.stageAdSearch[scope]||""}" placeholder="Buscar anúncio…" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box"/>
     </div>
     <div class="cc" style="padding:0;overflow:hidden;margin-bottom:6px">
       <div style="overflow-x:auto">
@@ -6044,6 +6140,7 @@ window.MDI = {
   planoDateRange,
   planoTotalLancamento,
   pontosResposta,
+  preservaFoco,
   principalTotals,
   processCarrinhoVendas,
   processGA4,
@@ -6095,6 +6192,7 @@ window.MDI = {
   setStageChartMetric,
   setupTip,
   sheetCsvUrl,
+  somaLinhas,
   sortAnuncios,
   sortCampanhas,
   sortCarrinhoAds,
@@ -6471,8 +6569,8 @@ const SHEET_ID     = "1saA8fl4L70Fmoxj3YuVB3D29fbGGMPU8i0hQpnoldlE";
 const FEO_SHEET_ID = "1FFn_-ISWTj7FBsXxoVIRfFjBhlB2GU1kXK2HeUTtD_o";
 const GAPI_KEY  = "AIzaSyDFyD63YrWNWSX2gjZWdVD5Bq8uoazXzbE";
 const SHEET_META = "Base Meta - Cero";        // dados do gerenciador (Meta Ads)
-const SHEET_CERO     = "Vendas Hotmart - Cero";       // upsells + vendas históricas do Cero VSL
-const SHEET_CERO_VSL = "Vendas Hotmart - Cero VSL";  // nova aba dedicada ao Cero VSL (oferta 47eb3ha1)
+const SHEET_CERO = "Vendas Hotmart - Cero";   // vendas reais (Hotmart)
+const SHEET_MAPA_ASC = "Vendas Hotmart - Mapa Ascensao";  // ascensão 1 (Mapa)
 
 // Nome do dashboard (usado nos títulos e nos resumos copiáveis)
 const FUNIL_NOME = "Finanzas - Cero";
@@ -6481,19 +6579,29 @@ const FUNIL_NOME = "Finanzas - Cero";
 // A aba de vendas tem várias ofertas de outros funis: só entram as ofertas
 // listadas em "offers" de cada produto.
 //
-// ASCENSÕES (upsells) — ESCONDIDAS até o funil ficar pronto.
-// Para ativar: preencher label/sheet/offers de asc1/asc2 e trocar
-// ASCENSOES_ATIVAS para true. Com true voltam as colunas TR, o Ticket Médio
-// Ascensões, os degraus do funil e os gráficos de take rate.
-const ASCENSOES_ATIVAS = false;
+// ASCENSÕES (upsells): a ascensão 1 é o Mapa del Inversor. Quem comprou o
+// front é cruzado com a aba da ascensão por e-mail, CPF ou telefone (o
+// "procv"), e só conta a compra que, além de casar o comprador, estiver na
+// oferta listada em "offers" — compra do mesmo produto em outra oferta é de
+// outro funil e fica de fora.
+//
+// A ascensão 2 ainda não existe: fica sem aba e sem oferta, e por isso não
+// aparece em lugar nenhum. Para ativar, basta preencher sheet/offers/label
+// dela — nada mais precisa mudar.
+const ASCENSOES_ATIVAS = true;
 const FUNIL_PRODUTOS = [
-  {id:"front", label:"Cero a Inversor", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe", sheet:SHEET_CERO, offers:["3c55807d"]},
-  {id:"asc1",  label:"Ascensão 1",      step:"Upsell 1",            fill:"#92400e", text:"#fef3c7", sheet:"",         offers:[]},
-  {id:"asc2",  label:"Ascensão 2",      step:"Upsell 2",            fill:"#065f46", text:"#d1fae5", sheet:"",         offers:[]},
+  {id:"front", label:"Cero a Inversor",    step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe", sheet:SHEET_CERO,     offers:["3c55807d"]},
+  {id:"asc1",  label:"Mapa del Inversor",  step:"Upsell 1",            fill:"#92400e", text:"#fef3c7", sheet:SHEET_MAPA_ASC, offers:["uhrn50mn"]},
+  {id:"asc2",  label:"Ascensão 2",         step:"Upsell 2",            fill:"#065f46", text:"#d1fae5", sheet:"",             offers:[]},
 ];
-const FUNIL_ATIVO = ASCENSOES_ATIVAS ? FUNIL_PRODUTOS : FUNIL_PRODUTOS.slice(0,1);
 const FRONT_ID = FUNIL_PRODUTOS[0].id;
-const ASC1 = FUNIL_PRODUTOS[1], ASC2 = FUNIL_PRODUTOS[2];
+// Entram no funil o front-end e as ascensões já configuradas (aba + oferta).
+const FUNIL_ATIVO = FUNIL_PRODUTOS.filter(p=>p.id===FRONT_ID||(ASCENSOES_ATIVAS&&p.sheet&&p.offers.length));
+const ASC_ATIVAS = FUNIL_ATIVO.slice(1);   // ascensões em uso, na ordem
+const TEM_ASC = ASC_ATIVAS.length>0;
+const ASC1 = ASC_ATIVAS[0], ASC2 = ASC_ATIVAS[1];
+// Meta da take rate da ascensão 1 (linha tracejada no gráfico por dia)
+const META_TAKE_RATE_ASC1 = 20;
 const shortLbl = p => (p&&p.label||"").split(" ")[0];
 
 // Cache localStorage
@@ -6505,12 +6613,12 @@ const TAXA_IMPOSTO=1.0;
 
 // Metas aba Tráfego
 const METAS_T = {
-  cpc:      {val:0.54,  higher:false},
+  cpc:      {val:0.24,  higher:false},
   ctr:      {val:2.5,   higher:true},
-  cpm:      {val:13.50, higher:false},
-  txPagChk: {val:10.0,  higher:true},
-  txChkVnd: {val:18.5,  higher:true},
-  connect:  {val:80,    higher:true},
+  cpm:      {val:5.96,  higher:false},
+  txPagChk: {val:5.3,   higher:true},
+  txChkVnd: {val:18.3,  higher:true},
+  connect:  {val:70,    higher:true},
 };
 
 // Chart colors — dark mode
@@ -6731,13 +6839,13 @@ function statusBorder(val,meta,higherIsBetter){
 }
 
 // ── Ad ID / advCode helpers ───────────────────────────────────────────────
-// Extrai código adv/adi/adc + dígitos + sufixo de versão opcional (-v1-vnd-2309)
+// Extrai código adv/adi/adc + dígitos do nome do anúncio
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
   // remove prefixo teste- case-insensitive
   const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
+  const m=clean.match(/ad[vic]\d+/i);
   return m ? m[0].toLowerCase() : null;
 }
 
@@ -6761,7 +6869,7 @@ function extractPriceFromCamp(name){
 }
 // Fallback por código de oferta (quando não há UTM com nome de campanha)
 function extractPriceFromOffer(offerCode){
-  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos","mwwdt723":"85pesos","cjinn4wy":"220pesos"};
+  const FEO_OFFER_TIER={"7qcbwd5x":"170pesos"};
   return FEO_OFFER_TIER[(offerCode||"").toLowerCase().trim()]||null;
 }
 // Fallback: infere price tier pelo valor da compra quando não há UTM
@@ -6818,7 +6926,7 @@ function tsToISO(ts){
   // Timestamp em milissegundos
   const n=parseInt(ts);
   if(!n||isNaN(n)) return null;
-  const d=new Date(n-6*60*60*1000);
+  const d=new Date(n-3*60*60*1000);
   return d.toISOString().split("T")[0];
 }
 
@@ -7028,7 +7136,7 @@ async function loadData(force=false){
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
   // Meta + abas de vendas dos produtos ativos (cada aba buscada uma vez só)
-  const _salesTabs=[...new Set([...FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean), SHEET_CERO_VSL])];
+  const _salesTabs=[...new Set(FUNIL_ATIVO.map(p=>p.sheet).filter(Boolean))];
   const [mj, ..._salesJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     ..._salesTabs.map(t=>_fetchSafe(t,"Z",5000)),
@@ -7174,13 +7282,13 @@ async function loadData(force=false){
       if(!p.sheet||!p.offers.length) return [];
       if(!_parsedTabs[p.sheet]) _parsedTabs[p.sheet]=parseHotmartRows(salesByTab[p.sheet]||{values:[]});
       const ok=new Set(p.offers.map(o=>o.toLowerCase()));
-      return _parsedTabs[p.sheet].filter(r=>ok.has((r.offerCode||"").toLowerCase()));
+      const rows=_parsedTabs[p.sheet].filter(r=>ok.has((r.offerCode||"").toLowerCase()));
+      if(!rows.length&&_parsedTabs[p.sheet].length)
+        console.warn(`[funil] "${p.sheet}" tem ${_parsedTabs[p.sheet].length} linhas, mas nenhuma na oferta ${p.offers.join("/")} — confira o código da oferta e a coluna data.purchase.offer.code`);
+      return rows;
     };
-    // ── Vendas front-end (Cero a Inversor) ───────────────────────────────
-    // Combina: histórico em SHEET_CERO (oferta 3c55807d) + nova aba SHEET_CERO_VSL (oferta 47eb3ha1)
-    if(!_parsedTabs[SHEET_CERO_VSL]) _parsedTabs[SHEET_CERO_VSL]=parseHotmartRows(salesByTab[SHEET_CERO_VSL]||{values:[]});
-    const _vslRows=_parsedTabs[SHEET_CERO_VSL].filter(r=>!r.offerCode||r.offerCode==="47eb3ha1");
-    const retoRows=[...rowsOf(FUNIL_PRODUTOS[0]),..._vslRows];
+    // ── Vendas front-end (Cero a Inversor · oferta 3c55807d) ──────────────
+    const retoRows=rowsOf(FUNIL_PRODUTOS[0]);
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
@@ -7229,7 +7337,8 @@ async function loadData(force=false){
     }
     S.vendasByTemp=vByTemp;
 
-    // ── Funil: front-end + ascensões (ascensões só quando ASCENSOES_ATIVAS) ─
+    // ── Funil: front-end + ascensões (cruzamento por comprador é feito
+    // em buildFunilData, por e-mail / CPF / telefone) ──────────────────────
     S.funilRows=FUNIL_ATIVO.flatMap(p=>(p.id===FRONT_ID?retoRows:rowsOf(p)).map(r=>({...r,"Nome do produto":p.label})));
     // Build funilRowsByTemp: link each buyer to temp via their front-end purchase adId→campName
     {
@@ -7925,7 +8034,7 @@ function renderPrincipal(){
     ${retoTempFilterBar()}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
       ${kpiCard("Investimento",fBRL(tot.spend),`${tot.vendas} vendas · ${daily.length} dias`,"var(--text-strong)")}
-      ${kpiCard("ROAS do front",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
+      ${kpiCard("ROAS",tot.roas.toFixed(2)+"x",roasSub,roasC,false,isFeo?null:tot.roas,!isFeo)}
       ${kpiCard("Faturamento",fBRL(tot.faturamento),FUNIL_PRODUTOS[0].label,"var(--text-strong)")}
       ${kpiCard("Custo por Venda",fBRL(tot.cpv),cpvSub,cpvC,false,(!isFeo||_feoCpvM!==null)?tot.cpv:null,false)}
     </div>
@@ -7983,7 +8092,7 @@ function renderPrincipal(){
       {key:"spend",color:CHART_INV,name:"Investimento"},
       {key:"cpv",color:CHART_CPV,name:"CPV"},
     ]);
-    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS do front",fmt:v=>v.toFixed(2)+"x"}]);
+    setupTip("c-roas","t-roas",daily,[{key:"roas",color:CHART_COLOR,name:"ROAS",fmt:v=>v.toFixed(2)+"x"}]);
     setupTip("c-fat","t-fat",daily,[{key:"faturamento",color:CHART_COLOR,name:"Faturamento"}]);
   });
 }
@@ -8109,7 +8218,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Plataforma","Investimento","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8147,7 +8256,7 @@ function renderTrafego(){
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr>
-              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS do front"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
+              ${["Formato","Plataforma","Vendas","CPV","Faturamento","ROAS"].map(h=>`<th style="padding:7px 12px;text-align:${h==="Formato"||h==="Plataforma"?"left":"right"};background:var(--surf);border-bottom:1px solid var(--border);color:var(--hint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${h}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -8356,8 +8465,8 @@ function renderAnuncios(){
     let _cCero=0,_cMapa=0;
     for(const ek of campEvKeys){
       const prods=keyToProds.get(ek)||new Set();
-      if(prods.has(ASC1.id)) _cCero++;
-      if(prods.has(ASC2.id)) _cMapa++;
+      if(ASC1&&prods.has(ASC1.id)) _cCero++;
+      if(ASC2&&prods.has(ASC2.id)) _cMapa++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
       qtd:cQtd,valor:campFunilRev,
@@ -8417,11 +8526,11 @@ function renderAnuncios(){
       const useIds=allowedAdIds
         ? new Set([...allIds].filter(id=>allowedAdIds.has(id)))
         : allIds;
-      if(allowedAdIds && useIds.size===0) continue; // pula só com filtro de campanha ativo
+      if(useIds.size===0) continue;
 
       // Spend / clicks / impressions — calculado a partir dos adIds filtrados
       let spend=0,clicks=0,impressions=0,ic=0,video3s=0,video15s=0,landingViews=0,checkouts=0,igUrl="";
-      if(allowedAdIds && useIds.size>0){
+      if(allowedAdIds){
         // Usa metaByAdId para precisão por campanha
         for(const adId of useIds){
           const adData=dd.metaByAdId[adId];if(!adData)continue;
@@ -8435,7 +8544,7 @@ function renderAnuncios(){
           }
         }
       } else {
-        // Sem filtro (ou sem adIds): usa o agregado por advCode
+        // Sem filtro: usa o agregado por advCode (mais eficiente)
         for(const [d,vals] of Object.entries(byDate)){
           if(d>=start&&d<=end){
             spend+=vals.spend;clicks+=vals.clicks;impressions+=vals.impressions;
@@ -8480,8 +8589,8 @@ function renderAnuncios(){
       let _aCero=0,_aMapa=0;
       for(const ek of adEvKeys){
         const prods=keyToProds.get(ek)||new Set();
-        if(prods.has(ASC1.id)) _aCero++;
-        if(prods.has(ASC2.id)) _aMapa++;
+        if(ASC1&&prods.has(ASC1.id)) _aCero++;
+        if(ASC2&&prods.has(ASC2.id)) _aMapa++;
       }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
         trCero:adEvKeys.size>0?(_aCero/adEvKeys.size)*100:0,
@@ -8587,12 +8696,12 @@ function renderAnuncios(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
 
     <div class="section-lbl">Resumo do período${hasFilter?" · campanhas selecionadas":""}</div>
-    <div style="display:grid;grid-template-columns:repeat(${ASCENSOES_ATIVAS?7:6},1fr);gap:13px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(${TEM_ASC?7:6},1fr);gap:13px;margin-bottom:20px">
       <div class="kc"><div class="kc-lbl">Investimento</div><div class="kc-val" style="font-size:18px">${fBRL(tot.spend)}</div></div>
       <div class="kc"><div class="kc-lbl">Vendas</div><div class="kc-val" style="font-size:18px">${tot.qtd}</div></div>
       ${(()=>{const _m=isFeo?null:META_CPV;return `<div class="kc" style="border-color:${sb(totCpv,_m,false)}"><div class="kc-lbl">Custo por Venda</div><div class="kc-val" style="color:${sc(totCpv,_m,false)};font-size:18px">${fBRL(totCpv)}</div>${_m?`<div class="kc-sub">meta ${fBRL(_m)}</div>`:""}</div>`;})()}
       <div class="kc" style="border-color:${sb(totTicket,isFeo?null:META_TICKET,true)}"><div class="kc-lbl">Ticket Médio Front</div><div class="kc-val" style="color:${sc(totTicket,isFeo?null:META_TICKET,true)};font-size:18px">${fBRL(totTicket)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(META_TICKET)}</div>`}</div>
-      ${ASCENSOES_ATIVAS?`<div class="kc"><div class="kc-lbl">Ticket Médio Ascensões</div><div class="kc-val" style="font-size:18px">${fBRL(totTicketAsc)}</div><div class="kc-sub">todos os produtos</div></div>`:""}
+      ${TEM_ASC?`<div class="kc"><div class="kc-lbl">Ticket Médio Ascensões</div><div class="kc-val" style="font-size:18px">${fBRL(totTicketAsc)}</div><div class="kc-sub">todos os produtos</div></div>`:""}
       <div class="kc" style="border-color:${sb(totCtr,isFeo?null:METAS_T.ctr.val,true)}"><div class="kc-lbl">CTR</div><div class="kc-val" style="color:${sc(totCtr,isFeo?null:METAS_T.ctr.val,true)};font-size:18px">${fPct(totCtr)}</div>${isFeo?"":`<div class="kc-sub">meta ${fPct(METAS_T.ctr.val)}</div>`}</div>
       <div class="kc" style="border-color:${sb(totCpm,isFeo?null:METAS_T.cpm.val,false)}"><div class="kc-lbl">CPM</div><div class="kc-val" style="color:${sc(totCpm,isFeo?null:METAS_T.cpm.val,false)};font-size:18px">${fBRL(totCpm)}</div>${isFeo?"":`<div class="kc-sub">meta ${fBRL(METAS_T.cpm.val)}</div>`}</div>
     </div>
@@ -8686,17 +8795,16 @@ function renderAnuncios(){
       <span style="font-size:10px;color:var(--hint)">Clique para filtrar anúncios por campanha</span>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
-      <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           ${thC("campName","Campanha","camp")}
           ${thC("campStatus","Status","camp")}
           ${thC("spend","Investimento","camp")}
           ${thC("qtd","Vendas","camp")}
-          ${!isFeo&&ASCENSOES_ATIVAS?thC("trCero","TR "+shortLbl(ASC1),"camp"):""}
-          ${!isFeo&&ASCENSOES_ATIVAS?thC("trMapa","TR "+shortLbl(ASC2),"camp"):""}
+          ${!isFeo&&ASC1?thC("trCero","TR "+shortLbl(ASC1),"camp"):""}
+          ${!isFeo&&ASC2?thC("trMapa","TR "+shortLbl(ASC2),"camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
-          ${thC("roas","ROAS do front","camp")}
+          ${thC("roas","ROAS","camp")}
           ${thC("ticket","Ticket Médio","camp")}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
@@ -8727,8 +8835,8 @@ function renderAnuncios(){
               <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-              ${!isFeo&&ASCENSOES_ATIVAS?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
-              ${!isFeo&&ASCENSOES_ATIVAS?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
+              ${!isFeo&&ASC1?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
+              ${!isFeo&&ASC2?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
@@ -8743,7 +8851,6 @@ function renderAnuncios(){
           }).join("")}
         </tbody>
       </table>
-      </div>
     </div>
 
     ${(()=>{
@@ -8809,12 +8916,12 @@ function renderAnuncios(){
           ${thC("adStatus","Status","ad")}
           ${thC("spend","Investimento","ad")}
           ${thC("qtd","Vendas","ad")}
-          ${!isFeo&&ASCENSOES_ATIVAS?thC("trCero","TR "+shortLbl(ASC1),"ad"):""}
-          ${!isFeo&&ASCENSOES_ATIVAS?thC("trMapa","TR "+shortLbl(ASC2),"ad"):""}
+          ${!isFeo&&ASC1?thC("trCero","TR "+shortLbl(ASC1),"ad"):""}
+          ${!isFeo&&ASC2?thC("trMapa","TR "+shortLbl(ASC2),"ad"):""}
           ${thC("cpv","Custo/Venda","ad")}
           ${thC("ticket","Ticket Médio Front","ad")}
-          ${ASCENSOES_ATIVAS?thC("ticketAsc","Ticket Médio Ascensões","ad"):""}
-          ${thC("roas","ROAS do front","ad")}
+          ${TEM_ASC?thC("ticketAsc","Ticket Médio Ascensões","ad"):""}
+          ${thC("roas","ROAS","ad")}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -8849,11 +8956,11 @@ function renderAnuncios(){
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${fBRL(r.spend)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd}</td>
-            ${!isFeo&&ASCENSOES_ATIVAS?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
-            ${!isFeo&&ASCENSOES_ATIVAS?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
+            ${!isFeo&&ASC1?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
+            ${!isFeo&&ASC2?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
-            ${ASCENSOES_ATIVAS?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>`:""}
+            ${TEM_ASC?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
@@ -8881,7 +8988,7 @@ function renderAnuncios(){
       const selRows=[...adRows].filter(r=>S.selectedAds.has(r.advCode)).sort((a,b)=>b.qtd-a.qtd);
       const hdr=`*Melhores ads - Finanzas con Proposito - ${FUNIL_NOME}*\n_${fDM(start)} a ${fDM(end)}_`;
       const blocks=selRows.map(r=>{
-        const lines=["Nome do ad  ⤵️",r.adName||r.advCode];
+        const lines=["Nome do ad  ⤵️",r.advCode];
         if(r.igUrl) lines.push(r.igUrl);
         lines.push("Investimento:\t"+fD(r.spend));
         lines.push("Vendas:\t"+r.qtd);
@@ -9697,7 +9804,7 @@ function renderFunil(){
 
   // Daily take rate data (only for Reto funil)
   var _trDays=[],_trPoints=[];
-  if(!isFeoFunil&&s1&&s2&&S.startDate&&S.endDate){
+  if(!isFeoFunil&&s1&&S.startDate&&S.endDate){
     var _vbk=new Set();
     for(var [,_byr] of fd.buyers){
       if(!_byr.products.some(function(p){return p.id===s0.id&&p.status==="Paga";})) continue;
@@ -9725,7 +9832,7 @@ function renderFunil(){
       }
       if(_pid===s0.id) _dmap[_rd].reto++;
       else if(_pid===s1.id) _dmap[_rd].cero++;
-      else if(_pid===s2.id) _dmap[_rd].mapa++;
+      else if(s2&&_pid===s2.id) _dmap[_rd].mapa++;
     }
     // Taxa por dia isolado (igual ao que a célula mostra ao filtrar por aquele dia)
     for(var _ds2 of _trDays){
@@ -9787,34 +9894,36 @@ function renderFunil(){
       ${anaContent}
     </div>
     ${!isFeoFunil&&_trPoints.length>0?`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:${s2?"1fr 1fr":"1fr"};gap:14px;margin-bottom:20px">
       <div class="cc" style="position:relative">
         <div class="ch"><span class="ct">Take rate ${shortLbl(s1)} (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-cero"></canvas><div class="tip" id="t-tr-cero"></div></div>
       </div>
-      <div class="cc" style="position:relative">
+      ${s2?`<div class="cc" style="position:relative">
         <div class="ch"><span class="ct">Take rate ${shortLbl(s2)} (por dia)</span></div>
         <div style="position:relative"><canvas id="c-tr-mapa"></canvas><div class="tip" id="t-tr-mapa"></div></div>
-      </div>
+      </div>`:""}
     </div>`:""}
     <p style="font-size:10px;color:var(--hint);text-align:center;font-family:'JetBrains Mono',monospace">${s0.label} · Base Vendas (Hotmart) + Base Meta (Meta Ads via Stract)</p>`;
 
   if(!isFeoFunil&&_trPoints.length>0){
     requestAnimationFrame(function(){
       const trW1=document.getElementById("c-tr-cero")?.parentElement?.offsetWidth||380;
-      const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
-      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",20,"Meta 20%",trW1,170);
-      drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170);
+      drawLineChart("c-tr-cero",_trPoints,"trCero",function(v){return v.toFixed(1)+"%";},"#f59e0b",META_TAKE_RATE_ASC1,"Meta "+META_TAKE_RATE_ASC1+"%",trW1,170);
       setupTip("c-tr-cero","t-tr-cero",_trPoints,[
         {key:"trCero",color:"#f59e0b",name:"Take rate "+shortLbl(s1),fmt:function(v){return v.toFixed(1)+"%";}},
         {key:"reto",color:"var(--muted)",name:"Vendas "+shortLbl(s0),fmt:function(v){return v+" vdas";}},
         {key:"cero",color:"#f59e0b",name:"Vendas "+shortLbl(s1),fmt:function(v){return v+" vdas";}}
       ],52,12);
-      setupTip("c-tr-mapa","t-tr-mapa",_trPoints,[
-        {key:"trMapa",color:"#34d399",name:"Take rate "+shortLbl(s2),fmt:function(v){return v.toFixed(1)+"%";}},
-        {key:"cero",color:"var(--muted)",name:"Vendas "+shortLbl(s1),fmt:function(v){return v+" vdas";}},
-        {key:"mapa",color:"#34d399",name:"Vendas "+shortLbl(s2),fmt:function(v){return v+" vdas";}}
-      ],52,12);
+      if(s2){
+        const trW2=document.getElementById("c-tr-mapa")?.parentElement?.offsetWidth||380;
+        drawLineChart("c-tr-mapa",_trPoints,"trMapa",function(v){return v.toFixed(1)+"%";},"#34d399",null,null,trW2,170);
+        setupTip("c-tr-mapa","t-tr-mapa",_trPoints,[
+          {key:"trMapa",color:"#34d399",name:"Take rate "+shortLbl(s2),fmt:function(v){return v.toFixed(1)+"%";}},
+          {key:"cero",color:"var(--muted)",name:"Vendas "+shortLbl(s1),fmt:function(v){return v+" vdas";}},
+          {key:"mapa",color:"#34d399",name:"Vendas "+shortLbl(s2),fmt:function(v){return v+" vdas";}}
+        ],52,12);
+      }
     });
   }
 }
@@ -9975,7 +10084,7 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
-      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
+      ${row("ROAS", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
