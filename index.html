@@ -831,7 +831,7 @@ let META_CPL = FUNIS.mdi.metaCpl;
 // Selo de versão: aparece no rodapé de todas as páginas. Serve pra responder
 // "a página carregada é a última?" sem adivinhar — se o rodapé não mostra o
 // selo esperado, o navegador está com uma versão antiga em cache.
-const BUILD_TAG = "build 06/10 22:05";
+const BUILD_TAG = "build 06/10 22:40";
 let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
@@ -1285,6 +1285,18 @@ const LEADS_COLS = {
   utmTerm:["Term","utm_term"],             // nome do CONJUNTO + _id_<adset_id>
   url:["URL","url"],                       // página de captura (vira o path)
 };
+// Uma linha da Base leads tem ALGUM dado de atribuição? É o que separa um
+// cadastro de verdade (veio com UTM e/ou página) de uma linha de importação
+// manual (todas as colunas de origem em branco). Usado pela regra de data —
+// ver o laço de leads em loadData().
+const LEAD_CAMPOS_ATRIBUICAO = ["Source","utm_source","Campaign","utm_campaign",
+  "Medium","utm_medium","Term","utm_term","Content","utm_content","URL","url"];
+function temAtribuicao(r){
+  return LEAD_CAMPOS_ATRIBUICAO.some(c=>{
+    const v=r[c];
+    return v!=null&&String(v).trim()!=="";
+  });
+}
 // Primeiro cabeçalho preenchido, na ordem em que LEADS_COLS lista.
 function leadCol(r,chave){
   for(const c of LEADS_COLS[chave]){
@@ -2180,8 +2192,14 @@ async function loadData(){
       // que vale pras duas coisas.
       const emailLead=normalizeEmail(leadCol(r,"email"));
       const pesq=emailLead?(pesquisaByEmail[emailLead]||null):null;
+      // ⚠️ TRAVA: a data da pesquisa só substitui a da Base leads quando a
+      // linha NÃO tem nenhum dado de atribuição — a assinatura da importação
+      // manual. Sem isso a regra seria perigosa: quem se recadastra agora e
+      // já tinha respondido a pesquisa numa leva anterior teria a lead jogada
+      // semanas pra trás, esvaziando o dia de hoje. Linha com UTM ou página é
+      // cadastro de verdade e a data dela manda, ponto.
       let date=parsed.date, ms=parsed.ms, dataDaPesquisa=false;
-      if(pesq){
+      if(pesq&&!temAtribuicao(r)){
         const pq=toISOLead(pesq[PESQUISA_COLS.criadoEm]);
         if(pq&&pq.ms<ms){ date=pq.date; ms=pq.ms; dataDaPesquisa=true; }
       }
@@ -6254,6 +6272,7 @@ window.MDI = {
   sumMetaRows,
   sumStageRows,
   switchFunil,
+  temAtribuicao,
   tempPcts,
   tempToggle,
   tetoRobusto,
