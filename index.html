@@ -828,6 +828,10 @@ async function fetchSheetCSVOpt(sheetName, timeoutMs=20000){
 // Todas `let`: switchFunil() reatribui pra copiar os dados do FUNIS[key]
 // selecionado. O valor inicial vem do funil default (mdi_out26).
 let META_CPL = FUNIS.mdi.metaCpl;
+// Selo de versão: aparece no rodapé de todas as páginas. Serve pra responder
+// "a página carregada é a última?" sem adivinhar — se o rodapé não mostra o
+// selo esperado, o navegador está com uma versão antiga em cache.
+const BUILD_TAG = "build 06/10 22:05";
 let METAS_RESUMO = FUNIS.mdi.metasResumo;
 let AQUECIMENTO_METAS = FUNIS.mdi.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.mdi.lembreteMetas;
@@ -2448,12 +2452,16 @@ function getDaily(start,end,channel="total",temp="todos"){
     const m=sumMetaRows(metaRowsFiltered(date,date,temp));
     const dayLeadsAll=S.leadsRows.filter(l=>l.date===date);
     const leads=leadsForTemp(leadsForChannel(dayLeadsAll,channel),temp).length;
-    // GAP usa leads TOTAIS (sem dedup) — o gerenciador do Meta (actionLeads)
-    // também não deduplica por contato, então comparar contra a contagem já
-    // deduplicada infla o GAP artificialmente. O gráfico de volume continua
-    // mostrando "leads" (deduplicado) normalmente — só o GAP muda a base.
-    const dayLeadsAllRaw=S.leadsRowsRaw.filter(l=>l.date===date);
-    const leadsTotal=leadsForTemp(leadsForChannel(dayLeadsAllRaw,channel),temp).length;
+    // GAP usa a contagem DEDUPLICADA da planilha.
+    // Antes usava a contagem crua, com o argumento de que o gerenciador do
+    // Meta também não deduplica por contato. Na prática a diferença entre as
+    // duas é de 2 a 15 linhas por dia (0,1% a 1% do GAP) — e a contagem crua
+    // fica refém de qualquer importação manual na planilha: a de 06/10/2026
+    // duplicou ~7.000 pessoas e jogou o GAP do dia pra −35%, quando o número
+    // real era +8%. Decisão do Gustavo (06/10): o GAP ignora as duplicações
+    // entre a Base pesquisa e a Base leads.
+    const dayLeadsDed=S.leadsRows.filter(l=>l.date===date);
+    const leadsTotal=leadsForTemp(leadsForChannel(dayLeadsDed,channel),temp).length;
     const spend=channel==="organico"?0:m.spend;
     const actionLeads=m.actionLeads||0;
     // GAP % = diferença entre o que o gerenciador (Meta) reportou e os leads
@@ -2618,8 +2626,11 @@ function getLeadsRowsForCamp(start,end,campName){
 // Meta (actionLeads) não deduplica por contato, então comparar contra a
 // contagem já deduplicada infla o GAP artificialmente. Mesmo critério do
 // GAP diário da aba Principal (ver getDaily).
+// Base do GAP por campanha — deduplicada, pelo mesmo motivo do GAP diário
+// (ver getDaily): a contagem crua quebra quando a planilha recebe importação
+// manual, e a diferença em dia normal é de poucas linhas.
 function getLeadsRawForCamp(start,end,campName){
-  return S.leadsRowsRaw.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
+  return S.leadsRows.filter(l=>ehLeadDeTrafego(l)&&l.date>=start&&l.date<=end&&l.campName===campName);
 }
 function getLeadsRowsForAd(start,end,adName,campFilter){
   return S.leadsRows.filter(l=>{
@@ -3583,7 +3594,7 @@ function renderPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
   restoreStageFocus(_fid);
   requestAnimationFrame(()=>{
     if(ch!=="organico"){
@@ -3869,7 +3880,7 @@ function renderAnuncios(){
         <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
       </div>
     </div>`:""}
-    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Leads (Qualidade) ──────────────────────────────────────────────
@@ -3959,7 +3970,7 @@ function renderLeads(){
       ${demoBlock(SCORE_LABELS.tecnica,"tecnica",SCORE_COLS.tecnica)}
       ${demoBlock(SCORE_LABELS.renda,"renda",SCORE_COLS.renda)}
     </div>
-    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
 }
 
 // ── Render: Resumo diário ──────────────────────────────────────────────────
@@ -4143,7 +4154,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
     ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasTrafego||0} de tráfego · ${S.carrinhoVendasOutras||0} orgânica(s)/outras)`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
-    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
   el._resumoText=resumoText;
   restoreStageFocus(_fid);
 }
@@ -4396,7 +4407,7 @@ function renderMetricasTrafego(){
       <div style="position:relative"><canvas id="c-connect"></canvas><div class="tip" id="t-connect"></div></div>
     </div>
     ${daily.length===0?`<div class="err" style="margin-top:12px">Nenhum dado no período selecionado.</div>`:""}
-    <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Captação · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     // Todos os gráficos desta aba em azul (CHART_INV) — antes cada métrica
@@ -4435,7 +4446,7 @@ function renderStagePage(pageId,label,planArr){
         <div class="hdr-sub">em construção</div>
       </div>
     </div>
-    <div class="foot">mdi_out26 · ${label}</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · ${label}</div>`;
 }
 
 // ── Carrinho: Principal (KPIs + gráficos) ───────────────────────────────────
@@ -4572,7 +4583,7 @@ function renderCarrinhoPrincipal(){
     </div>
 
     ${daily.length===0?`<div class="err">Nenhum dado no período selecionado — o Carrinho ainda não começou ou os dados ainda não chegaram na planilha.</div>`:""}
-    <div class="foot">mdi_out26 · Carrinho · Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Google Sheets</div>`;
 
   requestAnimationFrame(()=>{
     const box1=document.getElementById("c-carrinho-dual")?.parentElement;
@@ -4792,7 +4803,7 @@ function renderCarrinhoVendas(){
       </table>
     </div>
 
-    <div class="foot">mdi_out26 · Carrinho · Vendas</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Vendas</div>`;
 
   requestAnimationFrame(()=>{
     const box=document.getElementById("c-carrinho-vendas")?.parentElement;
@@ -5077,7 +5088,7 @@ function renderCarrinhoAnuncios(){
       </div>
       <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.9;margin:0;user-select:all">${adResumoText.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
     </div>`:""}
-    <div class="foot">mdi_out26 · Carrinho · Campanhas/Anúncios</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Carrinho · Campanhas/Anúncios</div>`;
 }
 
 // ── Helpers compartilhados dos resumos de etapa (Aquecimento/Lembrete/Aulas) ─
@@ -5671,7 +5682,7 @@ function renderAquecimento(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aquecimento")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("aquecimento",rows,AQUECIMENTO_METAS,"aquecimento")}
-    <div class="foot">mdi_out26 · Aquecimento</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Aquecimento</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("aquecimento",rows,AQUECIMENTO_METAS));
 }
@@ -5694,7 +5705,7 @@ function renderLembrete(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("lembrete")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta etapa.</div>`:stageAnalysisHtml("lembrete",rows,LEMBRETE_METAS,"lembrete")}
-    <div class="foot">mdi_out26 · Lembrete</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Lembrete</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts("lembrete",rows,LEMBRETE_METAS));
 }
@@ -5747,7 +5758,7 @@ function renderAulas(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${stageErroHtml("aulas")}
     ${rows.length===0?`<div class="err" style="margin-top:10px">Nenhum dado carregado ainda para esta aula.</div>`:stageAnalysisHtml(cfg.scope,rows,cfg.metas,cfg.alcanceKey)}
-    <div class="foot">mdi_out26 · Aulas · ${cfg.label}</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Aulas · ${cfg.label}</div>`;
   restoreStageFocus(_fid);
   if(rows.length>0)requestAnimationFrame(()=>mountStageCharts(cfg.scope,rows,cfg.metas,"bar"));
 }
@@ -5957,7 +5968,7 @@ function renderPlanoReal(){
     ${stageTable("Grupo VIP","Grupo VIP",PLANO_GRUPO_VIP)}
     ${stageTable("Carrinho","Carrinho",PLANO_CARRINHO)}
 
-    <div class="foot">mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
+    <div class="foot">${BUILD_TAG} · mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
 }
 
 // ── Main render ───────────────────────────────────────────────────────────
