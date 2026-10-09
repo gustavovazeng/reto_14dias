@@ -1750,12 +1750,17 @@ function sumStageRows(rows){
 }
 // Métricas agregadas de uma etapa (Aquecimento/Lembrete/Aulas): CPC vem de
 // spend/clicks (recalculado, não da coluna pronta do CSV, pra consistência
-// com o resto do dashboard). Tx75%/CPtx75% usam Impressões como base (não
-// temos "Video Plays" nessas bases) — ajustar se um dia existir esse dado.
+// com o resto do dashboard).
+// ⚠️ Tx 75% = 75% assistido ÷ QUEM VIU 3 SEGUNDOS (não ÷ impressões).
+// Decisão do Gustavo (09/10): o denominador é o público que de fato começou a
+// assistir, que é a base usada no gerenciador — com impressões a taxa saía
+// bem mais baixa e não comparava com a meta. A coluna é "Action 3s Video
+// Views" (com "Action Video View" como alternativa, ver parseStageRows).
+// Sem view3s na base, a taxa fica "—" em vez de inventar um número.
 function stageMetrics(rows){
   const t=sumStageRows(rows);
   const cpc=t.clicks>0?t.spend/t.clicks:null;
-  const tx75=t.impressions>0?(t.video75/t.impressions)*100:null;
+  const tx75=t.view3s>0?(t.video75/t.view3s)*100:null;
   const cptx75=t.video75>0?t.spend/t.video75:null;
   return{...t,cpc,tx75,cptx75};
 }
@@ -5162,7 +5167,7 @@ function aquecimentoResumoHtml(){
       stageRow("Tx 75%",m.tx75!=null?fPct(m.tx75):"—",metas?`Meta: ${metas.tx75.val}%`:"sem meta ainda",metas?metaEmojiGlobal(m.tx75,metas.tx75.val,metas.tx75.higher):"")+
       stageRow("Custo por Tx 75%",m.cptx75!=null?fUSD(m.cptx75):"—",metas?`Meta: ${fUSD(metas.cptx75.val)}`:"sem meta ainda",metas?metaEmojiGlobal(m.cptx75,metas.cptx75.val,metas.cptx75.higher):"")
     )}
-    <div style="font-size:10px;color:var(--hint);max-width:640px">Total e Facebook mostram os mesmos números — esta base só tem uma fonte de tráfego (Meta Ads), sem quebra por plataforma. Tx75%/Custo por Tx75% usam Impressões como base (não há "Video Plays" nesta base).</div>`;
+    <div style="font-size:10px;color:var(--hint);max-width:640px">Total e Facebook mostram os mesmos números — esta base só tem uma fonte de tráfego (Meta Ads), sem quebra por plataforma. Tx 75% = 75% assistido ÷ quem viu 3 segundos. Custo por Tx 75% = investimento ÷ 75% assistido.</div>`;
 }
 // Soma do planejamento de uma etapa até hoje (inclusive) — usado nos
 // resumos pra mostrar "(planej até hoje: R$ x)" ao lado do realizado.
@@ -5481,7 +5486,7 @@ function stageDailyAgg(rows){
     const d=byDate[k];
     return{...d,label:fDate(d.date),
       cpc:d.clicks>0?d.spend/d.clicks:null,
-      tx75:d.impressions>0?(d.video75/d.impressions)*100:null,
+      tx75:d.view3s>0?(d.video75/d.view3s)*100:null,   // ÷ quem viu 3s (ver stageMetrics)
       cptx75:d.video75>0?d.spend/d.video75:null};
   });
 }
@@ -5498,7 +5503,7 @@ function stageAdAgg(rows){
   }
   return Object.values(byAd).map(a=>({...a,
     cpc:a.clicks>0?a.spend/a.clicks:null,
-    tx75:a.impressions>0?(a.video75/a.impressions)*100:null,
+    tx75:a.view3s>0?(a.video75/a.view3s)*100:null,   // ÷ quem viu 3s (ver stageMetrics)
     cptx75:a.video75>0?a.spend/a.video75:null}));
 }
 function setStageChartMetric(scope,metric){S.stageChartMetric[scope]=metric;render();}
