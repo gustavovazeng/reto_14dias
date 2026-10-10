@@ -6869,10 +6869,8 @@ function statusBorder(val,meta,higherIsBetter){
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
-  // remove prefixo teste- case-insensitive
-  const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
-  return m ? m[0].toLowerCase() : null;
+  // Usa o nome completo do anúncio como chave (remove prefixo teste-)
+  return name.replace(/^teste-/i,"").toLowerCase().trim()||null;
 }
 
 // Extrai país do Adset Name.
@@ -10739,10 +10737,8 @@ function statusBorder(val,meta,higherIsBetter){
 // Ignora prefixo "teste-"
 function extractAdvCode(name){
   if(!name) return null;
-  // remove prefixo teste- case-insensitive
-  const clean=name.replace(/^teste-/i,"");
-  const m=clean.match(/ad[vic]\d+(?:-v\d+(?:-vnd-\d+)?)?/i);
-  return m ? m[0].toLowerCase() : null;
+  // Usa o nome completo do anúncio como chave (remove prefixo teste-)
+  return name.replace(/^teste-/i,"").toLowerCase().trim()||null;
 }
 
 // Extrai país do Adset Name.
