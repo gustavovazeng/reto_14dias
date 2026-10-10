@@ -3756,7 +3756,7 @@ function renderAnuncios(){
             const sel=S.selectedCamps.has(c.campName);
             return `<tr onclick="MDI.toggleCamp('${escName(c.campName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
               <td style="text-align:center">${chkBox(sel)}</td>
-              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400}">${c.campName}</td>
+              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400};white-space:nowrap">${c.campName}</td>
               <td class="mono" style="text-align:right">${fUSD(c.spend)}</td>
               <td class="mono" style="text-align:right">${c.leads}</td>
               <td style="text-align:right;color:${c.cpl>0?statusColor(c.cpl,META_CPL,false):"var(--muted)"}">${c.cpl>0?fUSD(c.cpl):"—"}</td>
@@ -3825,7 +3825,7 @@ function renderAnuncios(){
             const sel=S.selectedAds.has(a.adName);
             return `<tr onclick="MDI.toggleAd('${escName(a.adName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
               <td style="text-align:center">${chkBox(sel)}</td>
-              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.adName}">${a.adName}</td>
+              <td style="color:${sel?"#10b981":"var(--text)"};font-weight:${sel?600:400};white-space:nowrap" title="${a.adName}">${a.adName}</td>
               <td class="mono" style="text-align:right">${fUSD(a.spend)}</td>
               <td class="mono" style="text-align:right">${a.leads}</td>
               <td style="text-align:right;color:${a.cpl>0?statusColor(a.cpl,META_CPL,false):"var(--muted)"}">${a.cpl>0?fUSD(a.cpl):"—"}</td>
@@ -5014,7 +5014,7 @@ function renderCarrinhoAnuncios(){
           sortedCamps.map(c=>{
             const sel=S.carrinhoSelectedCamps.has(c.campName);
             return `<tr onclick="MDI.toggleCarrinhoCamp('${escName(c.campName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
-              <td>${sel?"✓ ":""}${c.campName}</td>
+              <td style="white-space:nowrap">${sel?"✓ ":""}${c.campName}</td>
               <td class="mono" style="text-align:right">${fUSD(c.spend)}</td>
               <td class="mono" style="text-align:right">${c.clicks.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${c.cpc!=null?fUSD(c.cpc):"—"}</td>
@@ -5056,7 +5056,7 @@ function renderCarrinhoAnuncios(){
           sortedAds.map(a=>{
             const sel=S.carrinhoSelectedAds.has(a.adName);
             return `<tr onclick="MDI.toggleCarrinhoAd('${escName(a.adName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
-              <td>${sel?"✓ ":""}${a.adName}</td>
+              <td style="white-space:nowrap">${sel?"✓ ":""}${a.adName}</td>
               <td class="mono" style="text-align:right">${fUSD(a.spend)}</td>
               <td class="mono" style="text-align:right">${a.clicks.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${a.cpc!=null?fUSD(a.cpc):"—"}</td>
@@ -5617,7 +5617,7 @@ function stageAnalysisHtml(scope,rows,metas,alcanceKey){
         <tbody>
           ${adsSorted.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem dados de anúncios no período</td></tr>`:
           adsSorted.map(a=>`<tr>
-            <td>${a.adName}</td>
+            <td style="white-space:nowrap">${a.adName}</td>
             <td class="mono" style="text-align:right">${fUSD(a.spend)}</td>
             <td class="mono" style="text-align:right">${a.clicks.toLocaleString("pt-BR")}</td>
             <td class="mono" style="text-align:right">${a.cpc!=null?fUSD(a.cpc):"—"}</td>
@@ -8852,12 +8852,12 @@ function renderAnuncios(){
               onclick="CERO.toggleCamp(this.dataset.camp,event.shiftKey)"
               onmouseover="this.style.background='${sel?"rgba(59,130,246,.18)":"rgba(255,255,255,.025)"}'"
               onmouseout="this.style.background='${bg}'">
-              <td style="padding:10px 14px;text-align:left;max-width:300px">
+              <td style="padding:10px 14px;text-align:left;white-space:nowrap">
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="width:14px;height:14px;border-radius:3px;border:1.5px solid ${sel?"#3b82f6":"var(--border-h)"};background:${sel?"#3b82f6":"transparent"};display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     ${sel?`<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:""}
                   </div>
-                  <span style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.campName}">${r.campName}</span>
+                  <span style="font-size:11px;font-weight:600;color:var(--text)" title="${r.campName}">${r.campName}</span>
                 </div>
               </td>
               <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
@@ -8979,7 +8979,7 @@ function renderAnuncios(){
                 ${selAd?`<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:""}
               </div>
             </td>
-            <td style="padding:10px 14px;text-align:left">
+            <td style="padding:10px 14px;text-align:left;white-space:nowrap">
               <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace" title="${r.adName}">${r.adName||r.advCode}</span>
             </td>
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
@@ -13032,12 +13032,12 @@ function renderAnuncios(){
               onclick="toggleCamp(this.dataset.camp,event.shiftKey)"
               onmouseover="this.style.background='${sel?"rgba(59,130,246,.18)":"rgba(255,255,255,.025)"}'"
               onmouseout="this.style.background='${bg}'">
-              <td style="padding:10px 14px;text-align:left;max-width:300px">
+              <td style="padding:10px 14px;text-align:left;white-space:nowrap">
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="width:14px;height:14px;border-radius:3px;border:1.5px solid ${sel?"#3b82f6":"var(--border-h)"};background:${sel?"#3b82f6":"transparent"};display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     ${sel?`<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:""}
                   </div>
-                  <span style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.campName}">${r.campName}</span>
+                  <span style="font-size:11px;font-weight:600;color:var(--text)" title="${r.campName}">${r.campName}</span>
                 </div>
               </td>
               <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${r.campStatus===''?'var(--border-h)':r.campStatus==='ACTIVE'?'#22c55e':'#ef4444'};margin:0 auto" title="${r.campStatus||'Sem dados'}"></div></td>
@@ -13159,7 +13159,7 @@ function renderAnuncios(){
                 ${selAd?`<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:""}
               </div>
             </td>
-            <td style="padding:10px 14px;text-align:left">
+            <td style="padding:10px 14px;text-align:left;white-space:nowrap">
               <span style="background:var(--surf);border:1px solid var(--border-h);border-radius:6px;padding:2px 9px;font-size:10px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace" title="${r.adName}">${r.adName||r.advCode}</span>
             </td>
             <td style="padding:10px 12px;text-align:center"><div style="width:9px;height:9px;border-radius:50%;background:${!r.hasStatusData?'var(--border-h)':r.isActive?'#22c55e':'#ef4444'};margin:0 auto" title="${!r.hasStatusData?'Sem dados':r.isActive?'Ativo':'Pausado'}"></div></td>
