@@ -6618,7 +6618,7 @@ const ASCENSOES_ATIVAS = true;
 const FUNIL_PRODUTOS = [
   {id:"front", label:"Cero a Inversor",    step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe", sheet:SHEET_CERO,     offers:["3c55807d"]},
   {id:"asc1",  label:"Mapa del Inversor",  step:"Upsell 1",            fill:"#92400e", text:"#fef3c7", sheet:SHEET_MAPA_ASC, offers:["uhrn50mn"]},
-  {id:"asc2",  label:"Ascensão 2",         step:"Upsell 2",            fill:"#065f46", text:"#d1fae5", sheet:"",             offers:[]},
+  {id:"asc2",  label:"Ascensão 2",           step:"Upsell 2",            fill:"#065f46", text:"#d1fae5", sheet:"",             offers:[]},
 ];
 const FRONT_ID = FUNIL_PRODUTOS[0].id;
 // Entram no funil o front-end e as ascensões já configuradas (aba + oferta).
@@ -8492,8 +8492,7 @@ function renderAnuncios(){
     let _cCero=0,_cMapa=0;
     for(const ek of campEvKeys){
       const prods=keyToProds.get(ek)||new Set();
-      if(ASC1&&prods.has(ASC1.id)) _cCero++;
-      if(ASC2&&prods.has(ASC2.id)) _cMapa++;
+      if(ASC1&&(prods.has(ASC1.id)||(ASC2&&prods.has(ASC2.id)))) _cCero++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
       qtd:cQtd,valor:campFunilRev,
@@ -8616,8 +8615,7 @@ function renderAnuncios(){
       let _aCero=0,_aMapa=0;
       for(const ek of adEvKeys){
         const prods=keyToProds.get(ek)||new Set();
-        if(ASC1&&prods.has(ASC1.id)) _aCero++;
-        if(ASC2&&prods.has(ASC2.id)) _aMapa++;
+        if(ASC1&&(prods.has(ASC1.id)||(ASC2&&prods.has(ASC2.id)))) _aCero++;
       }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
         trCero:adEvKeys.size>0?(_aCero/adEvKeys.size)*100:0,
@@ -9502,6 +9500,7 @@ function buildFunilData(rows, start, end, funil){
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
       const _upsell1Id=getFunilSteps(f)[1]?.id;
+      const _upsell2Id=getFunilSteps(f)[2]?.id;
       if(!manualCount||!_upsell1Id) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
@@ -9511,7 +9510,8 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        const ascendeu=paid.some(p=>p.id===_upsell1Id&&p.date>=mp.date);
+        // conta quem comprou upsell1 OR upsell2 (Mapa + Webinário somados)
+        const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
@@ -9519,6 +9519,7 @@ function buildFunilData(rows, start, end, funil){
     taxaMapa: (function(){
       const _upsell1Id=getFunilSteps(f)[1]?.id;
       const _upsell2Id=getFunilSteps(f)[2]?.id;
+      const _upsell2bId=getFunilSteps(f)[3]?.id; // webinário (paralelo ao mapa)
       const upsell1Count=counts[_upsell1Id||""]||0;
       if(!_upsell2Id||!upsell1Count) return 0;
       let cnt=0;
@@ -9529,7 +9530,8 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        const comprou=paid.some(p=>p.id===_upsell2Id&&p.date>=cp.date);
+        // conta mapa OR webinário (ambos são upsell 2 paralelos)
+        const comprou=paid.some(p=>(p.id===_upsell2Id||(_upsell2bId&&p.id===_upsell2bId))&&p.date>=cp.date);
         if(comprou) cnt++;
       }
       return (cnt/upsell1Count)*100;
@@ -9559,10 +9561,11 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2]=steps;
+  const [s0,s1,s2,s3]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
+  const cnt3=s3?counts[s3.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -9636,7 +9639,7 @@ function renderFunil(){
         <text x="${SW/2}" y="${y2+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.55">${retoPct.toFixed(1)}% dos compradores ${s0.label}</text>`;
     }
   } else {
-    // Reto / não-FEO: cascata original
+    // não-FEO: cascata
     svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
     if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
     if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
@@ -10377,6 +10380,7 @@ const SHEET_AQUEC_SEG   = "Base Aquecimento Seguidores";
 const SHEET_RETO = "Vendas Hotmart - Reto";
 const SHEET_CERO = "Vendas Hotmart - Cero";
 const SHEET_MAPA = "Vendas Hotmart - Mapa";
+const SHEET_MAPA_ASC_RETO = "Vendas Hotmart - Mapa Ascensao"; // webinário (oferta 5hbs9dx9)
 
 // Mapeamento do funil — ordem importa
 // Funil: Finanzas - Reto 14 Dias (front-end) → Cero (upsell 1) → Mapa del Inversor (upsell 2)
@@ -11027,12 +11031,13 @@ async function loadData(force=false){
   // Tenta buscar do Google Sheets; cada aba falha de forma independente
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
-  let mj, retoJ, ceroJ, mapaJ, segJ, aquecSegJ;
-  [mj, retoJ, ceroJ, mapaJ, segJ, aquecSegJ] = await Promise.all([
+  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ;
+  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
     _fetchSafe(SHEET_MAPA,"Z",5000),
+    _fetchSafe(SHEET_MAPA_ASC_RETO,"Z",5000),
     _fetchSafe(SHEET_SEG,"Z",5000),
     _fetchSafe(SHEET_AQUEC_SEG,"Z",5000),
   ]);
@@ -11231,11 +11236,15 @@ async function loadData(force=false){
     // ── Vendas Mapa (upsell 2) ────────────────────────────────────────────
     const mapaRows=parseHotmartRows(mapaJ);
 
-    // ── Funil: Reto + Cero + Mapa ─────────────────────────────────────────
+    // ── Vendas Webinário (upsell 2b, paralelo ao Mapa) ───────────────────
+    const webinarioRows=parseHotmartRows(mapaAscJ).filter(r=>r.offerCode==="5hbs9dx9");
+
+    // ── Funil: Reto + Cero + Mapa + Webinário ────────────────────────────
     const retoFunil=retoRows.map(r=>({...r,"Nome do produto":"Finanzas - Reto 14 Dias"}));
     const ceroFunil=ceroRows.map(r=>({...r,"Nome do produto":"Cero"}));
     const mapaFunil=mapaRows.map(r=>({...r,"Nome do produto":"Mapa del Inversor"}));
-    S.funilRows=[...retoFunil,...ceroFunil,...mapaFunil];
+    const webinarioFunil=webinarioRows.map(r=>({...r,"Nome do produto":"Webinário Mapa"}));
+    S.funilRows=[...retoFunil,...ceroFunil,...mapaFunil,...webinarioFunil];
     // Build funilRowsByTemp: link each buyer to temp via their Reto purchase adId→campName
     {
       const buyerTemp={};
@@ -12673,7 +12682,7 @@ function renderAnuncios(){
     for(const ek of campEvKeys){
       const prods=keyToProds.get(ek)||new Set();
       if(prods.has("cero")) _cCero++;
-      if(prods.has("mapa")) _cMapa++;
+      if(prods.has("mapa")||prods.has("webinario")) _cMapa++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
       qtd:cQtd,valor:campFunilRev,
@@ -12797,7 +12806,7 @@ function renderAnuncios(){
       for(const ek of adEvKeys){
         const prods=keyToProds.get(ek)||new Set();
         if(prods.has("cero")) _aCero++;
-        if(prods.has("mapa")) _aMapa++;
+        if(prods.has("mapa")||prods.has("webinario")) _aMapa++;
       }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
         trCero:adEvKeys.size>0?(_aCero/adEvKeys.size)*100:0,
@@ -13411,6 +13420,7 @@ function classifyProduct(name, funil){
   }
   if(n.includes("RETO")) return "reto";
   if(n.includes("CERO")) return "cero";
+  if(n.includes("WEBINAR")) return "webinario";
   if(n.includes("MAPA")) return "mapa";
   return null;
 }
@@ -13424,9 +13434,10 @@ function getFunilSteps(funil){
     {id:"reto",     label:"Finanzas - Reto 14 Dias",              step:"Upsell",              fill:"#92400e", text:"#fef3c7"},
   ];
   return [
-    {id:"reto", label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
-    {id:"cero", label:"Cero",                    step:"Upsell 1",            fill:"#92400e", text:"#fef3c7"},
-    {id:"mapa", label:"Mapa del Inversor",        step:"Upsell 2",           fill:"#065f46", text:"#d1fae5"},
+    {id:"reto",      label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
+    {id:"cero",      label:"Cero",                    step:"Upsell 1",            fill:"#92400e", text:"#fef3c7"},
+    {id:"mapa",      label:"Mapa del Inversor",        step:"Upsell 2",           fill:"#065f46", text:"#d1fae5"},
+    {id:"webinario", label:"Webinário",                step:"Upsell 2b",           fill:"#7c3aed", text:"#ede9fe"},
   ];
 }
 
@@ -13688,6 +13699,7 @@ function buildFunilData(rows, start, end, funil){
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
       const _upsell1Id=getFunilSteps(f)[1]?.id;
+      const _upsell2Id=getFunilSteps(f)[2]?.id;
       if(!manualCount||!_upsell1Id) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
@@ -13697,7 +13709,8 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        const ascendeu=paid.some(p=>p.id===_upsell1Id&&p.date>=mp.date);
+        // conta quem comprou upsell1 OR upsell2 (Mapa + Webinário somados)
+        const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
@@ -13705,6 +13718,7 @@ function buildFunilData(rows, start, end, funil){
     taxaMapa: (function(){
       const _upsell1Id=getFunilSteps(f)[1]?.id;
       const _upsell2Id=getFunilSteps(f)[2]?.id;
+      const _upsell2bId=getFunilSteps(f)[3]?.id; // webinário (paralelo ao mapa)
       const upsell1Count=counts[_upsell1Id||""]||0;
       if(!_upsell2Id||!upsell1Count) return 0;
       let cnt=0;
@@ -13715,7 +13729,8 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        const comprou=paid.some(p=>p.id===_upsell2Id&&p.date>=cp.date);
+        // conta mapa OR webinário (ambos são upsell 2 paralelos)
+        const comprou=paid.some(p=>(p.id===_upsell2Id||(_upsell2bId&&p.id===_upsell2bId))&&p.date>=cp.date);
         if(comprou) cnt++;
       }
       return (cnt/upsell1Count)*100;
@@ -13745,10 +13760,11 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2]=steps;
+  const [s0,s1,s2,s3]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
+  const cnt3=s3?counts[s3.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -13821,8 +13837,42 @@ function renderFunil(){
         <text x="${SW/2}" y="${y2+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${retoStep.text}" opacity="0.9">${retoCnt} compras · ${fBRLShort(fat[retoStep.id]||0)}</text>
         <text x="${SW/2}" y="${y2+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.55">${retoPct.toFixed(1)}% dos compradores ${s0.label}</text>`;
     }
+  } else if(s1 && s2 && s3) {
+    // 3 níveis: s0 (full) → s1 (proporcional) → s2 + s3 lado a lado
+    const PAIR_GAP=8, PW=(SW-PAIR_GAP)/2;
+    const y0=0, y1=BH+GAP, y2=2*(BH+GAP);
+    const s1w=Math.max(SW*(pct1/100),40);
+    const s1x=(SW-s1w)/2;
+    const pctS2=cnt1>0?(cnt2/cnt1)*100:0;
+    const pctS3=cnt1>0?(cnt3/cnt1)*100:0;
+    SH=3*(BH+GAP)-GAP;
+    // Linha 0: front
+    svgBlocks+=`
+      <rect x="0" y="${y0}" width="${SW}" height="${BH}" rx="10" fill="${s0.fill}" fill-opacity="0.85"/>
+      <text x="${SW/2}" y="${y0+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.65">${s0.step}</text>
+      <text x="${SW/2}" y="${y0+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s0.text}">${s0.label}</text>
+      <text x="${SW/2}" y="${y0+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s0.text}" opacity="0.9">${cnt0} compras · ${fBRLShort(fat[s0.id]||0)}</text>
+      <text x="${SW/2}" y="${y0+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.55">100%</text>
+      <polygon points="0,${y0+BH} ${SW},${y0+BH} ${(s1x+s1w).toFixed(1)},${y1} ${s1x.toFixed(1)},${y1}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 1: s1 (Cero)
+    svgBlocks+=`
+      <rect x="${s1x.toFixed(1)}" y="${y1}" width="${s1w.toFixed(1)}" height="${BH}" rx="10" fill="${s1.fill}" fill-opacity="0.85"/>
+      <text x="${SW/2}" y="${y1+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s1.text}" opacity="0.65">${s1.step}</text>
+      <text x="${SW/2}" y="${y1+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s1.text}">${s1.label}</text>
+      <text x="${SW/2}" y="${y1+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s1.text}" opacity="0.9">${cnt1} compras · ${fBRLShort(fat[s1.id]||0)}</text>
+      <text x="${SW/2}" y="${y1+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s1.text}" opacity="0.55">${pct1.toFixed(1)}% dos compradores</text>
+      <polygon points="${s1x.toFixed(1)},${y1+BH} ${(s1x+s1w).toFixed(1)},${y1+BH} ${SW},${y2} 0,${y2}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 2: s2 (Mapa) e s3 (Webinário) lado a lado
+    [[s2,cnt2,fat[s2.id]||0,pctS2,0],[s3,cnt3,fat[s3.id]||0,pctS3,PW+PAIR_GAP]].forEach(([s,cnt,sf,pct,ox])=>{
+      svgBlocks+=`
+        <rect x="${ox.toFixed(1)}" y="${y2}" width="${PW.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+36}" text-anchor="middle" font-family="Sora,sans-serif" font-size="14" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+54}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="${s.text}" opacity="0.9">${cnt} compras · ${fBRLShort(sf)}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+72}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}% dos compradores</text>`;
+    });
   } else {
-    // Reto / não-FEO: cascata original
+    // cascata simples (s0 → s1 → s2)
     svgSteps.push({...s0,count:cnt0,fat:fat[s0.id]||0,w:SW,pct:"100%"});
     if(s1) svgSteps.push({...s1,count:cnt1,fat:fat[s1.id]||0,w:Math.max(SW*(pct1/100),40),pct:`${pct1.toFixed(1)}% dos compradores ${s0.label}`});
     if(s2) svgSteps.push({...s2,count:cnt2,fat:fat[s2.id]||0,w:Math.max(SW*(pct2/100)*(pct1/100),30),pct:`${pct2.toFixed(1)}% dos compradores ${s1?.label||""}`});
