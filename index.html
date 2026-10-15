@@ -10822,7 +10822,11 @@ function tsToISO(ts){
   // Timestamp em milissegundos
   const n=parseInt(ts);
   if(!n||isNaN(n)) return null;
-  const d=new Date(n-3*60*60*1000);
+  // A partir de outubro/2026 o Reto migrou para fuso México (UTC-6)
+  // Setembro para trás mantém UTC-3 (Brasil)
+  const OCT_CUTOFF=new Date("2026-10-01T03:00:00Z").getTime(); // 01/10 00:00 UTC-3
+  const offsetMs=n>=OCT_CUTOFF ? 6*60*60*1000 : 3*60*60*1000;
+  const d=new Date(n-offsetMs);
   return d.toISOString().split("T")[0];
 }
 
