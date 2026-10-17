@@ -7312,9 +7312,13 @@ async function loadData(force=false){
       return rows;
     };
     // ── Vendas front-end (Cero a Inversor) ───────────────────────────────
-    // Combina: histórico em SHEET_CERO (oferta 3c55807d) + nova aba SHEET_CERO_VSL (oferta 47eb3ha1)
+    // Combina: histórico em SHEET_CERO (oferta 3c55807d) + aba SHEET_CERO_VSL.
+    // Ofertas do Cero VSL — todas caem na aba SHEET_CERO_VSL. Linhas dessa aba
+    // sem código de oferta também entram (dados antigos, antes do campo existir).
+    const OFERTAS_CERO_VSL = ["47eb3ha1","ogxqru6y","5aaywb20"];
+    const _okVsl=new Set(OFERTAS_CERO_VSL);
     if(!_parsedTabs[SHEET_CERO_VSL]) _parsedTabs[SHEET_CERO_VSL]=parseHotmartRows(salesByTab[SHEET_CERO_VSL]||{values:[]});
-    const _vslRows=_parsedTabs[SHEET_CERO_VSL].filter(r=>!r.offerCode||r.offerCode==="47eb3ha1");
+    const _vslRows=_parsedTabs[SHEET_CERO_VSL].filter(r=>!r.offerCode||_okVsl.has(r.offerCode.toLowerCase()));
     const retoRows=[...rowsOf(FUNIL_PRODUTOS[0]),..._vslRows];
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
