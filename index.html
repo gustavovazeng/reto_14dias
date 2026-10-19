@@ -9514,28 +9514,28 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        // conta quem comprou upsell1 OR upsell2 (Mapa + Webinário somados)
+        // conta quem comprou Cero upsell OR Cero downsell
         const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      const _upsell1Id=getFunilSteps(f)[1]?.id;
-      const _upsell2Id=getFunilSteps(f)[2]?.id;
-      const _upsell2bId=getFunilSteps(f)[3]?.id; // webinário (paralelo ao mapa)
-      const upsell1Count=counts[_upsell1Id||""]||0;
-      if(!_upsell2Id||!upsell1Count) return 0;
+      // Denominator: compradores de Cero (upsell + downsell)
+      const _ceroIds=new Set(["cero","cero_down"]);
+      const _mapaIds=new Set(["mapa","webinario"]);
+      const upsell1Count=(counts["cero"]||0)+(counts["cero_down"]||0);
+      if(!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do upsell1 deve estar dentro do período filtrado
-        const cp=paid.filter(p=>p.id===_upsell1Id
+        // compra de cero (qualquer variante) deve estar dentro do período filtrado
+        const cp=paid.filter(p=>_ceroIds.has(p.id)
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        // conta mapa OR webinário (ambos são upsell 2 paralelos)
-        const comprou=paid.some(p=>(p.id===_upsell2Id||(_upsell2bId&&p.id===_upsell2bId))&&p.date>=cp.date);
+        // conta mapa OR webinário
+        const comprou=paid.some(p=>_mapaIds.has(p.id)&&p.date>=cp.date);
         if(comprou) cnt++;
       }
       return (cnt/upsell1Count)*100;
@@ -9565,11 +9565,12 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2,s3]=steps;
+  const [s0,s1,s2,s3,s4]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
   const cnt3=s3?counts[s3.id]||0:0;
+  const cnt4=s4?counts[s4.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -11249,10 +11250,11 @@ async function loadData(force=false){
 
     // ── Funil: Reto + Cero + Mapa + Webinário ────────────────────────────
     const retoFunil=retoRows.map(r=>({...r,"Nome do produto":"Finanzas - Reto 14 Dias"}));
-    const ceroFunil=ceroRows.map(r=>({...r,"Nome do produto":"Cero"}));
+    const ceroFunil=ceroRows.filter(r=>r.offerCode!=="jh5dbgve").map(r=>({...r,"Nome do produto":"Cero"}));
+    const ceroDownFunil=ceroRows.filter(r=>r.offerCode==="jh5dbgve").map(r=>({...r,"Nome do produto":"Cero Downsell"}));
     const mapaFunil=mapaRows.map(r=>({...r,"Nome do produto":"Mapa del Inversor"}));
     const webinarioFunil=webinarioRows.map(r=>({...r,"Nome do produto":"Webinar Mapa"}));
-    S.funilRows=[...retoFunil,...ceroFunil,...mapaFunil,...webinarioFunil];
+    S.funilRows=[...retoFunil,...ceroFunil,...ceroDownFunil,...mapaFunil,...webinarioFunil];
     // Build funilRowsByTemp: link each buyer to temp via their Reto purchase adId→campName
     {
       const buyerTemp={};
@@ -12689,7 +12691,7 @@ function renderAnuncios(){
     let _cCero=0,_cMapa=0;
     for(const ek of campEvKeys){
       const prods=keyToProds.get(ek)||new Set();
-      if(prods.has("cero")) _cCero++;
+      if(prods.has("cero")||prods.has("cero_down")) _cCero++;
       if(prods.has("mapa")||prods.has("webinario")) _cMapa++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
@@ -12813,7 +12815,7 @@ function renderAnuncios(){
       let _aCero=0,_aMapa=0;
       for(const ek of adEvKeys){
         const prods=keyToProds.get(ek)||new Set();
-        if(prods.has("cero")) _aCero++;
+        if(prods.has("cero")||prods.has("cero_down")) _aCero++;
         if(prods.has("mapa")||prods.has("webinario")) _aMapa++;
       }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
@@ -13427,6 +13429,7 @@ function classifyProduct(name, funil){
     return null;
   }
   if(n.includes("RETO")) return "reto";
+  if(n.includes("CERO DOWNSELL")) return "cero_down";
   if(n.includes("CERO")) return "cero";
   if(n.includes("WEBINAR")) return "webinario";
   if(n.includes("MAPA")) return "mapa";
@@ -13444,8 +13447,9 @@ function getFunilSteps(funil){
   return [
     {id:"reto",      label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
     {id:"cero",      label:"Cero",                    step:"Upsell 1",            fill:"#92400e", text:"#fef3c7"},
+    {id:"cero_down", label:"Cero Downsell",           step:"Downsell 1",          fill:"#b45309", text:"#fef9c3"},
     {id:"mapa",      label:"Mapa del Inversor",        step:"Upsell 2",           fill:"#065f46", text:"#d1fae5"},
-    {id:"webinario", label:"Webinário",                step:"Upsell 2b",           fill:"#7c3aed", text:"#ede9fe"},
+    {id:"webinario", label:"Webinário",                step:"Upsell 2b",          fill:"#7c3aed", text:"#ede9fe"},
   ];
 }
 
@@ -13717,28 +13721,28 @@ function buildFunilData(rows, start, end, funil){
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        // conta quem comprou upsell1 OR upsell2 (Mapa + Webinário somados)
+        // conta quem comprou Cero upsell OR Cero downsell
         const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      const _upsell1Id=getFunilSteps(f)[1]?.id;
-      const _upsell2Id=getFunilSteps(f)[2]?.id;
-      const _upsell2bId=getFunilSteps(f)[3]?.id; // webinário (paralelo ao mapa)
-      const upsell1Count=counts[_upsell1Id||""]||0;
-      if(!_upsell2Id||!upsell1Count) return 0;
+      // Denominator: compradores de Cero (upsell + downsell)
+      const _ceroIds=new Set(["cero","cero_down"]);
+      const _mapaIds=new Set(["mapa","webinario"]);
+      const upsell1Count=(counts["cero"]||0)+(counts["cero_down"]||0);
+      if(!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do upsell1 deve estar dentro do período filtrado
-        const cp=paid.filter(p=>p.id===_upsell1Id
+        // compra de cero (qualquer variante) deve estar dentro do período filtrado
+        const cp=paid.filter(p=>_ceroIds.has(p.id)
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        // conta mapa OR webinário (ambos são upsell 2 paralelos)
-        const comprou=paid.some(p=>(p.id===_upsell2Id||(_upsell2bId&&p.id===_upsell2bId))&&p.date>=cp.date);
+        // conta mapa OR webinário
+        const comprou=paid.some(p=>_mapaIds.has(p.id)&&p.date>=cp.date);
         if(comprou) cnt++;
       }
       return (cnt/upsell1Count)*100;
@@ -13768,11 +13772,12 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2,s3]=steps;
+  const [s0,s1,s2,s3,s4]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
   const cnt3=s3?counts[s3.id]||0:0;
+  const cnt4=s4?counts[s4.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -13845,6 +13850,43 @@ function renderFunil(){
         <text x="${SW/2}" y="${y2+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${retoStep.text}" opacity="0.9">${retoCnt} compras · ${fBRLShort(fat[retoStep.id]||0)}</text>
         <text x="${SW/2}" y="${y2+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.55">${retoPct.toFixed(1)}% dos compradores ${s0.label}</text>`;
     }
+  } else if(s1 && s2 && s3 && s4) {
+    // 3 níveis: s0 (full) → [s1 | s2] lado a lado → [s3 | s4] lado a lado
+    const PAIR_GAP=8, PW=(SW-PAIR_GAP)/2;
+    const y0=0, y1=BH+GAP, y2=2*(BH+GAP);
+    SH=3*(BH+GAP)-GAP;
+    const pctS1=cnt0>0?(cnt1/cnt0)*100:0;
+    const pctS2=cnt0>0?(cnt2/cnt0)*100:0;
+    const cero12=cnt1+cnt2;
+    const pctS3=cero12>0?(cnt3/cero12)*100:0;
+    const pctS4=cero12>0?(cnt4/cero12)*100:0;
+    // Linha 0: s0 (full)
+    svgBlocks+=`
+      <rect x="0" y="${y0}" width="${SW}" height="${BH}" rx="10" fill="${s0.fill}" fill-opacity="0.85"/>
+      <text x="${SW/2}" y="${y0+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.65">${s0.step}</text>
+      <text x="${SW/2}" y="${y0+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s0.text}">${s0.label}</text>
+      <text x="${SW/2}" y="${y0+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s0.text}" opacity="0.9">${cnt0} compras · ${fBRLShort(fat[s0.id]||0)}</text>
+      <text x="${SW/2}" y="${y0+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.55">100%</text>
+      <polygon points="0,${y0+BH} ${SW},${y0+BH} ${SW},${y1} 0,${y1}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 1: s1 (Cero upsell) + s2 (Cero downsell) lado a lado
+    [[s1,cnt1,fat[s1.id]||0,pctS1,0],[s2,cnt2,fat[s2.id]||0,pctS2,PW+PAIR_GAP]].forEach(([s,cnt,sf,pct,ox])=>{
+      svgBlocks+=`
+        <rect x="${ox.toFixed(1)}" y="${y1}" width="${PW.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y1+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y1+36}" text-anchor="middle" font-family="Sora,sans-serif" font-size="14" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y1+54}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="${s.text}" opacity="0.9">${cnt} compras · ${fBRLShort(sf)}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y1+72}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}% dos compradores ${s0.label}</text>`;
+    });
+    svgBlocks+=`<polygon points="0,${y1+BH} ${SW},${y1+BH} ${SW},${y2} 0,${y2}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 2: s3 (Mapa) + s4 (Webinário) lado a lado
+    [[s3,cnt3,fat[s3.id]||0,pctS3,0],[s4,cnt4,fat[s4.id]||0,pctS4,PW+PAIR_GAP]].forEach(([s,cnt,sf,pct,ox])=>{
+      svgBlocks+=`
+        <rect x="${ox.toFixed(1)}" y="${y2}" width="${PW.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+36}" text-anchor="middle" font-family="Sora,sans-serif" font-size="14" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+54}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="${s.text}" opacity="0.9">${cnt} compras · ${fBRLShort(sf)}</text>
+        <text x="${(ox+PW/2).toFixed(1)}" y="${y2+72}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}% dos compradores Cero</text>`;
+    });
   } else if(s1 && s2 && s3) {
     // 3 níveis: s0 (full) → s1 (proporcional) → s2 + s3 lado a lado
     const PAIR_GAP=8, PW=(SW-PAIR_GAP)/2;
