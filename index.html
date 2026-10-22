@@ -9515,28 +9515,26 @@ function buildFunilData(rows, start, end, funil){
     ltv:  totalFat/manualCount,
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
-      const _upsell1Id=getFunilSteps(f)[1]?.id;
-      const _upsell2Id=getFunilSteps(f)[2]?.id;
-      if(!manualCount||!_upsell1Id) return 0;
+      // Conta quem comprou qualquer upsell/downsell 1 (Cero, Mapa Ascensión, Cero Downsell)
+      const _up1Ids=new Set(["cero","mapa_asc","cero_down"]);
+      if(!manualCount) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do produto principal deve estar dentro do período filtrado
         const mp=paid.filter(p=>p.id===primaryId
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        // conta quem comprou Cero upsell OR Cero downsell
-        const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
+        const ascendeu=paid.some(p=>_up1Ids.has(p.id)&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      // Denominator: compradores de Cero (upsell + downsell)
-      const _ceroIds=new Set(["cero","cero_down"]);
+      // Denominator: compradores de qualquer upsell/downsell 1
+      const _ceroIds=new Set(["cero","mapa_asc","cero_down"]);
       const _mapaIds=new Set(["mapa","webinario"]);
-      const upsell1Count=(counts["cero"]||0)+(counts["cero_down"]||0);
+      const upsell1Count=(counts["cero"]||0)+(counts["mapa_asc"]||0)+(counts["cero_down"]||0);
       if(!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
@@ -9577,12 +9575,13 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2,s3,s4]=steps;
+  const [s0,s1,s2,s3,s4,s5]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
   const cnt3=s3?counts[s3.id]||0:0;
   const cnt4=s4?counts[s4.id]||0:0;
+  const cnt5=s5?counts[s5.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -11257,16 +11256,19 @@ async function loadData(force=false){
     // ── Vendas Mapa (upsell 2) ────────────────────────────────────────────
     const mapaRows=parseHotmartRows(mapaJ);
 
-    // ── Vendas Webinário (upsell 2b, paralelo ao Mapa) ───────────────────
-    const webinarioRows=parseHotmartRows(mapaAscJ).filter(r=>r.offerCode==="5hbs9dx9");
+    // ── Vendas Mapa Ascensión (upsell 1b, oferta 682nnc18) + Webinário (upsell 2b, oferta 5hbs9dx9) ───
+    const mapaAscRows=parseHotmartRows(mapaAscJ);
+    const mapaAscUpRows=mapaAscRows.filter(r=>r.offerCode==="682nnc18");
+    const webinarioRows=mapaAscRows.filter(r=>r.offerCode==="5hbs9dx9");
 
-    // ── Funil: Reto + Cero + Mapa + Webinário ────────────────────────────
+    // ── Funil: Reto + Cero + Mapa Ascensión + Cero Downsell + Mapa + Webinário ──
     const retoFunil=retoRows.map(r=>({...r,"Nome do produto":"Finanzas - Reto 14 Dias"}));
     const ceroFunil=ceroRows.filter(r=>r.offerCode!=="jh5dbgve").map(r=>({...r,"Nome do produto":"Cero"}));
+    const mapaAscUpFunil=mapaAscUpRows.map(r=>({...r,"Nome do produto":"Mapa Ascension Up"}));
     const ceroDownFunil=ceroRows.filter(r=>r.offerCode==="jh5dbgve").map(r=>({...r,"Nome do produto":"Cero Downsell"}));
     const mapaFunil=mapaRows.map(r=>({...r,"Nome do produto":"Mapa del Inversor"}));
     const webinarioFunil=webinarioRows.map(r=>({...r,"Nome do produto":"Webinar Mapa"}));
-    S.funilRows=[...retoFunil,...ceroFunil,...ceroDownFunil,...mapaFunil,...webinarioFunil];
+    S.funilRows=[...retoFunil,...ceroFunil,...mapaAscUpFunil,...ceroDownFunil,...mapaFunil,...webinarioFunil];
     // Build funilRowsByTemp: link each buyer to temp via their Reto purchase adId→campName
     {
       const buyerTemp={};
@@ -12703,7 +12705,7 @@ function renderAnuncios(){
     let _cCero=0,_cMapa=0;
     for(const ek of campEvKeys){
       const prods=keyToProds.get(ek)||new Set();
-      if(prods.has("cero")||prods.has("cero_down")) _cCero++;
+      if(prods.has("cero")||prods.has("mapa_asc")||prods.has("cero_down")) _cCero++;
       if(prods.has("mapa")||prods.has("webinario")) _cMapa++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
@@ -12827,7 +12829,7 @@ function renderAnuncios(){
       let _aCero=0,_aMapa=0;
       for(const ek of adEvKeys){
         const prods=keyToProds.get(ek)||new Set();
-        if(prods.has("cero")||prods.has("cero_down")) _aCero++;
+        if(prods.has("cero")||prods.has("mapa_asc")||prods.has("cero_down")) _aCero++;
         if(prods.has("mapa")||prods.has("webinario")) _aMapa++;
       }
       rows.push({advCode,adName:dd.metaByAd[advCode]?.adName||advCode,campName:dd.metaByAd[advCode]?.campName||"",spend,clicks,impressions,qtd,valor,igUrl,
@@ -13443,6 +13445,7 @@ function classifyProduct(name, funil){
   if(n.includes("RETO")) return "reto";
   if(n.includes("CERO DOWNSELL")) return "cero_down";
   if(n.includes("CERO")) return "cero";
+  if(n.includes("MAPA ASCENSION UP")) return "mapa_asc";
   if(n.includes("WEBINAR")) return "webinario";
   if(n.includes("MAPA")) return "mapa";
   return null;
@@ -13458,10 +13461,11 @@ function getFunilSteps(funil){
   ];
   return [
     {id:"reto",      label:"Finanzas - Reto 14 Dias", step:"Entrada (Front-end)", fill:"#1d4ed8", text:"#dbeafe"},
-    {id:"cero",      label:"Cero",                    step:"Upsell 1",            fill:"#92400e", text:"#fef3c7"},
-    {id:"cero_down", label:"Cero Downsell",           step:"Downsell 1",          fill:"#b45309", text:"#fef9c3"},
-    {id:"mapa",      label:"Mapa del Inversor",        step:"Upsell 2",           fill:"#065f46", text:"#d1fae5"},
-    {id:"webinario", label:"Webinário",                step:"Upsell 2b",          fill:"#7c3aed", text:"#ede9fe"},
+    {id:"cero",      label:"Cero",                    step:"Upsell 1a",           fill:"#92400e", text:"#fef3c7"},
+    {id:"mapa_asc",  label:"Mapa Ascensión",           step:"Upsell 1b",           fill:"#065f46", text:"#d1fae5"},
+    {id:"cero_down", label:"Cero Downsell",            step:"Downsell 1",          fill:"#b45309", text:"#fef9c3"},
+    {id:"mapa",      label:"Mapa del Inversor",        step:"Upsell 2",            fill:"#14532d", text:"#dcfce7"},
+    {id:"webinario", label:"Webinário",                step:"Upsell 2b",           fill:"#7c3aed", text:"#ede9fe"},
   ];
 }
 
@@ -13722,28 +13726,26 @@ function buildFunilData(rows, start, end, funil){
     ltv:  totalFat/manualCount,
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
-      const _upsell1Id=getFunilSteps(f)[1]?.id;
-      const _upsell2Id=getFunilSteps(f)[2]?.id;
-      if(!manualCount||!_upsell1Id) return 0;
+      // Conta quem comprou qualquer upsell/downsell 1 (Cero, Mapa Ascensión, Cero Downsell)
+      const _up1Ids=new Set(["cero","mapa_asc","cero_down"]);
+      if(!manualCount) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra do produto principal deve estar dentro do período filtrado
         const mp=paid.filter(p=>p.id===primaryId
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        // conta quem comprou Cero upsell OR Cero downsell
-        const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
+        const ascendeu=paid.some(p=>_up1Ids.has(p.id)&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      // Denominator: compradores de Cero (upsell + downsell)
-      const _ceroIds=new Set(["cero","cero_down"]);
+      // Denominator: compradores de qualquer upsell/downsell 1
+      const _ceroIds=new Set(["cero","mapa_asc","cero_down"]);
       const _mapaIds=new Set(["mapa","webinario"]);
-      const upsell1Count=(counts["cero"]||0)+(counts["cero_down"]||0);
+      const upsell1Count=(counts["cero"]||0)+(counts["mapa_asc"]||0)+(counts["cero_down"]||0);
       if(!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
@@ -13784,12 +13786,13 @@ function renderFunil(){
   const {counts,fat,manualCount,totalFat,totalSpend,roas,ltv,lucro,taxaAscensao,taxaMapa,statusCounts,statusVals}=fd;
 
   const steps=getFunilSteps(funil);
-  const [s0,s1,s2,s3,s4]=steps;
+  const [s0,s1,s2,s3,s4,s5]=steps;
   const cnt0=counts[s0.id]||0;
   const cnt1=s1?counts[s1.id]||0:0;
   const cnt2=s2?counts[s2.id]||0:0;
   const cnt3=s3?counts[s3.id]||0:0;
   const cnt4=s4?counts[s4.id]||0:0;
+  const cnt5=s5?counts[s5.id]||0:0;
   const pct1=cnt0>0?(cnt1/cnt0)*100:0;
   const pct2=cnt1>0?(cnt2/cnt1)*100:0;
 
@@ -13862,6 +13865,44 @@ function renderFunil(){
         <text x="${SW/2}" y="${y2+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${retoStep.text}" opacity="0.9">${retoCnt} compras · ${fBRLShort(fat[retoStep.id]||0)}</text>
         <text x="${SW/2}" y="${y2+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${retoStep.text}" opacity="0.55">${retoPct.toFixed(1)}% dos compradores ${s0.label}</text>`;
     }
+  } else if(s1 && s2 && s3 && s4 && s5) {
+    // 3 níveis: s0 (full) → [s1|s2|s3] (3 upsells) → [s4|s5] lado a lado
+    const TRIPLE_GAP=8, PW3=(SW-2*TRIPLE_GAP)/3, PAIR_GAP=8, PW2=(SW-PAIR_GAP)/2;
+    const y0=0, y1=BH+GAP, y2=2*(BH+GAP);
+    SH=3*(BH+GAP)-GAP;
+    const tot1=cnt1+cnt2+cnt3;
+    const pctS1=cnt0>0?(cnt1/cnt0)*100:0;
+    const pctS2=cnt0>0?(cnt2/cnt0)*100:0;
+    const pctS3=cnt0>0?(cnt3/cnt0)*100:0;
+    const pctS4=tot1>0?(cnt4/tot1)*100:0;
+    const pctS5=tot1>0?(cnt5/tot1)*100:0;
+    // Linha 0: s0 (full)
+    svgBlocks+=`
+      <rect x="0" y="${y0}" width="${SW}" height="${BH}" rx="10" fill="${s0.fill}" fill-opacity="0.85"/>
+      <text x="${SW/2}" y="${y0+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.65">${s0.step}</text>
+      <text x="${SW/2}" y="${y0+38}" text-anchor="middle" font-family="Sora,sans-serif" font-size="15" font-weight="700" fill="${s0.text}">${s0.label}</text>
+      <text x="${SW/2}" y="${y0+57}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="${s0.text}" opacity="0.9">${cnt0} compras · ${fBRLShort(fat[s0.id]||0)}</text>
+      <text x="${SW/2}" y="${y0+76}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s0.text}" opacity="0.55">100%</text>
+      <polygon points="0,${y0+BH} ${SW},${y0+BH} ${SW},${y1} 0,${y1}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 1: s1 + s2 + s3 (3 boxes)
+    [[s1,cnt1,fat[s1.id]||0,pctS1,0],[s2,cnt2,fat[s2.id]||0,pctS2,PW3+TRIPLE_GAP],[s3,cnt3,fat[s3.id]||0,pctS3,2*(PW3+TRIPLE_GAP)]].forEach(([s,cnt,sf,pct,ox])=>{
+      svgBlocks+=`
+        <rect x="${ox.toFixed(1)}" y="${y1}" width="${PW3.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(ox+PW3/2).toFixed(1)}" y="${y1+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(ox+PW3/2).toFixed(1)}" y="${y1+36}" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(ox+PW3/2).toFixed(1)}" y="${y1+54}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="${s.text}" opacity="0.9">${cnt} · ${fBRLShort(sf)}</text>
+        <text x="${(ox+PW3/2).toFixed(1)}" y="${y1+72}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}%</text>`;
+    });
+    svgBlocks+=`<polygon points="0,${y1+BH} ${SW},${y1+BH} ${SW},${y2} 0,${y2}" fill="rgba(255,255,255,0.04)"/>`;
+    // Linha 2: s4 + s5 (2 boxes)
+    [[s4,cnt4,fat[s4.id]||0,pctS4,0],[s5,cnt5,fat[s5.id]||0,pctS5,PW2+PAIR_GAP]].forEach(([s,cnt,sf,pct,ox])=>{
+      svgBlocks+=`
+        <rect x="${ox.toFixed(1)}" y="${y2}" width="${PW2.toFixed(1)}" height="${BH}" rx="10" fill="${s.fill}" fill-opacity="0.85"/>
+        <text x="${(ox+PW2/2).toFixed(1)}" y="${y2+18}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="9" fill="${s.text}" opacity="0.65">${s.step}</text>
+        <text x="${(ox+PW2/2).toFixed(1)}" y="${y2+36}" text-anchor="middle" font-family="Sora,sans-serif" font-size="14" font-weight="700" fill="${s.text}">${s.label}</text>
+        <text x="${(ox+PW2/2).toFixed(1)}" y="${y2+54}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="${s.text}" opacity="0.9">${cnt} · ${fBRLShort(sf)}</text>
+        <text x="${(ox+PW2/2).toFixed(1)}" y="${y2+72}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="${s.text}" opacity="0.55">${pct.toFixed(1)}% dos compradores</text>`;
+    });
   } else if(s1 && s2 && s3 && s4) {
     // 3 níveis: s0 (full) → [s1 | s2] lado a lado → [s3 | s4] lado a lado
     const PAIR_GAP=8, PW=(SW-PAIR_GAP)/2;
