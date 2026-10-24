@@ -7106,6 +7106,55 @@ function parseHotmartRows(sheetJ){
     },[]);
 }
 
+// ── parseWhopRows: converte CSV do Whop para o mesmo formato do parseHotmartRows ─────────────────
+function parseWhopRows(sheetJ){
+  const rows=[];
+  for(const r of parseSheetFirstWins(sheetJ)){
+    if((r["data.substatus"]||"")!=="succeeded") continue;
+    const paidAt=r["data.paid_at"]||""; if(!paidAt) continue;
+    // Converte UTC → UTC-6 (México)
+    const ms=new Date(paidAt).getTime(); if(!ms||isNaN(ms)) continue;
+    const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
+    if(!d||d<"2020-01-01") continue; // filtra linhas de exemplo (1970)
+    const email=(r["data.user.email"]||"").toLowerCase().trim();
+    const phone=(r["data.member.phone"]||r["data.customer_phone"]||"").replace(/\D/g,"");
+    const name=r["data.user.name"]||r["data.user.username"]||"";
+    const totalLocal=parseFloat(String(r["data.total"]||"0").replace(",","."))||0;
+    const usdTotal=parseFloat(String(r["data.usd_total"]||"0").replace(",","."))||0;
+    // Parseia checkout_pattern (JSON) para extrair produtos e preços individuais
+    const xcod=r["data.metadata.checkout_pattern"]||"";
+    let items=[];
+    if(xcod&&xcod.startsWith("[")){try{items=JSON.parse(xcod);}catch(e){}}
+    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalLocal}];
+    for(const item of items){
+      const t=(item.title||"").trim().toUpperCase();
+      const itemPrice=parseFloat(item.price)||0;
+      const itemUSD=totalLocal>0?(itemPrice/totalLocal)*usdTotal:0;
+      let productName,offerCode;
+      if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){
+        productName="FEO - Planilla Finanzas en Ordem"; offerCode="mwwdt723"; // 85pesos
+      } else if(t.includes("COMBO")){
+        productName="FEO - Combo Calculadora + Ingresso"; offerCode="";
+      } else if(t.includes("INGRES")){
+        productName="FEO - Ingresso"; offerCode="";
+      } else if(t.includes("CALCULADORA")){
+        productName="FEO - Calculadora"; offerCode="";
+      } else {
+        productName=item.title||""; offerCode="";
+      }
+      rows.push({
+        "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
+        "Status da compra":"Paga","Data da compra":d,
+        "Nome do produto":productName,"Valor do produto":itemUSD.toFixed(2),
+        "Taxa da plataforma":"0","Ad Id":"",
+        _src:"whop",platform:"",placement:"",
+        _orderDate:paidAt,offerCode:offerCode,
+      });
+    }
+  }
+  return rows;
+}
+
 // ── Load data ──────────────────────────────────────────────────────────────
 // Busca uma aba em blocos de 5000 linhas para evitar timeout em abas grandes
 // ── CSV parser → mesmo formato que a Sheets API {values:[rows]} ───────────
@@ -9515,37 +9564,42 @@ function buildFunilData(rows, start, end, funil){
     ltv:  totalFat/manualCount,
     lucro: totalFat - totalTaxa - (totalSpend*TAXA_IMPOSTO),
     taxaAscensao: (function(){
-      // Conta quem comprou qualquer upsell/downsell 1 (Cero, Mapa Ascensión, Cero Downsell)
-      const _up1Ids=new Set(["cero","mapa_asc","cero_down"]);
-      if(!manualCount) return 0;
+      // Os ids vêm dos degraus DESTE funil (front/asc1/asc2) — nunca use aqui
+      // ids de outro dashboard ("cero", "mapa_asc"…): eles não existem no Cero
+      // e a taxa zera mesmo com as vendas aparecendo nos cards.
+      const _upsell1Id=getFunilSteps(f)[1]?.id;
+      const _upsell2Id=getFunilSteps(f)[2]?.id;
+      if(!manualCount||!_upsell1Id) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
+        // compra do produto principal deve estar dentro do período filtrado
         const mp=paid.filter(p=>p.id===primaryId
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!mp) continue;
-        const ascendeu=paid.some(p=>_up1Ids.has(p.id)&&p.date>=mp.date);
+        // conta quem comprou upsell1 OR upsell2 (Mapa + Webinário somados)
+        const ascendeu=paid.some(p=>(p.id===_upsell1Id||(_upsell2Id&&p.id===_upsell2Id))&&p.date>=mp.date);
         if(ascendeu) cnt++;
       }
       return (cnt/manualCount)*100;
     })(),
     taxaMapa: (function(){
-      // Denominator: compradores de qualquer upsell/downsell 1
-      const _ceroIds=new Set(["cero","mapa_asc","cero_down"]);
-      const _mapaIds=new Set(["mapa","webinario"]);
-      const upsell1Count=(counts["cero"]||0)+(counts["mapa_asc"]||0)+(counts["cero_down"]||0);
-      if(!upsell1Count) return 0;
+      const _upsell1Id=getFunilSteps(f)[1]?.id;
+      const _upsell2Id=getFunilSteps(f)[2]?.id;
+      const _upsell2bId=getFunilSteps(f)[3]?.id; // webinário (paralelo ao mapa)
+      const upsell1Count=counts[_upsell1Id||""]||0;
+      if(!_upsell2Id||!upsell1Count) return 0;
       let cnt=0;
       for(const [,buyer] of buyers){
         const paid=buyer.products.filter(p=>p.status==="Paga");
-        // compra de cero (qualquer variante) deve estar dentro do período filtrado
-        const cp=paid.filter(p=>_ceroIds.has(p.id)
+        // compra do upsell1 deve estar dentro do período filtrado
+        const cp=paid.filter(p=>p.id===_upsell1Id
           &&(!start||p.date>=start)&&(!end||p.date<=end))
           .sort((a,b)=>a.date.localeCompare(b.date))[0];
         if(!cp) continue;
-        // conta mapa OR webinário
-        const comprou=paid.some(p=>_mapaIds.has(p.id)&&p.date>=cp.date);
+        // conta mapa OR webinário (ambos são upsell 2 paralelos)
+        const comprou=paid.some(p=>(p.id===_upsell2Id||(_upsell2bId&&p.id===_upsell2bId))&&p.date>=cp.date);
         if(comprou) cnt++;
       }
       return (cnt/upsell1Count)*100;
@@ -10986,6 +11040,55 @@ function parseHotmartRows(sheetJ){
     },[]);
 }
 
+// ── parseWhopRows: converte CSV do Whop para o mesmo formato do parseHotmartRows ─────────────────
+function parseWhopRows(sheetJ){
+  const rows=[];
+  for(const r of parseSheetFirstWins(sheetJ)){
+    if((r["data.substatus"]||"")!=="succeeded") continue;
+    const paidAt=r["data.paid_at"]||""; if(!paidAt) continue;
+    // Converte UTC → UTC-6 (México)
+    const ms=new Date(paidAt).getTime(); if(!ms||isNaN(ms)) continue;
+    const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
+    if(!d||d<"2020-01-01") continue; // filtra linhas de exemplo (1970)
+    const email=(r["data.user.email"]||"").toLowerCase().trim();
+    const phone=(r["data.member.phone"]||r["data.customer_phone"]||"").replace(/\D/g,"");
+    const name=r["data.user.name"]||r["data.user.username"]||"";
+    const totalLocal=parseFloat(String(r["data.total"]||"0").replace(",","."))||0;
+    const usdTotal=parseFloat(String(r["data.usd_total"]||"0").replace(",","."))||0;
+    // Parseia checkout_pattern (JSON) para extrair produtos e preços individuais
+    const xcod=r["data.metadata.checkout_pattern"]||"";
+    let items=[];
+    if(xcod&&xcod.startsWith("[")){try{items=JSON.parse(xcod);}catch(e){}}
+    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalLocal}];
+    for(const item of items){
+      const t=(item.title||"").trim().toUpperCase();
+      const itemPrice=parseFloat(item.price)||0;
+      const itemUSD=totalLocal>0?(itemPrice/totalLocal)*usdTotal:0;
+      let productName,offerCode;
+      if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){
+        productName="FEO - Planilla Finanzas en Ordem"; offerCode="mwwdt723"; // 85pesos
+      } else if(t.includes("COMBO")){
+        productName="FEO - Combo Calculadora + Ingresso"; offerCode="";
+      } else if(t.includes("INGRES")){
+        productName="FEO - Ingresso"; offerCode="";
+      } else if(t.includes("CALCULADORA")){
+        productName="FEO - Calculadora"; offerCode="";
+      } else {
+        productName=item.title||""; offerCode="";
+      }
+      rows.push({
+        "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
+        "Status da compra":"Paga","Data da compra":d,
+        "Nome do produto":productName,"Valor do produto":itemUSD.toFixed(2),
+        "Taxa da plataforma":"0","Ad Id":"",
+        _src:"whop",platform:"",placement:"",
+        _orderDate:paidAt,offerCode:offerCode,
+      });
+    }
+  }
+  return rows;
+}
+
 // ── Load data ──────────────────────────────────────────────────────────────
 // Busca uma aba em blocos de 5000 linhas para evitar timeout em abas grandes
 // ── CSV parser → mesmo formato que a Sheets API {values:[rows]} ───────────
@@ -11421,13 +11524,14 @@ async function loadData(force=false){
 
     // ── FEO ────────────────────────────────────────────────────────────────
     const _feoSafe=(tab,col)=>fetchSheetPaged(tab,col,5000,FEO_SHEET_ID).catch(e=>{console.warn(`[feo] "${tab}":`,e.message);return {values:[]};});
-    const [feoMetaJ, feoVendasJ, feoRetoJ, feoCalcJ, feoIngJ, feoComboJ] = await Promise.all([
+    const [feoMetaJ, feoVendasJ, feoRetoJ, feoCalcJ, feoIngJ, feoComboJ, feoWhopJ] = await Promise.all([
       _feoSafe("Base meta","V"),
       _feoSafe("Base vendas","Z"),
       _feoSafe("Base vendas - Reto","Z"),
       _feoSafe("Base vendas - Calculadora","Z"),
       _feoSafe("Base vendas - Ingresso","Z"),
       _feoSafe("Base vendas - Combo Calculadora + Ingresso","Z"),
+      _feoSafe("Base vendas - Whop","Z"),
     ]);
     {
       const fmD={}, fmByAd={}, fmByAdByDate={}, fmByCamp={}, fmByCampByDate={}, fmByAdId={};
@@ -11514,8 +11618,11 @@ async function loadData(force=false){
       S.feoMetaByAdId=fmByAdId; S.feoMetaByCamp=fmByCamp; S.feoMetaByCampByDate=fmByCampByDate;
       S.feoMetaByTemp=fmByTemp;
 
-      // FEO vendas
-      const feoRows=parseHotmartRows(feoVendasJ);
+      // FEO vendas (Hotmart + Whop)
+      const _whopAllRows=parseWhopRows(feoWhopJ);
+      const _whopMainRows=_whopAllRows.filter(r=>r["Nome do produto"]==="FEO - Planilla Finanzas en Ordem");
+      const _whopBumpRows=_whopAllRows.filter(r=>r["Nome do produto"]!=="FEO - Planilla Finanzas en Ordem");
+      const feoRows=[...parseHotmartRows(feoVendasJ),..._whopMainRows];
       // Reto upsell: só oferta 2fhj5a20 — parse antecipado para atribuição por campanha
       const FEO_RETO_OFFER="2fhj5a20";
       const feoRetoRows=parseHotmartRows(feoRetoJ).filter(r=>r.offerCode===FEO_RETO_OFFER);
@@ -11582,6 +11689,7 @@ async function loadData(force=false){
         ...feoCalcRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
         ...feoIngRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
         ...feoComboRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null})),
+        ..._whopBumpRows.map(r=>({...r,_priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||"85pesos"})),
         ...feoRetoRows.map(r=>({
           ...r,
           _priceTier:emailToPriceTier[(r["Email"]||"").toLowerCase().trim()]||null,
