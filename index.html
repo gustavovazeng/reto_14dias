@@ -8159,14 +8159,14 @@ function renderPrincipal(){
       <div class="ch">
         <span class="ct">Vendas (dia a dia)</span>
         <div style="display:flex;align-items:center;gap:10px">
-          <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas Hotmart</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
+          <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>${isFeo?"Vendas":"Vendas Hotmart"}</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
           <button onclick="CERO.S.showGapVendas=!CERO.S.showGapVendas;CERO.render()" style="font-size:10px;font-weight:600;padding:4px 12px;border-radius:8px;border:1px solid ${S.showGapVendas?"#f87171":"var(--border)"};background:${S.showGapVendas?"rgba(248,113,113,.15)":"transparent"};color:${S.showGapVendas?"#f87171":"var(--hint)"};cursor:pointer;font-family:inherit;transition:all .15s">GAP</button>
         </div>
       </div>
       <div style="position:relative"><canvas id="c-bar-vendas"></canvas><div class="tip" id="t-bar-vendas"></div></div>
-      ${S.showGapVendas?`<p style="font-size:9px;color:var(--hint);margin:4px 0 0;line-height:1.5">GAP % = (vendas reportadas pelo gerenciador do Meta – vendas reais Hotmart) ÷ vendas reais. Positivo = gerenciador reportou mais do que realmente converteu.</p>`:""}
+      ${S.showGapVendas?`<p style="font-size:9px;color:var(--hint);margin:4px 0 0;line-height:1.5">GAP % = (vendas reportadas pelo gerenciador do Meta – vendas reais) ÷ vendas reais. Positivo = gerenciador reportou mais do que realmente converteu.</p>`:""}
     </div>
-    <p class="foot">Base Meta + Base Vendas (Hotmart)</p>`;
+    <p class="foot">${isFeo?"Base Meta + Base Vendas (Hotmart + Whop)":"Base Meta + Base Vendas (Hotmart)"}</p>`;
 
   requestAnimationFrame(()=>{
     const mW=document.getElementById("c-dual")?.parentElement?.offsetWidth||720;
@@ -12415,14 +12415,14 @@ function renderPrincipal(){
       <div class="ch">
         <span class="ct">Vendas (dia a dia)</span>
         <div style="display:flex;align-items:center;gap:10px">
-          <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>Vendas Hotmart</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
+          <div class="lg"><span class="li"><span class="ld" style="background:#34d399"></span>${isFeo?"Vendas":"Vendas Hotmart"}</span>${S.showGapVendas?`<span class="li"><span class="ld" style="background:#f87171"></span>Gerenciador</span>`:""}</div>
           <button onclick="S.showGapVendas=!S.showGapVendas;render()" style="font-size:10px;font-weight:600;padding:4px 12px;border-radius:8px;border:1px solid ${S.showGapVendas?"#f87171":"var(--border)"};background:${S.showGapVendas?"rgba(248,113,113,.15)":"transparent"};color:${S.showGapVendas?"#f87171":"var(--hint)"};cursor:pointer;font-family:inherit;transition:all .15s">GAP</button>
         </div>
       </div>
       <div style="position:relative"><canvas id="c-bar-vendas"></canvas><div class="tip" id="t-bar-vendas"></div></div>
-      ${S.showGapVendas?`<p style="font-size:9px;color:var(--hint);margin:4px 0 0;line-height:1.5">GAP % = (vendas reportadas pelo gerenciador do Meta – vendas reais Hotmart) ÷ vendas reais. Positivo = gerenciador reportou mais do que realmente converteu.</p>`:""}
+      ${S.showGapVendas?`<p style="font-size:9px;color:var(--hint);margin:4px 0 0;line-height:1.5">GAP % = (vendas reportadas pelo gerenciador do Meta – vendas reais) ÷ vendas reais. Positivo = gerenciador reportou mais do que realmente converteu.</p>`:""}
     </div>
-    <p class="foot">Base Meta + Base Vendas (Hotmart)</p>`;
+    <p class="foot">${isFeo?"Base Meta + Base Vendas (Hotmart + Whop)":"Base Meta + Base Vendas (Hotmart)"}</p>`;
 
   requestAnimationFrame(()=>{
     const mW=document.getElementById("c-dual")?.parentElement?.offsetWidth||720;
