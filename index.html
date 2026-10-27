@@ -614,9 +614,11 @@ const FUNIS = {
     // custo por venda. Os cartões do carrinho ficam sem farol.
     // ── Planejamento de investimento do mdi_out26 ─────────────────────────
     // Verba total: $100.000, mesmos percentuais por etapa do set26:
-    //   Cadastros 86,0% = $86.000  ·  Aquecimento 3,0% = $3.000
+    //   Cadastros 89,5% = $89.500  ·  Aquecimento 3,0% = $3.000
     //   Lembretes  2,0% = $2.000   ·  Aulas 4,5%       = $4.500
-    //   Grupos VIP 3,5% = $3.500   ·  Carrinho 1,0%    = $1.000
+    //   Grupos VIP      = cancelado ·  Carrinho 1,0%   = $1.000
+    //   (os $3.500 do Grupo VIP foram rateados por igual nos 36 dias da
+    //    Captação em 27/10 — ver planoGrupoVip)
     //
     // Calendário: Captação 22/09→27/10 · Aquecimento 02/10→26/10 ·
     // Lembrete 20/10→26/10 · Aulas 27, 28 e 29/10 · Grupo VIP 30/10→01/11 ·
@@ -641,42 +643,42 @@ const FUNIS = {
     // exatos — diferença de centavos por dia.
     // "leads" = investimento do dia ÷ meta de CPL ($1,25), arredondado.
     planoDiario:[
-      {date:"2026-09-22", investimento:1504.55, leads:1204},
-      {date:"2026-09-23", investimento:1495.95, leads:1197},
-      {date:"2026-09-24", investimento:1495.95, leads:1197},
-      {date:"2026-09-25", investimento:1495.95, leads:1197},
-      {date:"2026-09-26", investimento:1495.95, leads:1197},
-      {date:"2026-09-27", investimento:1495.95, leads:1197},
-      {date:"2026-09-28", investimento:1495.95, leads:1197},
-      {date:"2026-09-29", investimento:1495.95, leads:1197},
-      {date:"2026-09-30", investimento:1796.86, leads:1437},
-      {date:"2026-10-01", investimento:1788.26, leads:1431},
-      {date:"2026-10-02", investimento:1788.26, leads:1431},
-      {date:"2026-10-03", investimento:1788.26, leads:1431},
-      {date:"2026-10-04", investimento:2140.76, leads:1713},
-      {date:"2026-10-05", investimento:2140.76, leads:1713},
-      {date:"2026-10-06", investimento:2140.76, leads:1713},
-      {date:"2026-10-07", investimento:2140.76, leads:1713},
-      {date:"2026-10-08", investimento:2570.63, leads:2057},
-      {date:"2026-10-09", investimento:2570.63, leads:2057},
-      {date:"2026-10-10", investimento:2570.63, leads:2057},
-      {date:"2026-10-11", investimento:2570.63, leads:2057},
-      {date:"2026-10-12", investimento:3086.47, leads:2469},
-      {date:"2026-10-13", investimento:3086.47, leads:2469},
-      {date:"2026-10-14", investimento:3086.47, leads:2469},
-      {date:"2026-10-15", investimento:3086.47, leads:2469},
-      {date:"2026-10-16", investimento:3086.47, leads:2469},
-      {date:"2026-10-17", investimento:3086.47, leads:2469},
-      {date:"2026-10-18", investimento:3086.47, leads:2469},
-      {date:"2026-10-19", investimento:3086.47, leads:2469},
-      {date:"2026-10-20", investimento:3086.47, leads:2469},
-      {date:"2026-10-21", investimento:3086.47, leads:2469},
-      {date:"2026-10-22", investimento:3086.47, leads:2469},
-      {date:"2026-10-23", investimento:3086.47, leads:2469},
-      {date:"2026-10-24", investimento:3086.47, leads:2469},
-      {date:"2026-10-25", investimento:3086.47, leads:2469},
-      {date:"2026-10-26", investimento:3086.54, leads:2469},
-      {date:"2026-10-27", investimento:1719.48, leads:1376},
+      {date:"2026-09-22", investimento:1601.77, leads:1204},
+      {date:"2026-09-23", investimento:1593.17, leads:1197},
+      {date:"2026-09-24", investimento:1593.17, leads:1197},
+      {date:"2026-09-25", investimento:1593.17, leads:1197},
+      {date:"2026-09-26", investimento:1593.17, leads:1197},
+      {date:"2026-09-27", investimento:1593.17, leads:1197},
+      {date:"2026-09-28", investimento:1593.17, leads:1197},
+      {date:"2026-09-29", investimento:1593.17, leads:1197},
+      {date:"2026-09-30", investimento:1894.08, leads:1437},
+      {date:"2026-10-01", investimento:1885.48, leads:1431},
+      {date:"2026-10-02", investimento:1885.48, leads:1431},
+      {date:"2026-10-03", investimento:1885.48, leads:1431},
+      {date:"2026-10-04", investimento:2237.98, leads:1713},
+      {date:"2026-10-05", investimento:2237.98, leads:1713},
+      {date:"2026-10-06", investimento:2237.98, leads:1713},
+      {date:"2026-10-07", investimento:2237.98, leads:1713},
+      {date:"2026-10-08", investimento:2667.85, leads:2057},
+      {date:"2026-10-09", investimento:2667.85, leads:2057},
+      {date:"2026-10-10", investimento:2667.85, leads:2057},
+      {date:"2026-10-11", investimento:2667.85, leads:2057},
+      {date:"2026-10-12", investimento:3183.69, leads:2469},
+      {date:"2026-10-13", investimento:3183.69, leads:2469},
+      {date:"2026-10-14", investimento:3183.69, leads:2469},
+      {date:"2026-10-15", investimento:3183.69, leads:2469},
+      {date:"2026-10-16", investimento:3183.69, leads:2469},
+      {date:"2026-10-17", investimento:3183.69, leads:2469},
+      {date:"2026-10-18", investimento:3183.69, leads:2469},
+      {date:"2026-10-19", investimento:3183.69, leads:2469},
+      {date:"2026-10-20", investimento:3183.69, leads:2469},
+      {date:"2026-10-21", investimento:3183.69, leads:2469},
+      {date:"2026-10-22", investimento:3183.69, leads:2469},
+      {date:"2026-10-23", investimento:3183.69, leads:2469},
+      {date:"2026-10-24", investimento:3183.69, leads:2469},
+      {date:"2026-10-25", investimento:3183.69, leads:2469},
+      {date:"2026-10-26", investimento:3183.76, leads:2469},
+      {date:"2026-10-27", investimento:1816.78, leads:1376},
     ],
     // Aquecimento: 02/10 → 26/10 (25 dias), $3.000. Curva em DEGRAUS: o valor
     // fica igual por 2 ou 3 dias seguidos e só então sobe — mais estável pro
@@ -735,13 +737,14 @@ const FUNIS = {
       {date:"2026-10-28", investimento:1434.00},
       {date:"2026-10-29", investimento:1533.00},
     ],
-    // Grupo VIP: sem página própria; entra no Resumo por etapa e no
-    // Planejado/Realizado. Realizado = campanhas com "vip" no nome.
-    planoGrupoVip:[
-      {date:"2026-10-30", investimento:1400.00},
-      {date:"2026-10-31", investimento:1400.00},
-      {date:"2026-11-01", investimento:700.00},
-    ],
+    // Grupo VIP: ETAPA CANCELADA (decisão do Gustavo, 27/10). Os $3.500 que
+    // estavam aqui (30/10 a 01/11) foram para a Captação, divididos por igual
+    // entre os 36 dias do planoDiario: +$97,22 por dia, que levou a etapa de
+    // $86.000 para $89.500. O plano fica vazio e os blocos do Grupo VIP saem
+    // do Resumo por etapa e do Planejado/Realizado; a leitura da aba continua
+    // no código (se sobrar algum gasto com "vip" no nome ele ainda entra no
+    // investimento total do lançamento, pro ROAS não ficar subestimado).
+    planoGrupoVip:[],
     planoCarrinho:[
       {date:"2026-11-02", investimento:400.00},
       {date:"2026-11-03", investimento:300.00},
@@ -4154,7 +4157,6 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("🔥 Resumo Aquecimento",`dados carregados: ${S.aquecimentoRows.length} linha(s)`,aquecimentoResumoHtml(),"aquecimento",aquecimentoResumoText())}
     ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
     ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
-    ${stageResumoSection("💎 Resumo Grupo VIP",`${stageErroHtml("grupovip")?"":`dados carregados: ${S.grupoVipRows.length} linha(s)`}`,stageErroHtml("grupovip")+grupoVipResumoHtml(),"grupovip",grupoVipResumoText())}
     ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · vendas: ${(S.carrinhoVendas||[]).length} (${S.carrinhoVendasTrafego||0} de tráfego · ${S.carrinhoVendasOutras||0} orgânica(s)/outras)`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
     <div class="foot">mdi_out26 · Captação · Google Sheets</div>`;
@@ -5183,6 +5185,15 @@ function aquecimentoResumoHtml(){
 }
 // Soma do planejamento de uma etapa até hoje (inclusive) — usado nos
 // resumos pra mostrar "(planej até hoje: R$ x)" ao lado do realizado.
+// Planejado de UMA aula até hoje. A Base Meta - Aulas junta as 3 campanhas
+// numa aba só e o planoAulas tem uma linha por dia de aula, na ordem (27, 28
+// e 29/10) — então o planejado da Aula N é a linha N do plano. Só conta se a
+// data da aula já chegou; aula que ainda não aconteceu devolve 0.
+function planoAulaAteHoje(aulaNum){
+  const p=(PLANO_AULAS||[])[aulaNum-1];
+  if(!p)return null;
+  return p.date<=todayISO()?p.investimento:0;
+}
 function planoAcumAteHoje(plano){
   if(!plano||!plano.length)return null;
   const hoje=todayISO();
@@ -5289,20 +5300,22 @@ function aulaResumoHtml(aulaNum,metas){
   const alcance=S.manualAlcance[alcanceKey];
   const freq=alcance>0?m.impressions/alcance:null;
   const mCpc=metas&&metas.cpc||null, mFreq=metas&&metas.frequencia||null;
+  const plan=planoAulaAteHoje(aulaNum);
+  const planTxt=plan!=null?`planej até hoje: ${fUSD(plan)}`:"";
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   return `
     <div class="section-lbl" style="${aulaNum>1?"margin-top:8px":"margin-top:0"}">Aula 0${aulaNum}${first?` · desde ${fDateBR(first)}`:""}</div>
     ${stageResumoCard("Total",
-      stageRow("Investimento total",fUSD(m.spend),"","")+
+      stageRow("Investimento total",fUSD(m.spend),planTxt,"")+
       stageRow("Cliques totais",m.clicks.toLocaleString("pt-BR"),"","")+
       stageRow("CPC total",m.cpc!=null?fUSD(m.cpc):"—",mCpc?`Meta: ${fUSD(mCpc.val)}`:"",mCpc?metaEmojiGlobal(m.cpc,mCpc.val,mCpc.higher):"")
     )}
     ${stageResumoCard("Facebook",
-      stageRow("Investimento Facebook",fUSD(m.spend),"","")+
+      stageRow("Investimento Facebook",fUSD(m.spend),planTxt,"")+
       stageRow("Cliques FB",m.clicks.toLocaleString("pt-BR"),"","")+
       stageRow("CPC FB",m.cpc!=null?fUSD(m.cpc):"—",mCpc?`Meta: ${fUSD(mCpc.val)}`:"",mCpc?metaEmojiGlobal(m.cpc,mCpc.val,mCpc.higher):"")+
-      stageManualRow(`manual-alcance-aula0${aulaNum}`,"Alcance FB",alcance,`MDI.setManualAlcance('${alcanceKey}',this.value)`,"manual 🔧 (API não fornece)","")+
+      stageManualRow(`manual-alcance-aula0${aulaNum}`,"Alcance FB",alcance,`MDI.setManualAlcance('${alcanceKey}',this.value)`,"","")+
       stageRow("Frequência FB",freq!=null?freq.toFixed(2).replace(".",","):"—",mFreq?`Meta: ${String(mFreq.val).replace(".",",")}`:"",mFreq?(freq!=null?metaEmojiGlobal(freq,mFreq.val,mFreq.higher):"⚪"):"")
     )}`;
 }
@@ -5315,14 +5328,16 @@ function aulaResumoTextBlock(aulaNum,metas){
   const freq=alcance>0?m.impressions/alcance:null;
   const mCpc=metas&&metas.cpc||null, mFreq=metas&&metas.frequencia||null;
   const bm=(v,mt,fmt)=>mt?`\t${metaEmojiGlobal(v,mt.val,mt.higher)} Meta: ${fmt(mt.val)}`:"";
+  const plan=planoAulaAteHoje(aulaNum);
+  const planTxt=plan!=null?`\t(planej até hoje: ${fUSD(plan)})`:"";
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
   return `Aula 0${aulaNum}${first?` · desde ${fDateBR(first)}`:""}
 
-Investimento total:\t${fUSD(m.spend)}
+Investimento total:\t${fUSD(m.spend)}${planTxt}
 Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
 CPC total:\t${m.cpc!=null?fUSD(m.cpc):"—"}${bm(m.cpc,mCpc,fUSD)}
-Alcance FB:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
+Alcance FB:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}
 Frequência FB:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}${bm(freq,mFreq,v=>String(v).replace(".",","))}`;
 }
 // ── Resumo do Grupo VIP ────────────────────────────────────────────────────
@@ -5832,7 +5847,6 @@ function renderPlanoReal(){
     {nome:"Aquecimento",plan:PLANO_AQUECIMENTO.reduce((a,p)=>a+p.investimento,0)||PLANO_AQUECIMENTO_TOTAL,real:totalSpendForStage("Aquecimento")},
     {nome:"Lembrete",plan:PLANO_LEMBRETE.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Lembrete")},
     {nome:"Aulas",plan:PLANO_AULAS.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Aulas")},
-    {nome:"Grupo VIP",plan:PLANO_GRUPO_VIP.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Grupo VIP")},
     {nome:"Carrinho",plan:PLANO_CARRINHO.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Carrinho")},
   ];
   const etapasTotalPlan=etapas.reduce((a,e)=>a+e.plan,0);
@@ -5968,7 +5982,6 @@ function renderPlanoReal(){
     ${stageTable("Aquecimento","Aquecimento",PLANO_AQUECIMENTO)}
     ${stageTable("Lembrete","Lembrete",PLANO_LEMBRETE)}
     ${stageTable("Aulas","Aulas",PLANO_AULAS)}
-    ${stageTable("Grupo VIP","Grupo VIP",PLANO_GRUPO_VIP)}
     ${stageTable("Carrinho","Carrinho",PLANO_CARRINHO)}
 
     <div class="foot">mdi_out26 · Planejado × Realizado · planejamento manual + Google Sheets</div>`;
@@ -6174,6 +6187,7 @@ window.MDI = {
   planForDate,
   planoAcumAteHoje,
   planoAteHoje,
+  planoAulaAteHoje,
   planoDateRange,
   planoTotalLancamento,
   pontosResposta,
