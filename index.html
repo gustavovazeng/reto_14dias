@@ -7133,17 +7133,34 @@ function parseWhopRows(sheetJ){
     const email=(r["data.user.email"]||"").toLowerCase().trim();
     const phone=(r["data.member.phone"]||r["data.customer_phone"]||"").replace(/\D/g,"");
     const name=r["data.user.name"]||r["data.user.username"]||"";
-    const totalLocal=parseFloat(String(r["data.total"]||"0").replace(",","."))||0;
-    const usdTotal=parseFloat(String(r["data.usd_total"]||"0").replace(",","."))||0;
-    // Parseia checkout_pattern (JSON) para extrair produtos e preços individuais
-    const xcod=r["data.metadata.checkout_pattern"]||"";
+    // ── Extrai xcod da coluna url para UTMs ──
+    const urlRaw=r["url"]||"";
+    let whopXcod="";
+    if(urlRaw){
+      try{
+        const urlObj=new URL(urlRaw);
+        whopXcod=decodeURIComponent(urlObj.searchParams.get("xcod")||"");
+      }catch(e){
+        const m=urlRaw.match(/[?&]xcod=([^&]*)/);
+        if(m) whopXcod=decodeURIComponent(m[1]);
+      }
+    }
+    const adId=extractAdIdFromXcod(whopXcod)||"";
+    const {platform:_plat,placement:_plac}=extractXcodMeta(whopXcod);
+    // ── Extrai itens do checkout (JSON em data.fees[0].amount) ──
+    const f0a=(r["data.fees[0].amount"]||"").trim();
     let items=[];
-    if(xcod&&xcod.startsWith("[")){try{items=JSON.parse(xcod);}catch(e){}}
-    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalLocal}];
+    if(f0a.startsWith("[")){try{items=JSON.parse(f0a);}catch(e){}}
+    // ── Valor total MXN: fees[1].amount (compra simples) ou fees[1].currency (OB) ──
+    const f1a=(r["data.fees[1].amount"]||"").trim();
+    const f1c=(r["data.fees[1].currency"]||"").trim();
+    let totalMXN=parseFloat(f1a.replace(",","."))||0;
+    if(!totalMXN) totalMXN=parseFloat(f1c.replace(",","."))||0;
+    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalMXN}];
     for(const item of items){
       const t=(item.title||"").trim().toUpperCase();
-      const itemPrice=parseFloat(item.price)||0;
-      const itemUSD=totalLocal>0?(itemPrice/totalLocal)*usdTotal:0;
+      const itemPrice=parseFloat(item.price)||totalMXN;
+      const itemUSD=toUSD(itemPrice,"MXN");
       let productName,offerCode;
       if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){
         productName="FEO - Planilla Finanzas en Ordem"; offerCode="mwwdt723"; // 85pesos
@@ -7160,8 +7177,8 @@ function parseWhopRows(sheetJ){
         "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
         "Status da compra":"Paga","Data da compra":d,
         "Nome do produto":productName,"Valor do produto":itemUSD.toFixed(2),
-        "Taxa da plataforma":"0","Ad Id":"",
-        _src:"whop",platform:"",placement:"",
+        "Taxa da plataforma":"0","Ad Id":adId,
+        _src:"whop",platform:_plat,placement:_plac,
         _orderDate:paidAt,offerCode:offerCode,
       });
     }
@@ -11067,17 +11084,34 @@ function parseWhopRows(sheetJ){
     const email=(r["data.user.email"]||"").toLowerCase().trim();
     const phone=(r["data.member.phone"]||r["data.customer_phone"]||"").replace(/\D/g,"");
     const name=r["data.user.name"]||r["data.user.username"]||"";
-    const totalLocal=parseFloat(String(r["data.total"]||"0").replace(",","."))||0;
-    const usdTotal=parseFloat(String(r["data.usd_total"]||"0").replace(",","."))||0;
-    // Parseia checkout_pattern (JSON) para extrair produtos e preços individuais
-    const xcod=r["data.metadata.checkout_pattern"]||"";
+    // ── Extrai xcod da coluna url para UTMs ──
+    const urlRaw=r["url"]||"";
+    let whopXcod="";
+    if(urlRaw){
+      try{
+        const urlObj=new URL(urlRaw);
+        whopXcod=decodeURIComponent(urlObj.searchParams.get("xcod")||"");
+      }catch(e){
+        const m=urlRaw.match(/[?&]xcod=([^&]*)/);
+        if(m) whopXcod=decodeURIComponent(m[1]);
+      }
+    }
+    const adId=extractAdIdFromXcod(whopXcod)||"";
+    const {platform:_plat,placement:_plac}=extractXcodMeta(whopXcod);
+    // ── Extrai itens do checkout (JSON em data.fees[0].amount) ──
+    const f0a=(r["data.fees[0].amount"]||"").trim();
     let items=[];
-    if(xcod&&xcod.startsWith("[")){try{items=JSON.parse(xcod);}catch(e){}}
-    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalLocal}];
+    if(f0a.startsWith("[")){try{items=JSON.parse(f0a);}catch(e){}}
+    // ── Valor total MXN: fees[1].amount (compra simples) ou fees[1].currency (OB) ──
+    const f1a=(r["data.fees[1].amount"]||"").trim();
+    const f1c=(r["data.fees[1].currency"]||"").trim();
+    let totalMXN=parseFloat(f1a.replace(",","."))||0;
+    if(!totalMXN) totalMXN=parseFloat(f1c.replace(",","."))||0;
+    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalMXN}];
     for(const item of items){
       const t=(item.title||"").trim().toUpperCase();
-      const itemPrice=parseFloat(item.price)||0;
-      const itemUSD=totalLocal>0?(itemPrice/totalLocal)*usdTotal:0;
+      const itemPrice=parseFloat(item.price)||totalMXN;
+      const itemUSD=toUSD(itemPrice,"MXN");
       let productName,offerCode;
       if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){
         productName="FEO - Planilla Finanzas en Ordem"; offerCode="mwwdt723"; // 85pesos
@@ -11094,8 +11128,8 @@ function parseWhopRows(sheetJ){
         "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
         "Status da compra":"Paga","Data da compra":d,
         "Nome do produto":productName,"Valor do produto":itemUSD.toFixed(2),
-        "Taxa da plataforma":"0","Ad Id":"",
-        _src:"whop",platform:"",placement:"",
+        "Taxa da plataforma":"0","Ad Id":adId,
+        _src:"whop",platform:_plat,placement:_plac,
         _orderDate:paidAt,offerCode:offerCode,
       });
     }
