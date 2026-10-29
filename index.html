@@ -621,17 +621,17 @@ const FUNIS = {
     //    Captação em 27/10 — ver planoGrupoVip)
     //
     // Calendário: Captação 22/09→27/10 · Aquecimento 02/10→26/10 ·
-    // Lembrete 20/10→26/10 · Aulas 27, 28 e 29/10 · Grupo VIP 30/10→01/11 ·
-    // Carrinho 02→05/11. Mesma estrutura do set26 em torno das aulas:
+    // Lembrete 20/10→26/10 · Aulas 27, 28 e 29/10 ·
+    // Carrinho 30/10→02/11. Mesma estrutura do set26 em torno das aulas:
     // Captação, Aquecimento e Lembrete vão até o dia da Aula 01 inclusive; o
-    // Grupo VIP abre no dia seguinte à Aula 03 e o Carrinho logo depois.
+    // Carrinho abre no dia seguinte à Aula 03 (a etapa de Grupo VIP, que
+    // antes ficava entre as duas, foi cancelada em 27/10).
     //
     // Curvas herdadas do set26, só reescaladas pra nova verba:
     //   • Aquecimento (25 dias, 02→26/10) e Lembrete (5 dias): rampa
     //     CRESCENTE e LINEAR, incremento fixo em dólar por dia, salto máximo
     //     de ~20% do 1º pro 2º dia.
     //   • Aulas: proporção 155/145/155 do set26 → $1.533 / $1.434 / $1.533.
-    //   • Grupo VIP: 40% / 40% / 20%.
     //   • Carrinho: DECRESCENTE, 40% / 30% / 20% / 10%.
     //
     // CAPTAÇÃO: $86.000 em 36 dias (22/09→27/10), curva definida pelo usuário
@@ -745,11 +745,16 @@ const FUNIS = {
     // no código (se sobrar algum gasto com "vip" no nome ele ainda entra no
     // investimento total do lançamento, pro ROAS não ficar subestimado).
     planoGrupoVip:[],
+    // Carrinho: 30/10 (sex) → 02/11 (seg), 4 dias, $1.000 (1,0% dos $100.000).
+    // Antes era 02/11 → 05/11, quando o Carrinho abria depois do Grupo VIP;
+    // com a etapa do VIP cancelada o carrinho foi antecipado e passou a abrir
+    // no dia seguinte à Aula 03 (29/10). São os MESMOS 4 dias e a MESMA curva
+    // de antes — só as datas mudaram.
     planoCarrinho:[
-      {date:"2026-11-02", investimento:400.00},
-      {date:"2026-11-03", investimento:300.00},
-      {date:"2026-11-04", investimento:200.00},
-      {date:"2026-11-05", investimento:100.00},
+      {date:"2026-10-30", investimento:400.00},
+      {date:"2026-10-31", investimento:300.00},
+      {date:"2026-11-01", investimento:200.00},
+      {date:"2026-11-02", investimento:100.00},
     ],
   },
 };
@@ -8522,7 +8527,7 @@ function renderAnuncios(){
   const countryBuyerSets={};
   for(const [adId,adData] of Object.entries(dd.metaByAdId)){
     const country=adData.country;
-    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0,ic:0};
+    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,valor:0,funilRev:0,ic:0};
     for(const [d,vals] of Object.entries(adData.byDate)){
       if(d>=start&&d<=end){
         countryStats[country].spend+=vals.spend;
@@ -8533,13 +8538,13 @@ function renderAnuncios(){
     }
     const vByD=dd.vendasByAdDate[adId]||{};
     for(const [vd,vv] of Object.entries(vByD)){
-      if(vd>=start&&vd<=end) countryStats[country].qtd+=vv.qtd;
+      if(vd>=start&&vd<=end){ countryStats[country].qtd+=vv.qtd; countryStats[country].valor+=vv.valor||0; }
     }
     if(!countryBuyerSets[country]) countryBuyerSets[country]=new Set();
     for(const ek of (adBuyersMap.get(adId)||new Set())) countryBuyerSets[country].add(ek);
   }
   for(const [country,keys] of Object.entries(countryBuyerSets)){
-    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0};
+    if(!countryStats[country]) countryStats[country]={spend:0,clicks:0,impressions:0,qtd:0,valor:0,funilRev:0};
     for(const ek of keys) countryStats[country].funilRev+=(buyerTotalSpent.get(ek)||0);
   }
 
@@ -8572,11 +8577,11 @@ function renderAnuncios(){
       }
     }
     if(cSpend===0) continue;
-    let cQtd=0;
+    let cQtd=0, cValor=0;   // cValor = faturamento só do front (Cero)
     for(const adId of adIdsC){
       const byD=dd.vendasByAdDate[adId]||{};
       for(const [vd,vv] of Object.entries(byD)){
-        if(vd>=start&&vd<=end) cQtd+=vv.qtd;
+        if(vd>=start&&vd<=end){ cQtd+=vv.qtd; cValor+=vv.valor||0; }
       }
     }
     const campEvKeys=new Set();
@@ -8591,14 +8596,15 @@ function renderAnuncios(){
       if(ASC1&&(prods.has(ASC1.id)||(ASC2&&prods.has(ASC2.id)))) _cCero++;
     }
     campRows.push({campName,spend:cSpend,clicks:cClicks,impressions:cImpr,
-      qtd:cQtd,valor:campFunilRev,
+      qtd:cQtd,valor:campFunilRev,valorFront:cValor,
       trCero:campEvKeys.size>0?(_cCero/campEvKeys.size)*100:0,
       trMapa:_cCero>0?(_cMapa/_cCero)*100:0,
       cpc:cClicks>0?cSpend/cClicks:0,
       ctr:cImpr>0?(cClicks/cImpr)*100:0,
       cpm:cImpr>0?(cSpend/cImpr)*1000:0,
       cpv:cQtd>0?cSpend/cQtd:0,
-      roas:cSpend>0?campFunilRev/cSpend:0,
+      roas:cSpend>0?cValor/cSpend:0,                 // ROAS do front: só o Cero
+      roasTotal:cSpend>0?campFunilRev/cSpend:0,     // ROAS total: Cero + ascensões
       ticket:cQtd>0?campFunilRev/cQtd:0,
       ic:cIc, cpic:cIc>0?cSpend/cIc:0,
       connect:cClicks>0?(cLv/cClicks)*100:0,
@@ -8722,7 +8728,9 @@ function renderAnuncios(){
         cpv:qtd>0?spend/qtd:0,
         ticket:qtd>0?valor/qtd:0,
         ticketAsc:qtd>0?totalAscensoes/qtd:0,
-        roas:spend>0&&totalAscensoes>0?totalAscensoes/spend:0,
+        valorTotal:totalAscensoes,
+        roas:spend>0?valor/spend:0,                                    // ROAS do front: só o Cero
+        roasTotal:spend>0&&totalAscensoes>0?totalAscensoes/spend:0,    // ROAS total: Cero + ascensões
         ic, cpic:ic>0?spend/ic:0,
         connect:clicks>0?(landingViews/clicks)*100:0,
         txPagChk:landingViews>0?(checkouts/landingViews)*100:0,
@@ -8846,7 +8854,7 @@ function renderAnuncios(){
       const totRow={spend:0,clicks:0,impressions:0,qtd:0,funilRev:0,ic:0};
       for(const s of Object.values(countryStats)){
         totRow.spend+=s.spend;totRow.clicks+=s.clicks;
-        totRow.impressions+=s.impressions;totRow.qtd+=s.qtd;totRow.funilRev+=s.funilRev;totRow.ic+=(s.ic||0);
+        totRow.impressions+=s.impressions;totRow.qtd+=s.qtd;totRow.valor+=(s.valor||0);totRow.funilRev+=s.funilRev;totRow.ic+=(s.ic||0);
       }
       function cpRow(c,s,isTodos){
         const sel=!isTodos&&S.selectedCountry===c;
@@ -8857,8 +8865,8 @@ function renderAnuncios(){
         const ctr=s.impressions>0?(s.clicks/s.impressions)*100:0;
         const cpm=s.impressions>0?(s.spend/s.impressions)*1000:0;
         const cpv=s.qtd>0?s.spend/s.qtd:0;
-        const roas=s.spend>0?s.funilRev/s.spend:0;
-        const ticket=s.qtd>0?s.funilRev/s.qtd:0;
+        const roas=s.spend>0?(s.valor||0)/s.spend:0;          // front
+        const roasTotal=s.spend>0?s.funilRev/s.spend:0;      // com ascensões
         const safeC=(isTodos?"todos":c).replace(/'/g,"\\'");
         return `<tr data-country="${safeC}" style="border-bottom:1px solid var(--border);background:${bg};${bord};cursor:pointer;transition:background .1s"
           onclick="CERO.selectCountry('${safeC}')"
@@ -8869,7 +8877,7 @@ function renderAnuncios(){
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">${s.qtd||"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.qtd>0?sc(cpv,META_CPV,false):"var(--hint)"}">${s.qtd>0?fBRL(cpv):"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.qtd>0?sc(roas,META_ROAS,true):"var(--hint)"}">${s.qtd>0?roas.toFixed(2)+"x":"—"}</td>
-          <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">${s.qtd>0?fBRL(ticket):"—"}</td>
+          ${TEM_ASC?`<td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.qtd>0?sc(roasTotal,META_ROAS,true):"var(--hint)"};font-weight:600">${s.qtd>0?roasTotal.toFixed(2)+"x":"—"}</td>`:""}
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">${(s.ic||0)>0?fBRL(s.spend/(s.ic||1)):"—"}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${sc(ctr,METAS_T.ctr.val,true)}">${fPct(ctr)}</td>
           <td style="padding:9px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:${sc(cpm,METAS_T.cpm.val,false)}">${fBRL(cpm)}</td>
@@ -8890,8 +8898,8 @@ function renderAnuncios(){
             <th style="${thStyle};text-align:right">Investimento</th>
             <th style="${thStyle};text-align:right">Vendas</th>
             <th style="${thStyle};text-align:right">Custo/Venda</th>
-            <th style="${thStyle};text-align:right">ROAS</th>
-            <th style="${thStyle};text-align:right">Ticket Médio</th>
+            <th style="${thStyle};text-align:right">ROAS do front</th>
+            ${TEM_ASC?`<th style="${thStyle};text-align:right">ROAS total</th>`:""}
             <th style="${thStyle};text-align:right">Custo/IC</th>
             <th style="${thStyle};text-align:right">CTR</th>
             <th style="${thStyle};text-align:right">CPM</th>
@@ -8899,7 +8907,7 @@ function renderAnuncios(){
           </tr></thead>
           <tbody>
             ${cpRow("todos",totRow,true)}
-            ${countries.map(c=>cpRow(c,countryStats[c]||{spend:0,clicks:0,impressions:0,qtd:0,funilRev:0},false)).join("")}
+            ${countries.map(c=>cpRow(c,countryStats[c]||{spend:0,clicks:0,impressions:0,qtd:0,valor:0,funilRev:0},false)).join("")}
           </tbody>
         </table>
       </div>`;
@@ -8927,7 +8935,7 @@ function renderAnuncios(){
           ${!isFeo&&ASC2?thC("trMapa","TR "+shortLbl(ASC2),"camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
           ${thC("roas","ROAS do front","camp")}
-          ${thC("ticket","Ticket Médio","camp")}
+          ${TEM_ASC?thC("roasTotal","ROAS total","camp"):""}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
           ${thC("cpm","CPM","camp")}
@@ -8961,7 +8969,7 @@ function renderAnuncios(){
               ${!isFeo&&ASC2?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
+              ${TEM_ASC?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roasTotal,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.qtd>0?r.roasTotal.toFixed(2)+"x":"—"}</td>`:""}
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
@@ -8982,23 +8990,25 @@ function renderAnuncios(){
       const selAdCodes=[...S.selectedAds];
       if(selCampNames.length<1&&selAdCodes.length<1) return "";
       // Aggregate selected camps
-      let pSpend=0,pQtd=0,pIc=0,pClicks=0,pImpr=0,pValor=0;
+      let pSpend=0,pQtd=0,pIc=0,pClicks=0,pImpr=0,pValor=0,pValorTotal=0;
       if(selCampNames.length>0){
         for(const c of campRows){
           if(!S.selectedCamps.has(c.campName)) continue;
           pSpend+=c.spend; pQtd+=c.qtd; pIc+=c.ic||0;
-          pClicks+=c.clicks; pImpr+=c.impressions; pValor+=c.valor||0;
+          pClicks+=c.clicks; pImpr+=c.impressions;
+          pValor+=c.valorFront||0; pValorTotal+=c.valor||0;
         }
       } else if(selAdCodes.length>0){
         for(const r of adRows){
           if(!S.selectedAds.has(r.advCode)) continue;
           pSpend+=r.spend; pQtd+=r.qtd; pIc+=r.ic||0;
-          pClicks+=r.clicks; pImpr+=r.impressions; pValor+=r.valor||0;
+          pClicks+=r.clicks; pImpr+=r.impressions;
+          pValor+=r.valor||0; pValorTotal+=r.valorTotal||0;
         }
       }
       const pCpv=pQtd>0?pSpend/pQtd:0;
-      const pRoas=pSpend>0?pValor/pSpend:0;
-      const pTicket=pQtd>0?pValor/pQtd:0;
+      const pRoas=pSpend>0?pValor/pSpend:0;              // front
+      const pRoasTotal=pSpend>0?pValorTotal/pSpend:0;    // com ascensões
       const pCtr=pImpr>0?(pClicks/pImpr)*100:0;
       const pCpm=pImpr>0?(pSpend/pImpr)*1000:0;
       const pCpc=pClicks>0?pSpend/pClicks:0;
@@ -9010,8 +9020,8 @@ function renderAnuncios(){
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Investimento</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${fBRL(pSpend)}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Vendas</div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">${pQtd}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?sb(pCpv,isFeo?null:META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,isFeo?null:META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?sb(pRoas,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Ticket Médio</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pTicket):"—"}</div></div>
+          <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?sb(pRoas,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS do front</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
+          ${TEM_ASC?`<div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoasTotal>0?sb(pRoasTotal,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS total</div><div style="font-size:13px;font-weight:700;color:${pRoasTotal>0?sc(pRoasTotal,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoasTotal>0?pRoasTotal.toFixed(2)+"x":"—"}</div></div>`:""}
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/IC</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pIc>0?fBRL(pCpic):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CTR</div><div style="font-size:13px;font-weight:700;color:${sc(pCtr,METAS_T.ctr.val,true)}">${fPct(pCtr)}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CPM</div><div style="font-size:13px;font-weight:700;color:${sc(pCpm,METAS_T.cpm.val,false)};font-family:'JetBrains Mono',monospace">${fBRL(pCpm)}</div></div>
@@ -9042,9 +9052,8 @@ function renderAnuncios(){
           ${!isFeo&&ASC1?thC("trCero","TR "+shortLbl(ASC1),"ad"):""}
           ${!isFeo&&ASC2?thC("trMapa","TR "+shortLbl(ASC2),"ad"):""}
           ${thC("cpv","Custo/Venda","ad")}
-          ${thC("ticket","Ticket Médio Front","ad")}
-          ${TEM_ASC?thC("ticketAsc","Ticket Médio Ascensões","ad"):""}
           ${thC("roas","ROAS do front","ad")}
+          ${TEM_ASC?thC("roasTotal","ROAS total","ad"):""}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -9082,9 +9091,8 @@ function renderAnuncios(){
             ${!isFeo&&ASC1?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
             ${!isFeo&&ASC2?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
-            ${TEM_ASC?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
+            ${TEM_ASC?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roasTotal>0?sc(r.roasTotal,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roasTotal>0?r.roasTotal.toFixed(2)+"x":"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
@@ -10416,6 +10424,7 @@ window.CERO = {
   parseSheet,
   parseSheetFirstWins,
   parseUSD,
+  parseWhopRows,
   periodBar,
   piS,
   render,
@@ -12845,11 +12854,11 @@ function renderAnuncios(){
       }
     }
     if(cSpend===0) continue;
-    let cQtd=0;
+    let cQtd=0,cFrontValor=0;
     for(const adId of adIdsC){
       const byD=dd.vendasByAdDate[adId]||{};
       for(const [vd,vv] of Object.entries(byD)){
-        if(vd>=start&&vd<=end) cQtd+=vv.qtd;
+        if(vd>=start&&vd<=end){cQtd+=vv.qtd;cFrontValor+=vv.valor;}
       }
     }
     const campEvKeys=new Set();
@@ -12872,8 +12881,8 @@ function renderAnuncios(){
       ctr:cImpr>0?(cClicks/cImpr)*100:0,
       cpm:cImpr>0?(cSpend/cImpr)*1000:0,
       cpv:cQtd>0?cSpend/cQtd:0,
-      roas:cSpend>0?campFunilRev/cSpend:0,
-      ticket:cQtd>0?campFunilRev/cQtd:0,
+      roasFront:cSpend>0?cFrontValor/cSpend:0,
+      roasTotal:cSpend>0?campFunilRev/cSpend:0,
       ic:cIc, cpic:cIc>0?cSpend/cIc:0,
       connect:cClicks>0?(cLv/cClicks)*100:0,
       txPagChk:cLv>0?(cChk/cLv)*100:0,
@@ -12995,9 +13004,8 @@ function renderAnuncios(){
         ctr:impressions>0?(clicks/impressions)*100:0,
         cpm:impressions>0?(spend/impressions)*1000:0,
         cpv:qtd>0?spend/qtd:0,
-        ticket:qtd>0?valor/qtd:0,
-        ticketAsc:qtd>0?totalAscensoes/qtd:0,
-        roas:spend>0&&totalAscensoes>0?totalAscensoes/spend:0,
+        roasFront:spend>0?valor/spend:0,
+        roasTotal:spend>0?totalAscensoes/spend:0,
         ic, cpic:ic>0?spend/ic:0,
         connect:clicks>0?(landingViews/clicks)*100:0,
         txPagChk:landingViews>0?(checkouts/landingViews)*100:0,
@@ -13201,8 +13209,8 @@ function renderAnuncios(){
           ${!isFeo?thC("trCero","TR Cero","camp"):""}
           ${!isFeo?thC("trMapa","TR Mapa","camp"):""}
           ${thC("cpv","Custo/Venda","camp")}
-          ${thC("roas","ROAS do front","camp")}
-          ${thC("ticket","Ticket Médio","camp")}
+          ${thC("roasFront","ROAS do front","camp")}
+          ${thC("roasTotal","ROAS total","camp")}
           ${thC("cpic","Custo/IC","camp")}
           ${thC("ctr","CTR","camp")}
           ${thC("cpm","CPM","camp")}
@@ -13235,8 +13243,8 @@ function renderAnuncios(){
               ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
               ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)}">${r.qtd>0?fBRL(r.cpv):"—"}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roas.toFixed(2)+"x":"—"}</td>
-              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticket):"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roasFront,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roasFront.toFixed(2)+"x":"—"}</td>
+              <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.qtd>0?sc(r.roasTotal,isFeo?null:META_ROAS,true):"var(--hint)"}">${r.qtd>0?r.roasTotal.toFixed(2)+"x":"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)}">${fPct(r.ctr)}</td>
               <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)}">${fBRL(r.cpm)}</td>
@@ -13286,7 +13294,6 @@ function renderAnuncios(){
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Vendas</div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">${pQtd}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pCpv>0?sb(pCpv,isFeo?null:META_CPV,false):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/Venda</div><div style="font-size:13px;font-weight:700;color:${pCpv>0?sc(pCpv,isFeo?null:META_CPV,false):"var(--hint)"};font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pCpv):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid ${pRoas>0?sb(pRoas,isFeo?null:META_ROAS,true):"var(--border)"}"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">ROAS</div><div style="font-size:13px;font-weight:700;color:${pRoas>0?sc(pRoas,isFeo?null:META_ROAS,true):"var(--hint)"}">${pRoas>0?pRoas.toFixed(2)+"x":"—"}</div></div>
-          <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Ticket Médio</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pQtd>0?fBRL(pTicket):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">Custo/IC</div><div style="font-size:13px;font-weight:700;color:var(--text-strong);font-family:'JetBrains Mono',monospace">${pIc>0?fBRL(pCpic):"—"}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CTR</div><div style="font-size:13px;font-weight:700;color:${sc(pCtr,METAS_T.ctr.val,true)}">${fPct(pCtr)}</div></div>
           <div style="background:var(--card);border-radius:8px;padding:10px 12px"><div style="font-size:10px;color:var(--hint);margin-bottom:3px">CPM</div><div style="font-size:13px;font-weight:700;color:${sc(pCpm,METAS_T.cpm.val,false)};font-family:'JetBrains Mono',monospace">${fBRL(pCpm)}</div></div>
@@ -13317,9 +13324,8 @@ function renderAnuncios(){
           ${!isFeo?thC("trCero","TR Cero","ad"):""}
           ${!isFeo?thC("trMapa","TR Mapa","ad"):""}
           ${thC("cpv","Custo/Venda","ad")}
-          ${thC("ticket","Ticket Médio Front","ad")}
-          ${thC("ticketAsc","Ticket Médio Ascensões","ad")}
-          ${thC("roas","ROAS do front","ad")}
+          ${thC("roasFront","ROAS do front","ad")}
+          ${thC("roasTotal","ROAS total","ad")}
           ${thC("cpic","Custo/IC","ad")}
           ${thC("ctr","CTR","ad")}
           ${thC("cpm","CPM","ad")}
@@ -13332,7 +13338,7 @@ function renderAnuncios(){
           <th style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;white-space:nowrap">Ver</th>
         </tr></thead>
         <tbody>
-          ${filteredAds.length===0?`<tr><td colspan="${isFeo?20:22}" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
+          ${filteredAds.length===0?`<tr><td colspan="${isFeo?20:21}" style="padding:24px;text-align:center;color:var(--hint);font-size:12px">Nenhum anúncio encontrado para as campanhas selecionadas</td></tr>`:""}
           ${filteredAds.map(r=>{
             const selAd=S.selectedAds.has(r.advCode);
             const bgAd=selAd?"rgba(16,185,129,.10)":"transparent";
@@ -13357,9 +13363,8 @@ function renderAnuncios(){
             ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trCero>0?"#f59e0b":"var(--hint)"}">${r.trCero>0?r.trCero.toFixed(1)+"%":"—"}</td>`:""}
             ${!isFeo?`<td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.trMapa>0?"#34d399":"var(--hint)"}">${r.trMapa>0?r.trMapa.toFixed(1)+"%":"—"}</td>`:""}
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpv,isFeo?getCpvMetaFromCamp(r.campName):META_CPV,false)};font-weight:600">${r.qtd>0?fBRL(r.cpv):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ticket,isFeo?null:META_TICKET,true)};font-weight:600">${r.qtd>0?fBRL(r.ticket):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.qtd>0?fBRL(r.ticketAsc):"—"}</td>
-            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roas>0?sc(r.roas,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roas>0?r.roas.toFixed(2)+"x":"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roasFront>0?sc(r.roasFront,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roasFront>0?r.roasFront.toFixed(2)+"x":"—"}</td>
+            <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${r.roasTotal>0?sc(r.roasTotal,isFeo?null:META_ROAS,true):"var(--hint)"};font-weight:600">${r.roasTotal>0?r.roasTotal.toFixed(2)+"x":"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${r.ic>0?fBRL(r.cpic):"—"}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.ctr,isFeo?null:METAS_T.ctr.val,true)};font-weight:600">${fPct(r.ctr)}</td>
             <td style="padding:10px 14px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sc(r.cpm,isFeo?null:METAS_T.cpm.val,false)};font-weight:600">${fBRL(r.cpm)}</td>
