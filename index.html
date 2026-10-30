@@ -1747,12 +1747,16 @@ function campaignStage(campName){
 // Mídia do Carrinho: usa a aba própria ("Base Carrinho") quando existir; se
 // estiver vazia, cai no comportamento antigo (Base Meta - captação filtrada
 // por campanha), pra não quebrar enquanto a aba nova não tem linhas.
-// ⚠️ SEM fallback pra "Base meta - Captação". Antes, se a aba do carrinho não
-// respondesse, isto devolvia as campanhas de carrinho que estivessem na aba de
-// captação — e a aba do Carrinho mostrava investimento que não era dela, sem
-// avisar. Agora, aba vazia = número zerado e o aviso de erro aparece na tela.
+// ⚠️ FILTRA POR ETAPA. A aba "Base meta - Vendas" da planilha NÃO é só do
+// carrinho: ela traz a exportação de mídia inteira do lançamento. Sem este
+// filtro, o Carrinho mostrava o investimento da captação e, pior, o
+// investimento total do lançamento contava tudo DUAS vezes ($185 mil em vez
+// de $96 mil). Agora só entram as campanhas com "carrinho" no nome — e o
+// filtro é inofensivo se um dia a aba voltar a ser exclusiva do carrinho.
+// Também não há mais fallback pra "Base meta - Captação": aba sem linha de
+// carrinho = número zerado e aviso na tela, em vez de número errado calado.
 function carrinhoMetaRows(){
-  return S.carrinhoMetaRows||[];
+  return (S.carrinhoMetaRows||[]).filter(r=>campaignStage(r.campName)==="Carrinho");
 }
 function stageRowsForStage(stage){
   if(stage==="Carrinho")return carrinhoMetaRows();
@@ -4811,6 +4815,11 @@ function renderCarrinhoPrincipal(){
       ${kpiCard("ROAS",m.roas!=null?m.roas.toFixed(2)+"x":"—",`faturamento ÷ investimento do lançamento inteiro (${fUSD(m.investTotalLancamento)})`,"var(--text-strong)")}
     </div>
 
+    ${(()=>{const d=investimentoDetalhadoLancamento();
+      return `<div style="font-size:10px;color:var(--hint);margin:-10px 0 18px">Investimento do lançamento no ROAS: ${
+        Object.keys(d.porEtapa).filter(k=>d.porEtapa[k]>0).map(k=>`${k} ${fUSD(d.porEtapa[k])}`).join(" · ")
+      } = <b>${fUSD(d.total)}</b>${d.repetidas>0?` · ${d.repetidas} linha(s) repetida(s) entre abas ignorada(s)`:""}</div>`;})()}
+
     <div class="g5" style="margin-bottom:18px">
       ${kpiCard("Custo por ficha",m.custoFicha!=null?fUSD(m.custoFicha):"—","investimento ÷ fichas do recorte","var(--text-strong)")}
       ${kpiCard("Ficha → venda",m.txFichaVenda!=null?fPct(m.txFichaVenda):"—","vendas ÷ fichas","var(--text-strong)")}
@@ -4914,15 +4923,39 @@ function sortCarrinhoCanal(col){
 // O filtro na Base Meta - captação evita contar o Carrinho DUAS vezes: se
 // alguma campanha de carrinho ainda estiver naquela aba, ela é descartada
 // aqui e o valor vem de carrinhoMetaRows(), que é a fonte oficial da etapa.
+// Cada aba contribui SÓ com a própria etapa (pelo nome da campanha). Antes o
+// filtro existia só pro Carrinho, e bastava uma aba trazer a exportação
+// inteira pra mesma linha ser somada duas vezes — foi o que aconteceu com a
+// "Base meta - Vendas" em 30/10 e levou o total a $185 mil.
+// Como segunda trava, as linhas são desduplicadas por
+// data+campanha+anúncio+gasto+cliques+impressões: se a MESMA linha aparecer em
+// duas abas, conta uma vez só.
+function investimentoDetalhadoLancamento(){
+  const fontes=[
+    ["Captação",    S.metaRows,            "Captação"],
+    ["Lives",       S.livesCaptacaoRows,   "Captação"],
+    ["Aquecimento", S.aquecimentoRows,     "Aquecimento"],
+    ["Lembrete",    S.lembreteRows,        "Lembrete"],
+    ["Aulas",       S.aulasRows,           "Aulas"],
+    ["Grupo VIP",   S.grupoVipRows,        "Grupo VIP"],
+    ["Carrinho",    S.carrinhoMetaRows,    "Carrinho"],
+  ];
+  const vistos=new Set(); const porEtapa={}; let total=0, repetidas=0;
+  for(const [rotulo,arr,etapa] of fontes){
+    let t=0;
+    for(const r of (arr||[])){
+      if(campaignStage(r.campName)!==etapa)continue;
+      const k=[r.date,r.campName,r.adName,r.spend,r.clicks,r.impressions].join("|");
+      if(vistos.has(k)){repetidas++;continue;}
+      vistos.add(k);
+      t+=r.spend||0;
+    }
+    porEtapa[rotulo]=(porEtapa[rotulo]||0)+t; total+=t;
+  }
+  return{total,porEtapa,repetidas};
+}
 function investimentoTotalLancamento(){
-  const soma=arr=>(arr||[]).reduce((a,r)=>a+(r.spend||0),0);
-  return soma((S.metaRows||[]).filter(r=>campaignStage(r.campName)!=="Carrinho"))
-        +soma(S.livesCaptacaoRows)
-        +soma(carrinhoMetaRows())
-        +soma(S.aquecimentoRows)
-        +soma(S.lembreteRows)
-        +soma(S.aulasRows)
-        +soma(S.grupoVipRows);
+  return investimentoDetalhadoLancamento().total;
 }
 function renderCarrinhoVendas(){
   const el=document.getElementById("page-carrinho-vendas");if(!el)return;
@@ -6405,6 +6438,7 @@ window.MDI = {
   grupoVipResumoText,
   hojeBadge,
   initCanvas,
+  investimentoDetalhadoLancamento,
   investimentoTotalLancamento,
   kpiCard,
   kpiCardManual,
