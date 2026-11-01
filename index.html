@@ -1903,6 +1903,22 @@ function vendaDataMs(raw){
 // PAINEL da Hotmart, com cabeçalhos e status em espanhol. As duas formas
 // seguem aceitas — os nomes de coluna são procurados por getCol, que ignora
 // acento, caixa e pontuação, e os status das duas línguas estão nas listas.
+// A Hotmart já mandou TRÊS layouts diferentes de exportação (webhook, painel
+// "transacciones" e painel "ventas"), cada um com outros nomes de coluna. Como
+// getCol ignora acento, caixa e pontuação, basta listar todos os nomes já
+// vistos em cada campo — ver os getCol de processCarrinhoVendas.
+// A "Tasa de Cambio Real" vem com a vírgula comida ("52.246.000.000" = 0,052246,
+// ou seja 19,14 MXN por dólar). Dividir os dígitos por 1e12 devolve a taxa —
+// conferido contra a exportação anterior, que trazia o valor já convertido:
+// 8.331 MXN × 0,052246 = $435,26, exatamente a "Facturación bruta (sin
+// impuestos)" daquela venda. Se vier fora da faixa plausível, devolve null e
+// o cálculo cai no fallback de conversão da dash.
+function taxaCambioReal(raw){
+  const d=String(raw||"").replace(/[^\d]/g,"");
+  if(!d)return null;
+  const t=parseFloat(d)/1e12;
+  return (t>0&&t<=1.5)?t:null;
+}
 const VENDA_STATUS_OK=["APPROVED","COMPLETE","COMPLETED","APROBADO","APROVADO","COMPLETO"];
 const VENDA_STATUS_DEVOLVIDA=["REFUNDED","CHARGEBACK","CANCELED","CANCELLED","DISPUTE",
   "REEMBOLSADO","REEMBOLSO","CANCELADO","DISPUTA","DEVUELTO","EXPIRADO"];
@@ -2068,16 +2084,16 @@ function processCarrinhoVendas(rowsRaw){
   const idx=fichaIndex();
   let total=0, aprovadas=0, devolvidas=0, trafego=0, outras=0, faturamento=0, semData=0, semFicha=0;
   for(const r of rowsRaw){
-    const nome=String(getCol(r,"data.buyer.name","Comprador(a)","Nome","Name","Comprador")||"").trim();
-    const email=normalizeEmail(getCol(r,"data.buyer.email","Email del Comprador(a)","E-mail","Email","Mail"));
+    const nome=String(getCol(r,"data.buyer.name","Comprador(a)","Nombre","Nome","Name","Comprador")||"").trim();
+    const email=normalizeEmail(getCol(r,"data.buyer.email","Email del Comprador(a)","Email","E-mail","Mail"));
     const phoneRaw=getCol(r,"data.buyer.checkout_phone","Teléfono","Whatsapp1","Whatsapp","Telefone","Celular","Phone");
     const phone=normalizePhone(phoneRaw);
-    const status=String(getCol(r,"data.purchase.status","Estatus de la transacción","Status")||"").trim().toUpperCase();
+    const status=String(getCol(r,"data.purchase.status","Estatus de la transacción","Estatus","Status")||"").trim().toUpperCase();
     if(!nome&&!email&&!phone&&!status)continue; // linha vazia
     total++;
     if(VENDA_STATUS_DEVOLVIDA.includes(status)){devolvidas++;continue;}
     if(status&&!VENDA_STATUS_OK.includes(status))continue; // boleto gerado, aguardando pagamento etc.
-    const d=vendaDataMs(getCol(r,"data.purchase.order_date","Fecha de la transacción","Data Correta","Data","Data da venda","created_at"));
+    const d=vendaDataMs(getCol(r,"data.purchase.order_date","Fecha de la transacción","Fecha de venta","Fecha de Confirmación","Data Correta","Data","Data da venda","created_at"));
     const ms=d?d.ms:null;
     const date=d!=null?msToISO(d.ms+(d.utc?VENDAS_TZ_OFFSET_H*60*60*1000:0)):null;
     if(date==null)semData++;
@@ -2091,8 +2107,14 @@ function processCarrinhoVendas(rowsRaw){
     // quando a coluna em dólar não existe, que é o caso do webhook antigo.
     const brutoUSD=parseNum(getCol(r,"Facturación bruta (sin impuestos)"));
     const moeda=String(getCol(r,"data.purchase.price.currency_value","Moneda de compra","Moeda","Currency")||"").trim().toUpperCase();
-    const valor=parseNum(getCol(r,"data.purchase.price.value","Valor de compra con impuestos","valor","Valor","Preço","Price"));
-    const valorUSD=brutoUSD>0?brutoUSD:vendaValorUSD(valor,moeda);
+    const valor=parseNum(getCol(r,"data.purchase.price.value","Valor de compra con impuestos","Precio del Producto","valor","Valor","Preço","Price"));
+    // Preço do produto na moeda da compra × taxa real da Hotmart = o mesmo
+    // "bruto sem impostos" em dólar da exportação anterior. Vale pra qualquer
+    // moeda (MXN, PEN, CLP, CAD, CHF…), sem depender das taxas fixas da dash.
+    const precoProduto=parseNum(getCol(r,"Precio del Producto","Precio Original"));
+    const taxa=taxaCambioReal(getCol(r,"Tasa de Cambio Real"));
+    const brutoPorTaxa=(precoProduto>0&&taxa)?precoProduto*taxa:0;
+    const valorUSD=brutoUSD>0?brutoUSD:(brutoPorTaxa>0?brutoPorTaxa:vendaValorUSD(valor,moeda));
     // ── Atribuição ───────────────────────────────────────────────────────
     // A exportação do painel NÃO traz UTM utilizável: "Código SRC" e "Canal
     // usado" vêm "(none)" e o "Código SCK" traz o nome do closer, não a
@@ -2120,7 +2142,7 @@ function processCarrinhoVendas(rowsRaw){
     vendas.push({date,ms,nome,email,phone,status,moeda,valor,valorUSD,
       tipo:o.tipo,origem:o.origem,canal:o.canal,campName:o.campName,adName:o.adName,utmRaw:o.raw,
       comFicha:!!f,
-      produto:String(getCol(r,"data.product.name","Producto","Produto","Product")||"").trim()});
+      produto:String(getCol(r,"data.product.name","Nombre del Producto","Producto","Produto","Product")||"").trim()});
   }
   S.carrinhoVendas=vendas;
   S.carrinhoVendasPorDia=porDia;
@@ -6571,6 +6593,7 @@ window.MDI = {
   sumMetaRows,
   sumStageRows,
   switchFunil,
+  taxaCambioReal,
   telKey,
   tempPcts,
   tempToggle,
