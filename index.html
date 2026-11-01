@@ -5141,6 +5141,14 @@ function getCarrinhoCampRows(start,end){
     const c=byCamp[key];
     c.spend+=r.spend;c.clicks+=r.clicks;c.impressions+=r.impressions;c.checkout+=(r.checkout||0);
   }
+  // Fichas de TRÁFEGO atribuídas à campanha (o nome vem da UTM da ficha).
+  // Ficha orgânica não tem campanha, então não entra em nenhuma linha.
+  const fichasByCamp={};
+  for(const f of fichasInRange(start,end)){
+    if(f.canal!=="trafego")continue;
+    const cn=f.campName||"(sem atribuição)";
+    fichasByCamp[cn]=(fichasByCamp[cn]||0)+1;
+  }
   const vendasByCamp={}, fatByCamp={};
   for(const v of carrinhoVendasInRange(start,end)){
     if(v.tipo!=="traf")continue;
@@ -5150,7 +5158,9 @@ function getCarrinhoCampRows(start,end){
   }
   return Object.values(byCamp).map(c=>{
     const vendas=vendasByCamp[c.campName]||0, faturamento=fatByCamp[c.campName]||0;
-    return{...c,vendas,faturamento,
+    const fichas=fichasByCamp[c.campName]||0;
+    return{...c,vendas,faturamento,fichas,
+      custoFicha:fichas>0?c.spend/fichas:null,
       cpc:c.clicks>0?c.spend/c.clicks:null,
       ctr:c.impressions>0?(c.clicks/c.impressions)*100:null,
       cpm:c.impressions>0?(c.spend/c.impressions)*1000:null,
@@ -5171,6 +5181,13 @@ function carrinhoAdRows(start,end,selectedCamps){
     a.spend+=r.spend;a.clicks+=r.clicks;a.impressions+=r.impressions;a.checkout+=(r.checkout||0);
     if(!a.igUrl&&r.igUrl)a.igUrl=r.igUrl;
   }
+  const fichasByAd={};
+  for(const f of fichasInRange(start,end)){
+    if(f.canal!=="trafego")continue;
+    if(hasSel&&!selectedCamps.has(f.campName))continue;
+    const an=f.adName||"(sem atribuição)";
+    fichasByAd[an]=(fichasByAd[an]||0)+1;
+  }
   const vendasByAd={}, fatByAd={};
   for(const v of carrinhoVendasInRange(start,end)){
     if(v.tipo!=="traf")continue;
@@ -5181,7 +5198,9 @@ function carrinhoAdRows(start,end,selectedCamps){
   }
   return Object.values(byAd).map(a=>{
     const vendas=vendasByAd[a.adName]||0, faturamento=fatByAd[a.adName]||0;
-    return{...a,vendas,faturamento,
+    const fichas=fichasByAd[a.adName]||0;
+    return{...a,vendas,faturamento,fichas,
+      custoFicha:fichas>0?a.spend/fichas:null,
       cpc:a.clicks>0?a.spend/a.clicks:null,
       ctr:a.impressions>0?(a.clicks/a.impressions)*100:null,
       cpm:a.impressions>0?(a.spend/a.impressions)*1000:null,
@@ -5321,26 +5340,30 @@ function renderCarrinhoAnuncios(){
         <thead><tr>
           <th onclick="MDI.sortCarrinhoCampanhas('campName')" style="cursor:pointer">Campanha</th>
           ${thC("spend","Investimento")}
-          ${thC("cpc","CPC")}
-          ${thC("ctr","CTR")}
+          ${thC("fichas","Fichas")}
+          ${thC("custoFicha","Custo/ficha")}
           ${thC("vendas","Vendas")}
           ${thC("custoVenda","Custo/venda")}
-          ${thC("faturamento","Faturamento")}
           ${thC("roas","ROAS")}
+          ${thC("ctr","CTR")}
+          ${thC("cpm","CPM")}
+          ${thC("cpc","CPC")}
         </tr></thead>
         <tbody>
-          ${sortedCamps.length===0?`<tr><td colspan="8" style="text-align:center;color:var(--hint);padding:20px">Sem campanhas de Carrinho no período</td></tr>`:
+          ${sortedCamps.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem campanhas de Carrinho no período</td></tr>`:
           sortedCamps.map(c=>{
             const sel=S.carrinhoSelectedCamps.has(c.campName);
             return `<tr onclick="MDI.toggleCarrinhoCamp('${escName(c.campName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
               <td>${sel?"✓ ":""}${c.campName}</td>
               <td class="mono" style="text-align:right">${fUSD(c.spend)}</td>
-              <td class="mono" style="text-align:right">${c.cpc!=null?fUSD(c.cpc):"—"}</td>
-              <td class="mono" style="text-align:right">${c.ctr!=null?fPct(c.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${c.fichas.toLocaleString("pt-BR")}</td>
+              <td class="mono" style="text-align:right">${c.custoFicha!=null?fUSD(c.custoFicha):"—"}</td>
               <td class="mono" style="text-align:right">${c.vendas.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${c.custoVenda!=null?fUSD(c.custoVenda):"—"}</td>
-              <td class="mono" style="text-align:right">${fUSD(c.faturamento)}</td>
               <td class="mono" style="text-align:right">${c.roas!=null?c.roas.toFixed(2)+"x":"—"}</td>
+              <td class="mono" style="text-align:right">${c.ctr!=null?fPct(c.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${c.cpm!=null?fUSD(c.cpm):"—"}</td>
+              <td class="mono" style="text-align:right">${c.cpc!=null?fUSD(c.cpc):"—"}</td>
             </tr>`;
           }).join("")}
         </tbody>
@@ -5359,26 +5382,30 @@ function renderCarrinhoAnuncios(){
         <thead><tr>
           <th onclick="MDI.sortCarrinhoAds('adName')" style="cursor:pointer">Anúncio</th>
           ${th("spend","Investimento")}
-          ${th("cpc","CPC")}
-          ${th("ctr","CTR")}
+          ${th("fichas","Fichas")}
+          ${th("custoFicha","Custo/ficha")}
           ${th("vendas","Vendas")}
           ${th("custoVenda","Custo/venda")}
-          ${th("faturamento","Faturamento")}
           ${th("roas","ROAS")}
+          ${th("ctr","CTR")}
+          ${th("cpm","CPM")}
+          ${th("cpc","CPC")}
         </tr></thead>
         <tbody>
-          ${sortedAds.length===0?`<tr><td colspan="8" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
+          ${sortedAds.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:20px">Sem anúncios de Carrinho no período</td></tr>`:
           sortedAds.map(a=>{
             const sel=S.carrinhoSelectedAds.has(a.adName);
             return `<tr onclick="MDI.toggleCarrinhoAd('${escName(a.adName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
               <td>${sel?"✓ ":""}${a.adName}</td>
               <td class="mono" style="text-align:right">${fUSD(a.spend)}</td>
-              <td class="mono" style="text-align:right">${a.cpc!=null?fUSD(a.cpc):"—"}</td>
-              <td class="mono" style="text-align:right">${a.ctr!=null?fPct(a.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${a.fichas.toLocaleString("pt-BR")}</td>
+              <td class="mono" style="text-align:right">${a.custoFicha!=null?fUSD(a.custoFicha):"—"}</td>
               <td class="mono" style="text-align:right">${a.vendas.toLocaleString("pt-BR")}</td>
               <td class="mono" style="text-align:right">${a.custoVenda!=null?fUSD(a.custoVenda):"—"}</td>
-              <td class="mono" style="text-align:right">${fUSD(a.faturamento)}</td>
               <td class="mono" style="text-align:right">${a.roas!=null?a.roas.toFixed(2)+"x":"—"}</td>
+              <td class="mono" style="text-align:right">${a.ctr!=null?fPct(a.ctr):"—"}</td>
+              <td class="mono" style="text-align:right">${a.cpm!=null?fUSD(a.cpm):"—"}</td>
+              <td class="mono" style="text-align:right">${a.cpc!=null?fUSD(a.cpc):"—"}</td>
             </tr>`;
           }).join("")}
         </tbody>
