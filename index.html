@@ -11760,12 +11760,18 @@ async function loadData(force=false){
     const ceroRows=parseHotmartRows(ceroJ).filter(r=>!CERO_EXCLUDED_OFFERS.has(r.offerCode));
 
     // ── Vendas Mapa (upsell 2) ────────────────────────────────────────────
-    const mapaRows=parseHotmartRows(mapaJ);
+    // Offers de webinário podem vir tanto da aba Mapa quanto da aba Mapa Ascensao
+    const WEBINARIO_OFFERS=new Set(["5hbs9dx9","ryz99o7l"]);
+    const allMapaRows=parseHotmartRows(mapaJ);
+    const mapaRows=allMapaRows.filter(r=>!WEBINARIO_OFFERS.has(r.offerCode));
 
-    // ── Vendas Mapa Ascensión (upsell 1b, oferta 682nnc18) + Webinário (upsell 2b, oferta 5hbs9dx9) ───
+    // ── Vendas Mapa Ascensión (upsell 1b, oferta 682nnc18) + Webinário (upsell 2b, ofertas 5hbs9dx9/ryz99o7l) ───
     const mapaAscRows=parseHotmartRows(mapaAscJ);
     const mapaAscUpRows=mapaAscRows.filter(r=>r.offerCode==="682nnc18");
-    const webinarioRows=mapaAscRows.filter(r=>r.offerCode==="5hbs9dx9");
+    const webinarioRows=[
+      ...mapaAscRows.filter(r=>WEBINARIO_OFFERS.has(r.offerCode)),
+      ...allMapaRows.filter(r=>WEBINARIO_OFFERS.has(r.offerCode)),
+    ];
 
     // ── Funil: Reto + Cero + Mapa Ascensión + Cero Downsell + Mapa + Webinário ──
     const retoFunil=retoRows.map(r=>({...r,"Nome do produto":"Finanzas - Reto 14 Dias"}));
