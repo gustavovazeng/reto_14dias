@@ -10837,6 +10837,7 @@ const SHEET_RETO = "Vendas Hotmart - Reto";
 const SHEET_CERO = "Vendas Hotmart - Cero";
 const SHEET_MAPA = "Vendas Hotmart - Mapa";
 const SHEET_MAPA_ASC_RETO = "Vendas Hotmart - Mapa Ascensao"; // webinário (oferta 5hbs9dx9)
+const SHEET_WHOP_RETO     = "Vendas Whop - Reto";             // nova plataforma (USD, sem OB)
 
 // Mapeamento do funil — ordem importa
 // Funil: Finanzas - Reto 14 Dias (front-end) → Cero (upsell 1) → Mapa del Inversor (upsell 2)
@@ -11492,6 +11493,48 @@ function parseWhopRows(sheetJ){
   return rows;
 }
 
+// ── parseWhopRetoRows: converte Vendas Whop - Reto para o formato do parseHotmartRows ────────────
+function parseWhopRetoRows(sheetJ){
+  const rows=[];
+  for(const r of parseSheetFirstWins(sheetJ)){
+    if((r["Sub status"]||"")!=="succeeded") continue;
+    const paidAt=(r["Paid at"]||"").trim(); if(!paidAt) continue;
+    // "2026-11-04 15:52:23 -0300" → ISO 8601 com offset → UTC-6 (México)
+    const isoStr=paidAt.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})$/,"$1T$2$3$4:$5");
+    const ms=new Date(isoStr).getTime(); if(!ms||isNaN(ms)) continue;
+    const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
+    if(!d||d<"2020-01-01") continue;
+    const email=(r["Email"]||"").toLowerCase().trim();
+    const name=r["Customer name"]||"";
+    // ── Extrai xcod da coluna URL (mesmo formato hQwK21wXxR do Hotmart) ──
+    const urlRaw=r["URL"]||"";
+    let whopXcod="";
+    if(urlRaw){
+      try{
+        const urlObj=new URL(urlRaw);
+        whopXcod=decodeURIComponent(urlObj.searchParams.get("xcod")||"");
+      }catch(e){
+        const m=urlRaw.match(/[?&]xcod=([^&]*)/);
+        if(m) whopXcod=decodeURIComponent(m[1]);
+      }
+    }
+    const adId=extractAdIdFromXcod(whopXcod)||"";
+    const {platform:_plat,placement:_plac}=extractXcodMeta(whopXcod);
+    // ── Valor já em USD — sem conversão ──
+    const totalUSD=parseFloat((r["Subtotal"]||"0").replace(",","."))||0;
+    rows.push({
+      "Email":email,"CPF Comprador":"","Telefone":"","Nome":name,
+      "Status da compra":"Paga","Data da compra":d,
+      "Nome do produto":"Finanzas - Reto 14 Dias",
+      "Valor do produto":totalUSD.toFixed(2),
+      "Taxa da plataforma":"0","Ad Id":adId,
+      _src:"whop",platform:_plat,placement:_plac,
+      _orderDate:paidAt,offerCode:"",
+    });
+  }
+  return rows;
+}
+
 // ── Load data ──────────────────────────────────────────────────────────────
 // Busca uma aba em blocos de 5000 linhas para evitar timeout em abas grandes
 // ── CSV parser → mesmo formato que a Sheets API {values:[rows]} ───────────
@@ -11557,8 +11600,8 @@ async function loadData(force=false){
   // Tenta buscar do Google Sheets; cada aba falha de forma independente
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
-  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ;
-  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ] = await Promise.all([
+  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ;
+  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
@@ -11566,8 +11609,9 @@ async function loadData(force=false){
     _fetchSafe(SHEET_MAPA_ASC_RETO,"Z",5000),
     _fetchSafe(SHEET_SEG,"Z",5000),
     _fetchSafe(SHEET_AQUEC_SEG,"Z",5000),
+    _fetchSafe(SHEET_WHOP_RETO,"BL",5000),
   ]);
-  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1);
+  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1,"| Whop Reto:",whopRetoJ.values.length-1);
   S.loading=false; S.error=null;
 
   try{
@@ -11705,7 +11749,10 @@ async function loadData(force=false){
     // Filtro de oferta: a partir de 24/08/2026 o campo offerCode passou a ser preenchido.
     // Só considerar linhas sem código (dados antigos) ou com código "gsi35uek".
     const RETO_OFFERS=new Set(["gsi35uek","n85u013k"]);
-    const retoRows=parseHotmartRows(retoJ).filter(r=>!r.offerCode||RETO_OFFERS.has(r.offerCode));
+    const retoRows=[
+      ...parseHotmartRows(retoJ).filter(r=>!r.offerCode||RETO_OFFERS.has(r.offerCode)),
+      ...parseWhopRetoRows(whopRetoJ),
+    ];
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
