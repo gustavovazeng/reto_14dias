@@ -11410,22 +11410,26 @@ function parseHotmartRows(sheetJ){
       offerCode:(r["data.purchase.offer.code"]||"").trim(),
     };
   }).filter(r=>r["Data da compra"])
-    // Dedup por order_date: mesma compra pode gerar 2 webhooks; prefere o que tem email real
-    // Fallback: se não há order_date (timestamp ms), usa email+data para não deduplicar
-    // compradores diferentes que compraram no mesmo dia
+    // Dedup por COMPRA + COMPRADOR: a mesma compra pode gerar 2 webhooks (viram
+    // uma linha só), mas compradores diferentes que aparecem com o MESMO
+    // order_date — o que acontece quando as vendas são inseridas em lote na
+    // planilha e todas herdam o mesmo timestamp — continuam contando cada uma
+    // como uma venda. Deduplicar só por order_date transformava o lote inteiro
+    // numa venda só.
+    // Linha sem e-mail nem telefone não dá para distinguir: é tratada como
+    // repetição de outra linha da mesma compra, como era antes.
     .reduce((acc,r)=>{
       const em=r["Email"]&&r["Email"].includes("@")?r["Email"]:"";
-      const key=r._orderDate||(em?em+"|"+r["Data da compra"]:r["Data da compra"]);
-      const i=acc.findIndex(x=>{
-        const xe=x["Email"]&&x["Email"].includes("@")?x["Email"]:"";
-        const xk=x._orderDate||(xe?xe+"|"+x["Data da compra"]:x["Data da compra"]);
-        return xk===key;
-      });
-      if(i<0){ acc.push(r); }
+      const quem=em||r["Telefone"]||"";
+      const key=r._orderDate
+        ? r._orderDate+"|"+quem
+        : (quem?quem+"|"+r["Data da compra"]:r["Data da compra"]);
+      let i=acc.findIndex(x=>x._dedupKey===key);
+      if(i<0&&!quem&&r._orderDate) i=acc.findIndex(x=>x._orderDate===r._orderDate);
+      if(i<0){ r._dedupKey=key; acc.push(r); }
       else{
-        const hasEmail=!!em;
         const existingEmail=acc[i]["Email"]&&acc[i]["Email"].includes("@");
-        if(!existingEmail&&hasEmail) acc[i]=r; // substitui pela linha com email real
+        if(!existingEmail&&em){ r._dedupKey=acc[i]._dedupKey; acc[i]=r; } // fica a linha com e-mail real
       }
       return acc;
     },[]);
