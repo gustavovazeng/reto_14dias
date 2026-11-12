@@ -11880,10 +11880,13 @@ async function loadData(force=false){
       } else { d=dRaw; }
       if(!d)continue;
       const _acc      =(r["Nome da conta"]||"").toUpperCase();
-      const _rawSpend =parseFloat((r["Valor gasto (USD)"]||"0").replace(",","."))||0;
-      // CA03/CA04 sempre USD independente do sufixo; (MXN) → divide; resto → USD
+      // Aceita tanto "Valor gasto (USD)" (formato antigo/manual) quanto "Valor gasto (MXN)" (export Meta PT)
+      const _spendRawCol=r["Valor gasto (USD)"]||r["Valor gasto (MXN)"]||"0";
+      const _spendColIsMXN=!r["Valor gasto (USD)"]&&!!r["Valor gasto (MXN)"];
+      const _rawSpend =parseFloat(_spendRawCol.replace(",","."))||0;
+      // CA03/CA04 sempre USD independente do sufixo; (MXN) no nome da conta OU coluna MXN → divide; resto → USD
       const _isKnownUSD=/^CA0[34]\b/.test(_acc)||_acc.startsWith("CONTA G");
-      const spendUSD  =(!_isKnownUSD&&_acc.includes("(MXN)"))?_rawSpend/18:_rawSpend;
+      const spendUSD  =(!_isKnownUSD&&(_acc.includes("(MXN)")||_spendColIsMXN))?_rawSpend/18:_rawSpend;
       const clicksV   =piS(r["Cliques no link"]);
       const impressV  =piS(r["Impressões"]);
       const video3sV  =piS(r["Reproduções do vídeo por no mínimo 3 segundos"]);
