@@ -10526,15 +10526,17 @@ function renderResumo(){
 `*-> ${label}*
 Investimento:\t${fBRL(m.spend)}\t
 ${vLabel}:\t${m.vendas}\t
-${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}${!isFeo?`
-Custo por venda quente:\t${m.cpvQuente>0?fBRL(m.cpvQuente):"—"}${m.cpvQuente>0?cpvQMeta:"\t"}
-Custo por venda morno:\t${m.cpvMorno>0?fBRL(m.cpvMorno):"—"}${m.cpvMorno>0?cpvMMeta:"\t"}
-Custo por venda frio:\t${m.cpvFrio>0?fBRL(m.cpvFrio):"—"}${m.cpvFrio>0?cpvFMeta:"\t"}`:""}
+${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}
 ROAS:\t${m.roas.toFixed(2)}\t
 ${!isFeo?`
+Custo por venda quente:\t${m.cpvQuente>0?fBRL(m.cpvQuente):"—"}${m.cpvQuente>0?cpvQMeta:"\t"}
+Custo por venda morno:\t${m.cpvMorno>0?fBRL(m.cpvMorno):"—"}${m.cpvMorno>0?cpvMMeta:"\t"}
+Custo por venda frio:\t${m.cpvFrio>0?fBRL(m.cpvFrio):"—"}${m.cpvFrio>0?cpvFMeta:"\t"}
+
 % vendas quente:\t${m.pctQuente!=null?m.pctQuente+"%":"—"}\t
 % vendas morno:\t${m.pctMorno!=null?m.pctMorno+"%":"—"}\t
-% vendas frio:\t${m.pctFrio!=null?m.pctFrio+"%":"—"}\t`:""}
+% vendas frio:\t${m.pctFrio!=null?m.pctFrio+"%":"—"}\t
+`:""}
 Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%${pcMeta}
 Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%${cvMeta}
 Connect Rate:\t${m.connect.toFixed(2)}%${cnMeta}
@@ -10606,11 +10608,12 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
+      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
+      <div style="height:10px"></div>
       ${!isFeo?row("Custo por venda quente", m.cpvQuente>0?fBRL(m.cpvQuente):"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvQuente>0?cpvQE:""):""}
       ${!isFeo?row("Custo por venda morno",  m.cpvMorno >0?fBRL(m.cpvMorno) :"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvMorno >0?cpvME:""):""}
       ${!isFeo?row("Custo por venda frio",   m.cpvFrio  >0?fBRL(m.cpvFrio)  :"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvFrio  >0?cpvFE:""):""}
-      ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
-      <div style="height:10px"></div>
+      ${!isFeo?`<div style="height:10px"></div>`:""}
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas morno",  m.pctMorno !=null?m.pctMorno+"%":"—",  "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
@@ -15075,7 +15078,7 @@ ${block("Hoje", hoje, false)}`;
        ${!isFeo?`<div style="height:6px"></div>`:""}
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
-      ${!isFeo?`<div style="height:10px"></div>`:""}
+      <div style="height:16px"></div>
       ${row("Tx conv PgV-Checkout", m.txPagChk.toFixed(1)+"%", isFeo?"":(`meta ${METAS_T.txPagChk.val}%`), pcE)}
       ${row("Tx conv Checkout-Vendas", m.txChkVnd.toFixed(1)+"%", isFeo?"":(`meta ${METAS_T.txChkVnd.val}%`), cvE)}
       ${row("Connect Rate", m.connect.toFixed(2)+"%", isFeo?"":(`meta ${METAS_T.connect.val}%`), cnE)}
