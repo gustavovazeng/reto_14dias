@@ -10439,16 +10439,26 @@ function renderResumo(){
     t.valor=valor;
     t.roas=t.spend>0?valor/t.spend:0;
     t.cpv=t.vendas>0?t.spend/t.vendas:0;
-    // % por temperatura (apenas Reto; morno = quente)
-    // Denominador = vendas com UTM atribuída (quente+morno+frio), excluindo orgânicas
+    // Por temperatura: quente, morno e frio contados separadamente.
+    // Denominador do % = vendas com UTM atribuída (as três), sem as orgânicas.
+    // Custo por venda = investimento das campanhas daquela temperatura ÷ vendas dela.
     if(!isFeo){
-      let qQtd=0, fQtd=0;
-      for(const d of Object.keys(S.vendasByTemp.quente||{}).filter(d=>d>=s&&d<=e)) qQtd+=(S.vendasByTemp.quente[d]?.qtd||0);
-      for(const d of Object.keys(S.vendasByTemp.morno||{}).filter(d=>d>=s&&d<=e))  qQtd+=(S.vendasByTemp.morno[d]?.qtd||0);
-      for(const d of Object.keys(S.vendasByTemp.frio||{}).filter(d=>d>=s&&d<=e))   fQtd+=(S.vendasByTemp.frio[d]?.qtd||0);
-      const atribQtd=qQtd+fQtd;
+      const somaT=(o,campo)=>Object.keys(o||{}).filter(d=>d>=s&&d<=e)
+        .reduce((a,d)=>a+(o[d]?.[campo]||0),0);
+      const qQtd=somaT(S.vendasByTemp.quente,"qtd");
+      const mQtd=somaT(S.vendasByTemp.morno ,"qtd");
+      const fQtd=somaT(S.vendasByTemp.frio  ,"qtd");
+      const atribQtd=qQtd+mQtd+fQtd;
       t.pctQuente=atribQtd>0?Math.round((qQtd/atribQtd)*100):null;
+      t.pctMorno =atribQtd>0?Math.round((mQtd/atribQtd)*100):null;
       t.pctFrio  =atribQtd>0?Math.round((fQtd/atribQtd)*100):null;
+      t.vendasQuente=qQtd; t.vendasMorno=mQtd; t.vendasFrio=fQtd;
+      t.spendQuente=somaT(S.metaByTemp.quente,"spend");
+      t.spendMorno =somaT(S.metaByTemp.morno ,"spend");
+      t.spendFrio  =somaT(S.metaByTemp.frio  ,"spend");
+      t.cpvQuente=qQtd>0?t.spendQuente/qQtd:0;
+      t.cpvMorno =mQtd>0?t.spendMorno /mQtd:0;
+      t.cpvFrio  =fQtd>0?t.spendFrio  /fQtd:0;
     }
     return t;
   }
@@ -10461,6 +10471,14 @@ function renderResumo(){
     hoje.spend=S.manualSpendHoje;
     hoje.cpv=hoje.vendas>0?hoje.spend/hoje.vendas:0;
     hoje.roas=hoje.spend>0?hoje.valor/hoje.spend:0;
+    // mantém a proporção quente/frio que veio do Sheets
+    if(hojeBase.spend>0){
+      const _f=hoje.spend/hojeBase.spend;
+      for(const _t of ["Quente","Morno","Frio"]){
+        hoje["spend"+_t]=(hojeBase["spend"+_t]||0)*_f;
+        hoje["cpv"+_t]=hoje["vendas"+_t]>0?hoje["spend"+_t]/hoje["vendas"+_t]:0;
+      }
+    }
   }
 
   // Emoji de status
@@ -10482,6 +10500,9 @@ function renderResumo(){
   function block(label, m, isTotal){
     const _bCpvM=isFeo?getFeoMetaCPV():META_CPV;
     const cpvE  =em(m.cpv,      _bCpvM,                     false);
+    const cpvQE =em(m.cpvQuente,_bCpvM,                     false);
+    const cpvME =em(m.cpvMorno, _bCpvM,                     false);
+    const cpvFE =em(m.cpvFrio,  _bCpvM,                     false);
     const roasE =em(m.roas,     isFeo?null:META_ROAS,        true);
     const pcE   =em(m.txPagChk, isFeo?null:METAS_T.txPagChk.val, true);
     const cvE   =em(m.txChkVnd, isFeo?null:METAS_T.txChkVnd.val, true);
@@ -10492,6 +10513,9 @@ function renderResumo(){
     const vLabel=isTotal?"Vendas Mensal":"Vendas";
     const cpvLabel=isTotal?"Custo por venda Mensal":"Custo por venda";
     const cpvMeta=_bCpvM?` ${cpvE} $${_bCpvM}`:`  `;
+    const cpvQMeta=_bCpvM?` ${cpvQE} $${_bCpvM}`:`  `;
+    const cpvMMeta=_bCpvM?` ${cpvME} $${_bCpvM}`:`  `;
+    const cpvFMeta=_bCpvM?` ${cpvFE} $${_bCpvM}`:`  `;
     const pcMeta =isFeo?"":` ${pcE} ${METAS_T.txPagChk.val}%`;
     const cvMeta =isFeo?"":` ${cvE} ${METAS_T.txChkVnd.val}%`;
     const cnMeta =isFeo?"":` ${cnE} ${METAS_T.connect.val}%`;
@@ -10502,10 +10526,14 @@ function renderResumo(){
 `*-> ${label}*
 Investimento:\t${fBRL(m.spend)}\t
 ${vLabel}:\t${m.vendas}\t
-${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}
+${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}${!isFeo?`
+Custo por venda quente:\t${m.cpvQuente>0?fBRL(m.cpvQuente):"—"}${m.cpvQuente>0?cpvQMeta:"\t"}
+Custo por venda morno:\t${m.cpvMorno>0?fBRL(m.cpvMorno):"—"}${m.cpvMorno>0?cpvMMeta:"\t"}
+Custo por venda frio:\t${m.cpvFrio>0?fBRL(m.cpvFrio):"—"}${m.cpvFrio>0?cpvFMeta:"\t"}`:""}
 ROAS:\t${m.roas.toFixed(2)}\t
 ${!isFeo?`
 % vendas quente:\t${m.pctQuente!=null?m.pctQuente+"%":"—"}\t
+% vendas morno:\t${m.pctMorno!=null?m.pctMorno+"%":"—"}\t
 % vendas frio:\t${m.pctFrio!=null?m.pctFrio+"%":"—"}\t`:""}
 Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%${pcMeta}
 Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%${cvMeta}
@@ -10543,6 +10571,9 @@ ${block("Hoje", hoje, false)}`;
   function section(label, m, isTotal, isHoje=false){
     const _sCpvM=isFeo?getFeoMetaCPV():META_CPV;
     const cpvE  =em(m.cpv,      _sCpvM,                          false);
+    const cpvQE =em(m.cpvQuente,_sCpvM,                          false);
+    const cpvME =em(m.cpvMorno, _sCpvM,                          false);
+    const cpvFE =em(m.cpvFrio,  _sCpvM,                          false);
     const roasE =em(m.roas,     isFeo?null:META_ROAS,            true);
     const pcE   =em(m.txPagChk, isFeo?null:METAS_T.txPagChk.val, true);
     const cvE   =em(m.txChkVnd, isFeo?null:METAS_T.txChkVnd.val, true);
@@ -10575,9 +10606,13 @@ ${block("Hoje", hoje, false)}`;
       ${spendRow}
       ${row(vLabel, m.vendas, "", "")}
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
+      ${!isFeo?row("Custo por venda quente", m.cpvQuente>0?fBRL(m.cpvQuente):"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvQuente>0?cpvQE:""):""}
+      ${!isFeo?row("Custo por venda morno",  m.cpvMorno >0?fBRL(m.cpvMorno) :"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvMorno >0?cpvME:""):""}
+      ${!isFeo?row("Custo por venda frio",   m.cpvFrio  >0?fBRL(m.cpvFrio)  :"—", _sCpvM?`meta $${_sCpvM}`:"", m.cpvFrio  >0?cpvFE:""):""}
       ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
+      ${!isFeo?row("% vendas morno",  m.pctMorno !=null?m.pctMorno+"%":"—",  "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
       ${!isFeo?`<div style="height:10px"></div>`:""}
       ${row("Tx conv PgV-Checkout", m.txPagChk.toFixed(1)+"%", isFeo?"":(`meta ${METAS_T.txPagChk.val}%`), pcE)}
@@ -14887,15 +14922,22 @@ function renderResumo(){
     t.cpv=t.vendas>0?t.spend/t.vendas:0;
     // % por temperatura (apenas Reto; morno = quente)
     // Denominador = vendas com UTM atribuída (quente+morno+frio), excluindo orgânicas
-    if(!isFeo){
-      let qQtd=0, fQtd=0;
-      for(const d of Object.keys(S.vendasByTemp.quente||{}).filter(d=>d>=s&&d<=e)) qQtd+=(S.vendasByTemp.quente[d]?.qtd||0);
-      for(const d of Object.keys(S.vendasByTemp.morno||{}).filter(d=>d>=s&&d<=e))  qQtd+=(S.vendasByTemp.morno[d]?.qtd||0);
-      for(const d of Object.keys(S.vendasByTemp.frio||{}).filter(d=>d>=s&&d<=e))   fQtd+=(S.vendasByTemp.frio[d]?.qtd||0);
-      const atribQtd=qQtd+fQtd;
-      t.pctQuente=atribQtd>0?Math.round((qQtd/atribQtd)*100):null;
-      t.pctFrio  =atribQtd>0?Math.round((fQtd/atribQtd)*100):null;
-    }
+     if(!isFeo){
+       let qQtd=0, mQtd=0, fQtd=0, qSpend=0, mSpend=0, fSpend=0;
+       for(const d of Object.keys(S.vendasByTemp.quente||{}).filter(d=>d>=s&&d<=e)) qQtd+=(S.vendasByTemp.quente[d]?.qtd||0);
+       for(const d of Object.keys(S.vendasByTemp.morno||{}).filter(d=>d>=s&&d<=e))  mQtd+=(S.vendasByTemp.morno[d]?.qtd||0);
+       for(const d of Object.keys(S.vendasByTemp.frio||{}).filter(d=>d>=s&&d<=e))   fQtd+=(S.vendasByTemp.frio[d]?.qtd||0);
+       for(const d of Object.keys(S.metaByTemp.quente||{}).filter(d=>d>=s&&d<=e)) qSpend+=(S.metaByTemp.quente[d]?.spend||0);
+       for(const d of Object.keys(S.metaByTemp.morno||{}).filter(d=>d>=s&&d<=e))  mSpend+=(S.metaByTemp.morno[d]?.spend||0);
+       for(const d of Object.keys(S.metaByTemp.frio||{}).filter(d=>d>=s&&d<=e))   fSpend+=(S.metaByTemp.frio[d]?.spend||0);
+       const atribQtd=qQtd+mQtd+fQtd;
+       t.pctQuente=atribQtd>0?Math.round((qQtd/atribQtd)*100):null;
+       t.pctMorno =atribQtd>0?Math.round((mQtd/atribQtd)*100):null;
+       t.pctFrio  =atribQtd>0?Math.round((fQtd/atribQtd)*100):null;
+       t.cpvQuente=qQtd>0?qSpend/qQtd:null;
+       t.cpvMorno =mQtd>0?mSpend/mQtd:null;
+       t.cpvFrio  =fQtd>0?fSpend/fQtd:null;
+     }
     return t;
   }
 
@@ -14951,7 +14993,12 @@ ${vLabel}:\t${m.vendas}\t
 ${cpvLabel}:\t${fBRL(m.cpv)}${cpvMeta}
 ROAS:\t${m.roas.toFixed(2)}\t
 ${!isFeo?`
+Custo por venda quente:\t${m.cpvQuente!=null?fBRL(m.cpvQuente):"—"}\t
+Custo por venda morno:\t${m.cpvMorno!=null?fBRL(m.cpvMorno):"—"}\t
+Custo por venda frio:\t${m.cpvFrio!=null?fBRL(m.cpvFrio):"—"}\t
+
 % vendas quente:\t${m.pctQuente!=null?m.pctQuente+"%":"—"}\t
+% vendas morno:\t${m.pctMorno!=null?m.pctMorno+"%":"—"}\t
 % vendas frio:\t${m.pctFrio!=null?m.pctFrio+"%":"—"}\t`:""}
 Tx conv PgV-Checkout:\t${m.txPagChk.toFixed(1)}%${pcMeta}
 Tx conv Checkout-Vendas:\t${m.txChkVnd.toFixed(1)}%${cvMeta}
@@ -15023,6 +15070,9 @@ ${block("Hoje", hoje, false)}`;
       ${row(cpvLabel, fBRL(m.cpv), _sCpvM?`meta $${_sCpvM}`:"", cpvE)}
       ${row("ROAS do front", m.roas.toFixed(2), isFeo?"":(`meta ${META_ROAS}x`), roasE)}
       <div style="height:10px"></div>
+       ${!isFeo?row("Custo por venda quente", m.cpvQuente!=null?fBRL(m.cpvQuente):"—", "", ""):""}
+       ${!isFeo?row("Custo por venda frio",   m.cpvFrio  !=null?fBRL(m.cpvFrio):"—",   "", ""):""}
+       ${!isFeo?`<div style="height:6px"></div>`:""}
       ${!isFeo?row("% vendas quente", m.pctQuente!=null?m.pctQuente+"%":"—", "", ""):""}
       ${!isFeo?row("% vendas frio",   m.pctFrio  !=null?m.pctFrio+"%":"—",   "", ""):""}
       ${!isFeo?`<div style="height:10px"></div>`:""}
