@@ -11917,7 +11917,14 @@ async function loadData(force=false){
     const ceroDownFunil=ceroRows.filter(r=>r.offerCode==="jh5dbgve").map(r=>({...r,"Nome do produto":"Cero Downsell"}));
     const mapaFunil=mapaRows.map(r=>({...r,"Nome do produto":"Mapa del Inversor"}));
     const webinarioFunil=webinarioRows.map(r=>({...r,"Nome do produto":"Webinar Mapa"}));
-    S.funilRows=[...retoFunil,...ceroFunil,...mapaAscUpFunil,...ceroDownFunil,...mapaFunil,...webinarioFunil];
+    // Whop Cero upsells → converte para formato funilRow (mesmos campos que Hotmart)
+    const whopCeroFunil=whopCeroRows.map(u=>({
+      "Email":u.email, "Telefone":u.phone||"", "Nome":u.name,
+      "Status da compra":"Paga", "Data da compra":u.date,
+      "Nome do produto":"Cero", "Valor do produto":String(u.totalUSD.toFixed(2)),
+      "Ad Id":"", offerCode:"", _src:"whop-cero",
+    }));
+    S.funilRows=[...retoFunil,...ceroFunil,...whopCeroFunil,...mapaAscUpFunil,...ceroDownFunil,...mapaFunil,...webinarioFunil];
     // Build funilRowsByTemp: link each buyer to temp via their Reto purchase adId→campName
     {
       const buyerTemp={};
