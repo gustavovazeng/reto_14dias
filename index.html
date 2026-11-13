@@ -10879,7 +10879,8 @@ const SHEET_RETO = "Vendas Hotmart - Reto";
 const SHEET_CERO = "Vendas Hotmart - Cero";
 const SHEET_MAPA = "Vendas Hotmart - Mapa";
 const SHEET_MAPA_ASC_RETO = "Vendas Hotmart - Mapa Ascensao"; // webinário (oferta 5hbs9dx9)
-const SHEET_WHOP_RETO     = "Vendas Whop - Reto";             // nova plataforma (USD, sem OB)
+const SHEET_WHOP_RETO     = "Vendas Whop - Reto";
+const SHEET_WHOP_CERO     = "Vendas Whop - Cero";   // upsell Cero via Whop             // nova plataforma (USD, sem OB)
 
 // Mapeamento do funil — ordem importa
 // Funil: Finanzas - Reto 14 Dias (front-end) → Cero (upsell 1) → Mapa del Inversor (upsell 2)
@@ -11581,6 +11582,31 @@ function parseWhopRetoRows(sheetJ){
   return rows;
 }
 
+function parseWhopCeroRows(sheetJ){
+  // Upsell Cero vendido via Whop (mesmo formato do Whop Reto, sem coluna URL/xcod)
+  // Filtro: Sub status === "succeeded"
+  // Moeda: USD direto (Subtotal)
+  // Data: "YYYY-MM-DD HH:MM:SS -0300" → UTC-6
+  const rows=[];
+  for(const r of parseSheetFirstWins(sheetJ)){
+    if((r["Sub status"]||"")!=="succeeded") continue;
+    const paidAt=(r["Paid at"]||"").trim(); if(!paidAt) continue;
+    const isoStr=paidAt.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})$/,"$1T$2$3$4:$5");
+    const ms=new Date(isoStr).getTime(); if(!ms||isNaN(ms)) continue;
+    const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
+    if(!d||d<"2020-01-01") continue;
+    const email=(r["Email"]||"").toLowerCase().trim();
+    const phone=(r["Phone number"]||"").replace(/\D/g,"");
+    const name=r["Customer name"]||"";
+    const totalUSD=parseFloat((r["Subtotal"]||"0").replace(",","."))||0;
+    // Tenta extrair original_payment_id do Metadata
+    let origId="";
+    try{ const meta=JSON.parse(r["Metadata"]||"{}"); origId=meta.original_payment_id||""; }catch(e){}
+    rows.push({email, phone, name, totalUSD, date:d, origId, _src:"whop-cero"});
+  }
+  return rows;
+}
+
 // ── Load data ──────────────────────────────────────────────────────────────
 // Busca uma aba em blocos de 5000 linhas para evitar timeout em abas grandes
 // ── CSV parser → mesmo formato que a Sheets API {values:[rows]} ───────────
@@ -11646,8 +11672,8 @@ async function loadData(force=false){
   // Tenta buscar do Google Sheets; cada aba falha de forma independente
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
-  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ;
-  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ] = await Promise.all([
+  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ;
+  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
@@ -11656,8 +11682,9 @@ async function loadData(force=false){
     _fetchSafe(SHEET_SEG,"Z",5000),
     _fetchSafe(SHEET_AQUEC_SEG,"Z",5000),
     _fetchSafe(SHEET_WHOP_RETO,"BL",5000),
+    _fetchSafe(SHEET_WHOP_CERO,"BL",5000),
   ]);
-  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1,"| Whop Reto:",whopRetoJ.values.length-1);
+  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1,"| Whop Reto:",whopRetoJ.values.length-1,"| Whop Cero:",whopCeroJ.values.length-1);
   S.loading=false; S.error=null;
 
   try{
@@ -11799,6 +11826,15 @@ async function loadData(force=false){
       ...parseHotmartRows(retoJ).filter(r=>!r.offerCode||RETO_OFFERS.has(r.offerCode)),
       ...parseWhopRetoRows(whopRetoJ),
     ];
+    // ── Upsell Cero via Whop: cross-match por email/telefone com retoRows ──
+    const _retoEmails=new Set(retoRows.map(r=>(r["Email"]||"").toLowerCase()).filter(Boolean));
+    const _retoPhones=new Set(retoRows.map(r=>(r["Telefone"]||"").replace(/\D/g,"")).filter(Boolean));
+    const _retoWhopIds=new Set(retoRows.filter(r=>r._src==="whop").map(r=>r._orderDate||"").filter(Boolean));
+    const whopCeroRows=parseWhopCeroRows(whopCeroJ).filter(r=>{
+      if(r.email && _retoEmails.has(r.email)) return true;
+      if(r.phone && _retoPhones.has(r.phone)) return true;
+      return false; // sem match = não é upsell do Reto, ignorar
+    });
     const vD={}, vByAd={}, vByAdDate={};
     for(const r of retoRows){
       if(r["Status da compra"]!=="Paga") continue;
@@ -11832,6 +11868,14 @@ async function loadData(force=false){
       }
     }
     S.vendasByPlatform=vByPlatform; S.vendasByPlacement=vByPlacement;
+    // Upsell Cero: adiciona receita ao vD (boost ROAS) sem contar como venda nova
+    for(const u of whopCeroRows){
+      const d=u.date; if(!d) continue;
+      if(!vD[d]) vD[d]={qtd:0,valor:0,taxa:0};
+      vD[d].valor+=u.totalUSD;
+      if(!vD[d].valorUpsell) vD[d].valorUpsell=0;
+      vD[d].valorUpsell+=u.totalUSD;
+    }
     S.vendas=vD; S.vendasByAd=vByAd; S.vendasByAdDate=vByAdDate;
     // Build vendasByTemp: attribute each sale to its campaign temperature via adId→mByAdId
     const vByTemp={frio:{},morno:{},quente:{}};
