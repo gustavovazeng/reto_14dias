@@ -14647,7 +14647,9 @@ function renderResumo(){
   }
 
   function cplInfo(m){
-    if(!m.leadsTrafego||m.cpl==null) return {txt:"--", emoji:"🔴"};
+    const semMeta=!(META_CPL>0);                 // a black roda sem metas
+    if(!m.leadsTrafego||m.cpl==null) return {txt:"--", emoji:semMeta?"":"🔴"};
+    if(semMeta) return {txt:fUSD(m.cpl), emoji:""};
     const ratio=META_CPL/m.cpl;
     let emoji="🔴";
     if(ratio>=1)emoji="🟢";else if(ratio>=0.85)emoji="🟡";
@@ -14663,6 +14665,14 @@ function renderResumo(){
     return "🔴";
   }
 
+  // Alvo de uma métrica. Meta null/0 (caso da black, que roda sem metas) não
+  // imprime "🎯 $ 0.00" nem "🎯 null%" — some da linha.
+  const alvoHtml=(meta,fmt)=>meta==null?"":`🎯 ${fmt(meta)}`;
+  const alvoTxt=(val,meta,higher,fmt)=>{
+    const pedacos=[metaEmoji(val,meta,higher), meta==null?"":`(🎯: ${fmt(meta)})`].filter(Boolean);
+    return pedacos.length?`\t${pedacos.join(" ")}`:"";
+  };
+  const pctFmt=v=>`${v}%`;
   function row(lbl,val,metaStr,emoji){
     return `<div style="display:grid;grid-template-columns:220px 1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);align-items:center">
       <span style="color:var(--muted);font-size:12px">${lbl}</span>
@@ -14696,19 +14706,19 @@ function renderResumo(){
         ${dateLbl?`<span style="font-size:11px;color:var(--hint);font-family:'JetBrains Mono',monospace">${dateLbl}</span>`:""}
       </div>
       ${isHoje?investRowHoje(plan):row("Investimento",fUSD(m.spend),plan?`plan.: ${fUSD(plan.investimento)}`:"sem plano p/ este período","")}
-      ${row("Cadastros no AC Tráfego",m.leadsTrafego,plan?`plan.: ${plan.leads.toLocaleString("pt-BR")}`:"sem plano p/ este período","")}
-      ${row("Custo por cadastro AC Tráfego",c.txt,`🎯 ${fUSD(META_CPL)}`,c.emoji)}
+      ${row("Cadastros no AC Tráfego",m.leadsTrafego,!plan?"sem plano p/ este período":(plan.leads>0?`plan.: ${plan.leads.toLocaleString("pt-BR")}`:""),"")}
+      ${row("Custo por cadastro AC Tráfego",c.txt,alvoHtml(META_CPL!=null&&META_CPL>0?META_CPL:null,fUSD),c.emoji)}
       <div style="height:6px"></div>
       ${row("Cadastros no AC Orgânico",m.leadsOrganico,"","")}
       ${row("Cadastros no AC Total",m.leads,pctAtingimento!=null?`atingimento: ${fPct(pctAtingimento)}`:"","")}
       <div style="height:10px"></div>
-      ${row("CPC",fUSD(m.cpc),`🎯 ${fUSD(METAS_RESUMO.cpc.val)}`,metaEmoji(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher))}
-      ${row("CTR",fPct(m.ctr),`🎯 ${METAS_RESUMO.ctr.val}%`,metaEmoji(m.ctr,METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher))}
-      ${row("CPM",fUSD(m.cpm),`🎯 ${fUSD(METAS_RESUMO.cpm.val)}`,metaEmoji(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher))}
+      ${row("CPC",fUSD(m.cpc),alvoHtml(METAS_RESUMO.cpc.val,fUSD),metaEmoji(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher))}
+      ${row("CTR",fPct(m.ctr),alvoHtml(METAS_RESUMO.ctr.val,pctFmt),metaEmoji(m.ctr,METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher))}
+      ${row("CPM",fUSD(m.cpm),alvoHtml(METAS_RESUMO.cpm.val,fUSD),metaEmoji(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher))}
       ${!isHoje?`
       <div style="height:10px"></div>
-      ${row(`Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}`,fPctOrDash(m.txConvPg),`🎯 ${METAS_RESUMO.txConvPg.val}%`,metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher))}
-      ${row("Connect Rate",fPctOrDash(m.connectRate),m.connectRate==null?`sem visualização de pg. de destino`:`🎯 ${METAS_RESUMO.connectRate.val}%`,metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher))}`:""}
+      ${row(`Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}`,fPctOrDash(m.txConvPg),alvoHtml(METAS_RESUMO.txConvPg.val,pctFmt),metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher))}
+      ${row("Connect Rate",fPctOrDash(m.connectRate),m.connectRate==null?`sem visualização de pg. de destino`:alvoHtml(METAS_RESUMO.connectRate.val,pctFmt),metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher))}`:""}
     </div>`;
   }
 
@@ -14718,18 +14728,18 @@ function renderResumo(){
     return `${label}${dateLbl?`\t${dateLbl}`:""}
 
 Investimento:\t${fUSD(m.spend)}\t${plan?`(plan.: ${fUSD(plan.investimento)})`:"(sem plano p/ este período)"}
-Cadastros no AC Tráfego:\t${m.leadsTrafego}\t${plan?`(plan.: ${plan.leads})`:"(sem plano p/ este período)"}
-Custo por cadastro AC Tráfego:\t${c.txt}\t${c.emoji} (🎯: ${fUSD(META_CPL)})
+Cadastros no AC Tráfego:\t${m.leadsTrafego}${!plan?"\t(sem plano p/ este período)":(plan.leads>0?`\t(plan.: ${plan.leads})`:"")}
+Custo por cadastro AC Tráfego:\t${c.txt}${(()=>{const a=[c.emoji, META_CPL>0?`(🎯: ${fUSD(META_CPL)})`:""].filter(Boolean);return a.length?`\t${a.join(" ")}`:"";})()}
 
 Cadastros no AC Orgânico:\t${m.leadsOrganico}
 Cadastros no AC Total:\t${m.leads}${pctAtingimento!=null?`\t(atingimento: ${fPct(pctAtingimento)})`:""}
 
-CPC:\t${fUSD(m.cpc)}\t${metaEmoji(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher)} (🎯: ${fUSD(METAS_RESUMO.cpc.val)})
-CTR:\t${fPct(m.ctr)}\t${metaEmoji(m.ctr,METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher)} (🎯: ${METAS_RESUMO.ctr.val}%)
-CPM:\t${fUSD(m.cpm)}\t${metaEmoji(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher)} (🎯: ${fUSD(METAS_RESUMO.cpm.val)})${isHoje?"":`
+CPC:\t${fUSD(m.cpc)}${alvoTxt(m.cpc,METAS_RESUMO.cpc.val,METAS_RESUMO.cpc.higher,fUSD)}
+CTR:\t${fPct(m.ctr)}${alvoTxt(m.ctr,METAS_RESUMO.ctr.val,METAS_RESUMO.ctr.higher,pctFmt)}
+CPM:\t${fUSD(m.cpm)}${alvoTxt(m.cpm,METAS_RESUMO.cpm.val,METAS_RESUMO.cpm.higher,fUSD)}${isHoje?"":`
 
-Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}:\t${fPctOrDash(m.txConvPg)}\t${metaEmoji(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher)} (🎯: ${METAS_RESUMO.txConvPg.val}%)
-Connect Rate:\t${fPctOrDash(m.connectRate)}\t${metaEmoji(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher)} (🎯: ${METAS_RESUMO.connectRate.val}%)`}`;
+Tx conv Pg cadastro${m.txConvPgAprox?" (por cliques)":""}:\t${fPctOrDash(m.txConvPg)}${alvoTxt(m.txConvPg,METAS_RESUMO.txConvPg.val,METAS_RESUMO.txConvPg.higher,pctFmt)}
+Connect Rate:\t${fPctOrDash(m.connectRate)}${alvoTxt(m.connectRate,METAS_RESUMO.connectRate.val,METAS_RESUMO.connectRate.higher,pctFmt)}`}`;
   }
   const resumoText=
 `*black_nov26 - Resumo consolidado*
