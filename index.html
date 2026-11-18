@@ -11548,6 +11548,16 @@ function msToISO(ms){
 // silenciosamente numa planilha (e as com dia ≤12 caírem no dia trocado).
 // Por isso: detecta o formato pela presença de "T" (ISO) e trata cada um
 // com a conversão de fuso correta pra ele.
+// ── Fuso das leads ───────────────────────────────────────────────────────
+// O ActiveCampaign grava "Data da criação" em horário de BRASÍLIA (UTC-3),
+// mas o gerenciador de anúncios desta conta reporta em horário do MÉXICO
+// (UTC-6) — e é o fuso do gerenciador que define o dia da campanha, porque é
+// nele que o investimento diário é fechado. Então toda data de lead leva -3h
+// antes de virar dia, pra leads e investimento caírem no mesmo dia.
+// Nem o Brasil nem o México usam horário de verão, então o deslocamento é
+// fixo o ano inteiro.
+const LEAD_TZ_OFFSET_H = -3;
+const LEAD_TZ_MS = LEAD_TZ_OFFSET_H*60*60*1000;
 function toISOLead(s){
   if(!s)return null;
   const str=String(s).trim();
@@ -11557,7 +11567,8 @@ function toISOLead(s){
     // Precisa do -3h: é UTC de verdade, não hora de Brasília ainda.
     ms=Date.parse(str);
     if(isNaN(ms))return null;
-    return {ms,date:msToISO(ms-3*60*60*1000)};
+    // UTC de verdade → México são -6h (não -3h: aqui não se passa por Brasília).
+    return {ms,date:msToISO(ms-6*60*60*1000)};
   }
   // Formato "YYYY-MM-DD HH:MM:SS" (com espaço, sem "T" nem fuso) — é como a
   // Base leads do black_nov26 grava "Fecha de creación". Já vem na hora local
@@ -11566,7 +11577,9 @@ function toISOLead(s){
   if(isoLocal){
     const [,y,mo,da,hh,mi,ss]=isoLocal;
     ms=Date.UTC(+y,+mo-1,+da,+(hh||0),+(mi||0),+(ss||0));
-    return isNaN(ms)?null:{ms,date:msToISO(ms)};
+    if(isNaN(ms))return null;
+    ms+=LEAD_TZ_MS;                      // Brasília → México
+    return {ms,date:msToISO(ms)};
   }
   // Formato BR "DD/MM/YYYY HH:MM:SS" — parse manual (mesma técnica de
   // parseFichaDateTimeMs, pro "Submitted At" das fichas do Carrinho). Já
