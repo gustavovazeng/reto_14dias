@@ -17090,7 +17090,8 @@ const SHEET_CERO = "Vendas Hotmart - Cero";
 const SHEET_MAPA = "Vendas Hotmart - Mapa";
 const SHEET_MAPA_ASC_RETO = "Vendas Hotmart - Mapa Ascensao"; // webinário (oferta 5hbs9dx9)
 const SHEET_WHOP_RETO     = "Vendas Whop - Reto";
-const SHEET_WHOP_CERO     = "Vendas Whop - Cero";   // upsell Cero via Whop             // nova plataforma (USD, sem OB)
+const SHEET_WHOP_CERO     = "Vendas Whop - Cero";   // upsell Cero via Whop
+const SHEET_WHOP_AUTO     = "Vendas Whop - Automatizado"; // webhook checkoutbuilder (múlt. produtos)             // nova plataforma (USD, sem OB)
 
 // Mapeamento do funil — ordem importa
 // Funil: Finanzas - Reto 14 Dias (front-end) → Cero (upsell 1) → Mapa del Inversor (upsell 2)
@@ -17712,19 +17713,21 @@ function parseHotmartRows(sheetJ){
 
 // ── parseWhopRows: converte CSV do Whop para o mesmo formato do parseHotmartRows ─────────────────
 function parseWhopRows(sheetJ){
+  // Suporta formato antigo (data.substatus) e novo (checkoutbuilder type=payment.succeeded)
+  const BASE_FEO=85, OB_CALC=92, OB_ING=129, OB_COMBO=147;
   const rows=[];
   for(const r of parseSheetFirstWins(sheetJ)){
-    if((r["data.substatus"]||"")!=="succeeded") continue;
+    const isNew=(r["type"]||"")==="payment.succeeded";
+    const isOld=(r["data.substatus"]||"")==="succeeded";
+    if(!isNew&&!isOld) continue;
     const paidAt=r["data.paid_at"]||""; if(!paidAt) continue;
-    // Converte UTC → UTC-6 (México)
     const ms=new Date(paidAt).getTime(); if(!ms||isNaN(ms)) continue;
     const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
-    if(!d||d<"2020-01-01") continue; // filtra linhas de exemplo (1970)
+    if(!d||d<"2020-01-01") continue;
     const email=(r["data.user.email"]||"").toLowerCase().trim();
-    const phone=(r["data.member.phone"]||r["data.customer_phone"]||"").replace(/\D/g,"");
+    const phone=(r["data.customer_phone"]||r["data.metadata.phone"]||r["data.member.phone"]||"").replace(/\D/g,"");
     const name=r["data.user.name"]||r["data.user.username"]||"";
-    // ── Extrai xcod da coluna url para UTMs ──
-    const urlRaw=r["url"]||"";
+    const urlRaw=r["URL"]||r["url"]||"";
     let whopXcod="";
     if(urlRaw){
       try{
@@ -17737,40 +17740,48 @@ function parseWhopRows(sheetJ){
     }
     const adId=extractAdIdFromXcod(whopXcod)||"";
     const {platform:_plat,placement:_plac}=extractXcodMeta(whopXcod);
-    // ── Extrai itens do checkout (JSON em data.fees[0].amount) ──
-    const f0a=(r["data.fees[0].amount"]||"").trim();
-    let items=[];
-    if(f0a.startsWith("[")){try{items=JSON.parse(f0a);}catch(e){}}
-    // ── Valor total MXN: fees[1].amount (compra simples) ou fees[1].currency (OB) ──
-    const f1a=(r["data.fees[1].amount"]||"").trim();
-    const f1c=(r["data.fees[1].currency"]||"").trim();
-    let totalMXN=parseFloat(f1a.replace(",","."))||0;
-    if(!totalMXN) totalMXN=parseFloat(f1c.replace(",","."))||0;
-    if(!items.length) items=[{title:r["data.product.title"]||"",price:totalMXN}];
-    for(const item of items){
-      const t=(item.title||"").trim().toUpperCase();
-      const itemPrice=parseFloat(item.price)||totalMXN;
-      const itemUSD=toUSD(itemPrice,"MXN");
-      let productName,offerCode;
-      if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){
-        productName="FEO - Planilla Finanzas en Ordem"; offerCode="mwwdt723"; // 85pesos
-      } else if(t.includes("COMBO")){
-        productName="FEO - Combo Calculadora + Ingresso"; offerCode="";
-      } else if(t.includes("INGRES")){
-        productName="FEO - Ingresso"; offerCode="";
-      } else if(t.includes("CALCULADORA")){
-        productName="FEO - Calculadora"; offerCode="";
-      } else {
-        productName=item.title||""; offerCode="";
+    const push=(productName,offerCode,priceUSD)=>rows.push({
+      "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
+      "Status da compra":"Paga","Data da compra":d,
+      "Nome do produto":productName,"Valor do produto":priceUSD.toFixed(2),
+      "Taxa da plataforma":"0","Ad Id":adId,
+      _src:"whop",platform:_plat,placement:_plac,
+      _orderDate:paidAt,offerCode:offerCode,
+    });
+    if(isNew){
+      // Novo formato: total já inclui OBs — decompor
+      const prod=(r["data.product.title"]||"").trim();
+      if(!prod.includes("Planilla")&&!prod.includes("Finanzas")) continue;
+      const totalRaw=parseFloat((r["data.total"]||"0").replace(",","."))||0;
+      const currency=(r["data.currency"]||"mxn").toLowerCase();
+      const totalMXN=currency==="mxn"?totalRaw:totalRaw*18;
+      push("FEO - Planilla Finanzas en Ordem","mwwdt723",toUSD(BASE_FEO,"MXN"));
+      let rem=Math.round(totalMXN-BASE_FEO);
+      if(rem>=OB_COMBO){push("FEO - Combo Calculadora + Ingresso","",toUSD(OB_COMBO,"MXN")); rem-=OB_COMBO;}
+      else if(rem>=OB_ING){push("FEO - Ingresso","",toUSD(OB_ING,"MXN")); rem-=OB_ING;}
+      if(rem===OB_CALC){push("FEO - Calculadora","",toUSD(OB_CALC,"MXN")); rem=0;}
+      // rem>0: combinação inesperada, ignorar sobra
+    } else {
+      // Formato antigo: itens em JSON data.fees[0].amount
+      const f0a=(r["data.fees[0].amount"]||"").trim();
+      let items=[];
+      if(f0a.startsWith("[")){try{items=JSON.parse(f0a);}catch(e){}}
+      const f1a=(r["data.fees[1].amount"]||"").trim();
+      const f1c=(r["data.fees[1].currency"]||"").trim();
+      let totalMXN=parseFloat(f1a.replace(",","."))||0;
+      if(!totalMXN) totalMXN=parseFloat(f1c.replace(",","."))||0;
+      if(!items.length) items=[{title:r["data.product.title"]||"",price:totalMXN}];
+      for(const item of items){
+        const t=(item.title||"").trim().toUpperCase();
+        const itemUSD=toUSD(parseFloat(item.price)||totalMXN,"MXN");
+        let productName,offerCode;
+        if(t.includes("CHECKOUT")||t===""||t.includes("PLANILLA")){productName="FEO - Planilla Finanzas en Ordem";offerCode="mwwdt723";}
+        else if(t.includes("COMBO")){productName="FEO - Combo Calculadora + Ingresso";offerCode="";}
+        else if(t.includes("INGRES")){productName="FEO - Ingresso";offerCode="";}
+        else if(t.includes("CALCULADORA")){productName="FEO - Calculadora";offerCode="";}
+        else{productName=item.title||"";offerCode="";}
+        push(productName,offerCode,itemUSD);
       }
-      rows.push({
-        "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
-        "Status da compra":"Paga","Data da compra":d,
-        "Nome do produto":productName,"Valor do produto":itemUSD.toFixed(2),
-        "Taxa da plataforma":"0","Ad Id":adId,
-        _src:"whop",platform:_plat,placement:_plac,
-        _orderDate:paidAt,offerCode:offerCode,
-      });
     }
   }
   return rows;
@@ -17843,6 +17854,54 @@ function parseWhopCeroRows(sheetJ){
   return rows;
 }
 
+function parseWhopAutoRows(sheetJ){
+  // Webhook checkoutbuilder.app — formato data.* (múltiplos produtos na mesma aba)
+  // Filtra apenas "Reto 14 Días". Cero desta aba é ignorado (já vem via parseWhopCeroRows).
+  // Data: ISO UTC (data.paid_at) → subtrai 6h → data México
+  // Moeda: data.currency "mxn" ou "usd" → converte para USD
+  // Ad ID: xcod com separador hQwK21wXxR na coluna URL
+  const rows=[];
+  for(const r of parseSheetFirstWins(sheetJ)){
+    if((r["type"]||"")!=="payment.succeeded") continue;
+    const prod=(r["data.product.title"]||"").trim();
+    if(!prod.includes("Reto")) continue;
+    const paidAt=(r["data.paid_at"]||"").trim(); if(!paidAt) continue;
+    const ms=new Date(paidAt).getTime(); if(!ms||isNaN(ms)) continue;
+    const d=new Date(ms-6*60*60*1000).toISOString().split("T")[0];
+    if(!d||d<"2020-01-01") continue;
+    const email=(r["data.user.email"]||"").toLowerCase().trim();
+    const phone=(r["data.customer_phone"]||r["data.metadata.phone"]||"").replace(/\D/g,"");
+    const name="";
+    const totalRaw=parseFloat((r["data.total"]||"0").replace(",","."))||0;
+    const currency=(r["data.currency"]||"usd").toLowerCase();
+    const totalUSD=currency==="mxn"?totalRaw/18:totalRaw;
+    const urlRaw=r["URL"]||"";
+    // xcod pode estar no parâmetro xcod= ou no próprio URL com hQwK21wXxR
+    let xcod="";
+    try{
+      const u=new URL(urlRaw);
+      xcod=decodeURIComponent(u.searchParams.get("xcod")||"");
+    }catch(e){
+      const m=urlRaw.match(/[?&]xcod=([^&]*)/);
+      if(m) xcod=decodeURIComponent(m[1]);
+    }
+    const adId=extractAdIdFromXcod(xcod)||"";
+    const {platform:_plat,placement:_plac}=extractXcodMeta(xcod);
+    // Dedup key: data.id é único por transação
+    const orderId=r["data.id"]||"";
+    rows.push({
+      "Email":email,"CPF Comprador":"","Telefone":phone,"Nome":name,
+      "Status da compra":"Paga","Data da compra":d,
+      "Nome do produto":"Finanzas - Reto 14 Dias",
+      "Valor do produto":totalUSD.toFixed(2),
+      "Taxa da plataforma":"0","Ad Id":adId,
+      _src:"whop-auto",platform:_plat,placement:_plac,
+      _orderDate:orderId,offerCode:"",
+    });
+  }
+  return rows;
+}
+
 // ── Load data ──────────────────────────────────────────────────────────────
 // Busca uma aba em blocos de 5000 linhas para evitar timeout em abas grandes
 // ── CSV parser → mesmo formato que a Sheets API {values:[rows]} ───────────
@@ -17908,8 +17967,8 @@ async function loadData(force=false){
   // Tenta buscar do Google Sheets; cada aba falha de forma independente
   const _empty={values:[]};
   const _fetchSafe=(tab,col,ps)=>fetchSheetPaged(tab,col,ps).catch(e=>{console.warn(`[sheets] Aba "${tab}" indisponível:`,e.message);return _empty;});
-  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ;
-  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ] = await Promise.all([
+  let mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ, whopAutoJ;
+  [mj, retoJ, ceroJ, mapaJ, mapaAscJ, segJ, aquecSegJ, whopRetoJ, whopCeroJ, whopAutoJ] = await Promise.all([
     _fetchSafe(SHEET_META,"V",5000),
     _fetchSafe(SHEET_RETO,"Z",5000),
     _fetchSafe(SHEET_CERO,"Z",5000),
@@ -17919,8 +17978,9 @@ async function loadData(force=false){
     _fetchSafe(SHEET_AQUEC_SEG,"Z",5000),
     _fetchSafe(SHEET_WHOP_RETO,"BL",5000),
     _fetchSafe(SHEET_WHOP_CERO,"BL",5000),
+    _fetchSafe(SHEET_WHOP_AUTO,"W",5000),
   ]);
-  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1,"| Whop Reto:",whopRetoJ.values.length-1,"| Whop Cero:",whopCeroJ.values.length-1);
+  console.log("[sheets] Meta:",mj.values.length-1,"linhas | Reto:",retoJ.values.length-1,"| Cero:",ceroJ.values.length-1,"| Mapa:",mapaJ.values.length-1,"| Whop Reto:",whopRetoJ.values.length-1,"| Whop Cero:",whopCeroJ.values.length-1,"| Whop Auto:",whopAutoJ.values.length-1);
   S.loading=false; S.error=null;
 
   try{
@@ -18061,6 +18121,7 @@ async function loadData(force=false){
     const retoRows=[
       ...parseHotmartRows(retoJ).filter(r=>!r.offerCode||RETO_OFFERS.has(r.offerCode)),
       ...parseWhopRetoRows(whopRetoJ),
+      ...parseWhopAutoRows(whopAutoJ),
     ];
     // ── Upsell Cero via Whop: cross-match por email/telefone com retoRows ──
     const _retoEmails=new Set(retoRows.map(r=>(r["Email"]||"").toLowerCase()).filter(Boolean));
