@@ -13195,12 +13195,10 @@ function processVendas(rows){
     if(!d)continue;
     const bruto=parseNum(getCol(r,...VENDAS_COLS.valor));
     const estorno=parseNum(getCol(r,...VENDAS_COLS.estorno));
-    const telRaw=getCol(r,...VENDAS_COLS.telefone);
     out.push({
       date:d.date, ms:d.ms,
       email:normalizeEmail(getCol(r,...VENDAS_COLS.email)),
-      phone:telKey(telRaw),
-      telRaw:String(telRaw||""),
+      phone:telKey(getCol(r,...VENDAS_COLS.telefone)),
       produto:String(getCol(r,...VENDAS_COLS.produto)||"—").trim(),
       valor:Math.max(0,(bruto||0)-(estorno||0)),
     });
@@ -16815,11 +16813,11 @@ function conversaoPorProduto(start,end){
   const {pessoas,porEmail,porTel}=indicePessoas();
   const origem=pessoas.map(p=>produtoDaLead(p)||"__sem__");
   const comprou=new Array(pessoas.length).fill(false);
-  let vendasSemDono=0; const semDono=[];
+  let vendasSemDono=0;
   for(const v of vendasInRange(start,end)){
     let i=(v.email&&porEmail[v.email]!=null)?porEmail[v.email]
          :(v.phone&&porTel[v.phone]!=null)?porTel[v.phone]:null;
-    if(i==null){ vendasSemDono++; semDono.push(v); continue; }
+    if(i==null){ vendasSemDono++; continue; }
     comprou[i]=true;
   }
   const linhas=[...PRIO_PRODUTOS,"__sem__"].map(k=>{
@@ -16828,7 +16826,7 @@ function conversaoPorProduto(start,end){
     return {k,captados:n,vendas:v,conv:n>0?(v/n)*100:null};
   });
   const totCap=pessoas.length, totVen=comprou.filter(Boolean).length;
-  return {linhas,totCap,totVen,convTotal:totCap>0?(totVen/totCap)*100:null,vendasSemDono,semDono};
+  return {linhas,totCap,totVen,convTotal:totCap>0?(totVen/totCap)*100:null,vendasSemDono};
 }
 function carrinhoDiario(start,end){
   const porDia={};
@@ -17004,22 +17002,6 @@ function renderCarrinhoBlack(){
       ${kpiCard("Compradores captados",cp.totVen.toLocaleString("pt-BR"),cp.vendasSemDono>0?`${cp.vendasSemDono} venda(s) de fora da base captada`:"todas as vendas vieram da base captada","var(--text-strong)")}
       ${kpiCard("Conversão em venda",cp.convTotal!=null?fPct(cp.convTotal):d,"compradores ÷ pessoas captadas","var(--text-strong)")}
     </div>
-
-    ${cp.semDono.length>0?`
-    <div class="cc" style="margin-bottom:12px">
-      <div class="ct" style="margin-bottom:8px">Vendas que não vieram da base captada (${cp.semDono.length})</div>
-      <div style="font-size:10px;color:var(--hint);margin-bottom:8px">Compraram sem estar na Base leads nem na aba Grupo — nem por e-mail, nem por telefone.</div>
-      <div style="overflow-x:auto"><table><thead><tr>
-        <th>Data</th><th>E-mail</th><th>Telefone</th><th style="text-align:right">Valor</th>
-      </tr></thead><tbody>
-        ${cp.semDono.slice(0,25).map(v=>`<tr>
-          <td class="mono" style="font-size:11px">${fDateBR(v.date)}</td>
-          <td class="mono" style="font-size:11px">${(v.email||"—").replace(/</g,"&lt;")}</td>
-          <td class="mono" style="font-size:11px">${(v.telRaw||"—").replace(/</g,"&lt;")}</td>
-          <td class="mono" style="text-align:right;font-size:11px">${fUSD(v.valor)}</td>
-        </tr>`).join("")}
-      </tbody></table></div>
-    </div>`:""}
 
     ${diario.length>0?`
     <div class="cc" style="position:relative;margin-bottom:12px">
