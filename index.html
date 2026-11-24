@@ -11222,7 +11222,28 @@ const GRUPO_COLS = ["Número","Numero","Telefone","Número de telefone","Phone"]
 // certa). Quando o GA4 voltar ao normal, trocar esta constante por "ga4" faz
 // tudo voltar sozinho — nenhuma outra linha precisa mudar.
 let FONTE_PAGINA = "meta";
+// ⚠️ Por que NÃO usamos mais o gviz nas abas listadas abaixo:
+// o endpoint /gviz/tq adivinha o TIPO de cada coluna pela maioria dos valores
+// e devolve VAZIO toda célula que não couber nesse tipo. Na aba "Base vendas"
+// a coluna "Phone number" tem 55 valores só com dígitos e 40 em texto
+// ("+523312612192", "(722) 295 9028"); o gviz decidiu que a coluna é numérica
+// e apagou justamente os que começam com "+". Resultado: 21 vendas deixavam de
+// casar com a pessoa captada (68 em vez de 89 compradores).
+// O endpoint /export?format=csv&gid=… devolve o valor como ele aparece na
+// planilha, sem inventar tipo — mas exige o gid numérico da aba em vez do nome.
+// Aba sem gid aqui continua indo pelo gviz, que é o caminho que funciona por
+// nome; se você criar uma aba nova cujo conteúdo tenha mistura de texto e
+// número numa mesma coluna, acrescente o gid dela neste mapa.
+const SHEET_GIDS = {
+  "Base Meta":   0,
+  "Base leads":  2108470462,
+  "Grupo":       2275215,
+  "Base vendas": 1477519829,
+};
 function sheetCsvUrl(sheetName){
+  const gid=SHEET_GIDS[sheetName];
+  if(gid!=null)
+    return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 }
 // Timeout próprio (20s): sem isso, uma aba que trave (rede lenta, planilha
@@ -16908,16 +16929,16 @@ function renderCarrinhoBlack(){
 
     ${cp.semDono.length>0?`
     <div class="cc" style="margin-bottom:12px">
-      <div class="ct" style="margin-bottom:8px">Diagnóstico — vendas que não acharam dono na base captada</div>
-      <div style="font-size:10px;color:var(--hint);margin-bottom:8px">Mostra o valor do telefone <b>exatamente como chegou da planilha</b> e a chave de 10 dígitos que saiu dele.</div>
+      <div class="ct" style="margin-bottom:8px">Vendas que não vieram da base captada (${cp.semDono.length})</div>
+      <div style="font-size:10px;color:var(--hint);margin-bottom:8px">Compraram sem estar na Base leads nem na aba Grupo — nem por e-mail, nem por telefone.</div>
       <div style="overflow-x:auto"><table><thead><tr>
-        <th>E-mail da venda</th><th>Telefone como veio</th><th>Chave gerada</th><th style="text-align:right">E-mail bate?</th>
+        <th>Data</th><th>E-mail</th><th>Telefone</th><th style="text-align:right">Valor</th>
       </tr></thead><tbody>
-        ${cp.semDono.slice(0,12).map(v=>`<tr>
+        ${cp.semDono.slice(0,25).map(v=>`<tr>
+          <td class="mono" style="font-size:11px">${fDateBR(v.date)}</td>
           <td class="mono" style="font-size:11px">${(v.email||"—").replace(/</g,"&lt;")}</td>
           <td class="mono" style="font-size:11px">${(v.telRaw||"—").replace(/</g,"&lt;")}</td>
-          <td class="mono" style="font-size:11px">${v.phone||"—"}</td>
-          <td class="mono" style="text-align:right;font-size:11px">${v.email?"não":"sem e-mail"}</td>
+          <td class="mono" style="text-align:right;font-size:11px">${fUSD(v.valor)}</td>
         </tr>`).join("")}
       </tbody></table></div>
     </div>`:""}
