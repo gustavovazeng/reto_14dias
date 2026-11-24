@@ -11222,28 +11222,17 @@ const GRUPO_COLS = ["Número","Numero","Telefone","Número de telefone","Phone"]
 // certa). Quando o GA4 voltar ao normal, trocar esta constante por "ga4" faz
 // tudo voltar sozinho — nenhuma outra linha precisa mudar.
 let FONTE_PAGINA = "meta";
-// ⚠️ Por que NÃO usamos mais o gviz nas abas listadas abaixo:
-// o endpoint /gviz/tq adivinha o TIPO de cada coluna pela maioria dos valores
-// e devolve VAZIO toda célula que não couber nesse tipo. Na aba "Base vendas"
-// a coluna "Phone number" tem 55 valores só com dígitos e 40 em texto
-// ("+523312612192", "(722) 295 9028"); o gviz decidiu que a coluna é numérica
-// e apagou justamente os que começam com "+". Resultado: 21 vendas deixavam de
-// casar com a pessoa captada (68 em vez de 89 compradores).
-// O endpoint /export?format=csv&gid=… devolve o valor como ele aparece na
-// planilha, sem inventar tipo — mas exige o gid numérico da aba em vez do nome.
-// Aba sem gid aqui continua indo pelo gviz, que é o caminho que funciona por
-// nome; se você criar uma aba nova cujo conteúdo tenha mistura de texto e
-// número numa mesma coluna, acrescente o gid dela neste mapa.
-const SHEET_GIDS = {
-  "Base Meta":   0,
-  "Base leads":  2108470462,
-  "Grupo":       2275215,
-  "Base vendas": 1477519829,
-};
+// A dash lê a planilha pelo endpoint gviz porque é o único que o navegador
+// aceita ler de outra origem (manda Access-Control-Allow-Origin). O /export?
+// format=csv NÃO manda, e a leitura morre com "Failed to fetch" — já tentei,
+// não volte pra ele.
+// ⚠️ Contrapartida do gviz: ele adivinha o TIPO de cada coluna pela maioria
+// dos valores e devolve VAZIO em toda célula que não couber nesse tipo. Uma
+// coluna com telefones misturados ("9982144774" e "+523312612192") vira
+// coluna numérica e apaga os que têm "+". A defesa está em avisoColunaVazia(),
+// que grita na tela quando isso acontece, e na própria planilha, cujas colunas
+// de telefone são formatadas como TEXTO pra não haver maioria numérica.
 function sheetCsvUrl(sheetName){
-  const gid=SHEET_GIDS[sheetName];
-  if(gid!=null)
-    return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 }
 // Timeout próprio (20s): sem isso, uma aba que trave (rede lenta, planilha
