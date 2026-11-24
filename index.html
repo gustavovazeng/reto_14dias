@@ -11370,6 +11370,7 @@ const S = {
   vendasIgnoradas:0,        // linhas com status diferente de pago
   vendasSemTelefone:0,      // vendas que chegaram sem telefone
   alertaTelefone:0,         // >0 = coluna de telefone voltando vazia (ver processVendas)
+  telefonesRecuperados:0,   // células repostas pelo reparo do gviz
   grupoLinhas:0,            // linhas da aba Grupo antes de deduplicar
   principalTemp:"todos",    // "todos" | "quente" | "morno" | "frio" — filtro exclusivo da aba Principal
   leadsChannel:"total",      // filtro de canal exclusivo da aba Análise qualificação
@@ -12763,7 +12764,16 @@ async function loadData(){
       fetchSheetCSVOpt(SHEET_VENDAS_NAME),
     ]);
     S.grupoTels = processGrupo(parseRows(parseCSVText(grupoCsv)));
-    S.vendasRows = processVendas(parseRows(parseCSVText(vendasCsv)));
+    // Vendas: antes de processar, repõe o que o gviz apagou na coluna de
+    // telefone (ver reparaColunaVazia). Sem isso, toda venda cujo telefone
+    // está gravado como texto na planilha chega sem telefone e não casa com
+    // quem entrou só no grupo.
+    const vendasTab = parseCSVText(vendasCsv);
+    const vendasLinhas = parseRows(vendasTab);
+    S.telefonesRecuperados = vendasTab.length>1
+      ? await reparaColunaVazia(SHEET_VENDAS_NAME, vendasLinhas, vendasTab[0], VENDAS_COLS.telefone)
+      : 0;
+    S.vendasRows = processVendas(vendasLinhas);
     const metaRowsRaw = parseRows(parseCSVText(metaCsv));
     const leadsRowsRaw = parseRows(parseCSVText(leadsCsv));
     const pesquisaByEmail = processPesquisa(parseRows(parseCSVText(pesquisaCsv)));
@@ -13108,6 +13118,71 @@ function parseVendaDateTime(s){
   }
   return toISOLead(str);
 }
+// ── Reparo da coluna que o gviz apaga ────────────────────────────────────
+// O gviz adivinha o TIPO de cada coluna pela maioria das células que ele lê e
+// devolve VAZIO em tudo que não couber nesse tipo. Na "Base vendas" a coluna
+// de telefone tem 55 números puros e 40 textos ("+52…"), então a coluna vira
+// numérica e os 40 somem — justamente os que ligam a venda a quem entrou só
+// no grupo e não tem e-mail em lugar nenhum.
+//
+// O pulo do gato: esse palpite é feito SOBRE O INTERVALO PEDIDO. Pedindo de
+// novo só as linhas que voltaram vazias, o intervalo contém apenas texto, não
+// existe maioria numérica pra atrapalhar, e os valores vêm inteiros. Como as
+// linhas vazias costumam vir em blocos contíguos, dá pra fazer isso em poucas
+// requisições — e elas só acontecem quando algo veio vazio.
+function colunaParaLetra(i){
+  let s="", n=i+1;
+  while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+async function fetchSheetCSVIntervalo(sheetName, intervalo, timeoutMs=15000){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`
+          + `&sheet=${encodeURIComponent(sheetName)}&range=${encodeURIComponent(intervalo)}&headers=0`;
+  const ctrl=typeof AbortController!=="undefined"?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
+  try{
+    const res=await fetch(url,{cache:"no-store",signal:ctrl?ctrl.signal:undefined});
+    if(!res.ok)return "";
+    return await res.text();
+  }catch(e){ return ""; }
+  finally{ if(timer)clearTimeout(timer); }
+}
+// linhas: objetos já parseados; alts: nomes aceitos pra coluna.
+// Devolve quantas células foram recuperadas.
+async function reparaColunaVazia(sheetName, linhas, cabecalho, alts){
+  if(!linhas.length)return 0;
+  const norm=k=>String(k||"").normalize("NFKD").replace(/[̀-ͯ]/g,"")
+                 .toLowerCase().replace(/[^a-z0-9]/g,"");
+  const alvos=alts.map(norm);
+  const idx=cabecalho.findIndex(h=>alvos.includes(norm(h)));
+  if(idx<0)return 0;
+  const chave=cabecalho[idx], letra=colunaParaLetra(idx);
+  const vazias=[];
+  linhas.forEach((r,i)=>{ if(!String(r[chave]==null?"":r[chave]).trim())vazias.push(i); });
+  if(!vazias.length)return 0;
+  const blocos=[]; let a=vazias[0], p=vazias[0];
+  for(const i of vazias.slice(1)){ if(i===p+1){p=i;continue;} blocos.push([a,p]); a=p=i; }
+  blocos.push([a,p]);
+  // Guarda-chuva: se a coluna inteira está vazia de verdade (aba sem esse
+  // dado), não adianta martelar o Google com centenas de requisições.
+  if(blocos.length>80)return 0;
+  let recuperadas=0;
+  for(let k=0;k<blocos.length;k+=8){                       // 8 por vez
+    const lote=blocos.slice(k,k+8);
+    const csvs=await Promise.all(lote.map(([x,y])=>
+      fetchSheetCSVIntervalo(sheetName,`${letra}${x+2}:${letra}${y+2}`)));
+    csvs.forEach((csv,j)=>{
+      const [x,y]=lote[j];
+      const vals=parseCSVText(csv);
+      for(let t=0;t<=y-x;t++){
+        const v=vals[t]&&vals[t][0]!=null?String(vals[t][0]).trim():"";
+        if(v){ linhas[x+t][chave]=v; recuperadas++; }
+      }
+    });
+  }
+  return recuperadas;
+}
+
 // Aba "Base vendas" → vendas pagas, já no fuso do México.
 function processVendas(rows){
   const out=[]; let ignoradas=0;
@@ -16906,16 +16981,15 @@ function renderCarrinhoBlack(){
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">black_nov26 — Carrinho</div>
-        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · ${m.vendas.toLocaleString("pt-BR")} vendas no período${S.vendasIgnoradas>0?` · ${S.vendasIgnoradas} linha(s) ignorada(s) por status`:""}</div>
+        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · ${m.vendas.toLocaleString("pt-BR")} vendas no período${S.vendasIgnoradas>0?` · ${S.vendasIgnoradas} linha(s) ignorada(s) por status`:""}${S.telefonesRecuperados>0?` · ${S.telefonesRecuperados} telefone(s) recuperados da planilha`:""}</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${S.alertaTelefone>0?`<div class="err" style="margin-bottom:12px;line-height:1.6">
-      ⚠️ <b>${S.alertaTelefone} das ${S.vendasRows.length} vendas chegaram sem telefone</b> — e com isso elas não casam com quem entrou só no grupo (essa gente não tem e-mail em lugar nenhum).<br/>
-      A causa está na planilha, não aqui: a coluna <b>Phone number</b> da aba <b>Base vendas</b> mistura números puros (<span class="mono">9982144774</span>) com texto (<span class="mono">+523312612192</span>).
-      O Google decide que a coluna é numérica e devolve vazio justamente nos que têm "+".<br/>
-      <b>Como resolver:</b> selecione a coluna inteira → Formatar → Número → <b>Texto simples</b>, apague o conteúdo dela e cole de novo a coluna de telefones da exportação. Depois disso o formato fica grudado na coluna e o problema não volta.
+      ⚠️ <b>${S.alertaTelefone} das ${S.vendasRows.length} vendas continuam sem telefone</b> mesmo depois da releitura automática — elas não casam com quem entrou só no grupo, que não tem e-mail em lugar nenhum.<br/>
+      O Google devolve vazio quando a coluna <b>Phone number</b> da aba <b>Base vendas</b> mistura número puro (<span class="mono">9982144774</span>) com texto (<span class="mono">+523312612192</span>): ele decide que a coluna é numérica e apaga os que têm "+". A dash relê essas linhas sozinha pra contornar; se esta mensagem persistir, a releitura não deu conta.<br/>
+      <b>Saída manual:</b> selecione a coluna → Formatar → Número → <b>Texto simples</b>, apague o conteúdo e cole de novo os telefones da exportação.
     </div>`:""}
 
     <div class="g4" style="margin-bottom:13px">
@@ -17325,6 +17399,7 @@ window.BLACK = {
   clearCarrinhoAds,
   clearCarrinhoCamps,
   clearManualSpendHoje,
+  colunaParaLetra,
   conversaoPorCombinacao,
   conversaoPorProduto,
   copyAdResumo,
@@ -17360,6 +17435,7 @@ window.BLACK = {
   faixaFromScore,
   faixaSelButtons,
   fetchSheetCSV,
+  fetchSheetCSVIntervalo,
   fetchSheetCSVOpt,
   fichaCol,
   fichaIndex,
@@ -17485,6 +17561,7 @@ window.BLACK = {
   renderPrincipal,
   renderResumo,
   renderStagePage,
+  reparaColunaVazia,
   resetFunilData,
   respCanonica,
   restoreStageFocus,
