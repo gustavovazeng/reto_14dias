@@ -11368,6 +11368,8 @@ const S = {
   telsAC:new Set(),         // telefones de TODO contato da Base leads (sem corte de data)
   vendasRows:[],            // vendas pagas da aba "Base vendas"
   vendasIgnoradas:0,        // linhas com status diferente de pago
+  vendasSemTelefone:0,      // vendas que chegaram sem telefone
+  alertaTelefone:0,         // >0 = coluna de telefone voltando vazia (ver processVendas)
   grupoLinhas:0,            // linhas da aba Grupo antes de deduplicar
   principalTemp:"todos",    // "todos" | "quente" | "morno" | "frio" — filtro exclusivo da aba Principal
   leadsChannel:"total",      // filtro de canal exclusivo da aba Análise qualificação
@@ -13129,6 +13131,13 @@ function processVendas(rows){
     });
   }
   S.vendasIgnoradas=ignoradas;
+  // Alarme pro problema do gviz (ver sheetCsvUrl): quando a coluna de telefone
+  // tem maioria numérica, toda célula gravada como texto ("+52…") volta VAZIA,
+  // e some o único jeito de ligar a venda a quem entrou só no grupo. Em vez de
+  // o número errado passar despercebido, a tela grita.
+  const semTel=out.filter(v=>!v.phone).length;
+  S.vendasSemTelefone=semTel;
+  S.alertaTelefone = (out.length>=10 && semTel/out.length>0.15) ? semTel : 0;
   out.sort((a,b)=>a.ms-b.ms);
   return out;
 }
@@ -16902,6 +16911,12 @@ function renderCarrinhoBlack(){
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
+    ${S.alertaTelefone>0?`<div class="err" style="margin-bottom:12px;line-height:1.6">
+      ⚠️ <b>${S.alertaTelefone} das ${S.vendasRows.length} vendas chegaram sem telefone</b> — e com isso elas não casam com quem entrou só no grupo (essa gente não tem e-mail em lugar nenhum).<br/>
+      A causa está na planilha, não aqui: a coluna <b>Phone number</b> da aba <b>Base vendas</b> mistura números puros (<span class="mono">9982144774</span>) com texto (<span class="mono">+523312612192</span>).
+      O Google decide que a coluna é numérica e devolve vazio justamente nos que têm "+".<br/>
+      <b>Como resolver:</b> selecione a coluna inteira → Formatar → Número → <b>Texto simples</b>, apague o conteúdo dela e cole de novo a coluna de telefones da exportação. Depois disso o formato fica grudado na coluna e o problema não volta.
+    </div>`:""}
 
     <div class="g4" style="margin-bottom:13px">
       ${kpiCard("Vendas",m.vendas.toLocaleString("pt-BR"),"Base vendas · status pago","var(--text-strong)")}
