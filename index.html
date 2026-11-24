@@ -13108,10 +13108,12 @@ function processVendas(rows){
     if(!d)continue;
     const bruto=parseNum(getCol(r,...VENDAS_COLS.valor));
     const estorno=parseNum(getCol(r,...VENDAS_COLS.estorno));
+    const telRaw=getCol(r,...VENDAS_COLS.telefone);
     out.push({
       date:d.date, ms:d.ms,
       email:normalizeEmail(getCol(r,...VENDAS_COLS.email)),
-      phone:telKey(getCol(r,...VENDAS_COLS.telefone)),
+      phone:telKey(telRaw),
+      telRaw:String(telRaw||""),
       produto:String(getCol(r,...VENDAS_COLS.produto)||"—").trim(),
       valor:Math.max(0,(bruto||0)-(estorno||0)),
     });
@@ -16719,11 +16721,11 @@ function conversaoPorProduto(start,end){
   const {pessoas,porEmail,porTel}=indicePessoas();
   const origem=pessoas.map(p=>produtoDaLead(p)||"__sem__");
   const comprou=new Array(pessoas.length).fill(false);
-  let vendasSemDono=0;
+  let vendasSemDono=0; const semDono=[];
   for(const v of vendasInRange(start,end)){
     let i=(v.email&&porEmail[v.email]!=null)?porEmail[v.email]
          :(v.phone&&porTel[v.phone]!=null)?porTel[v.phone]:null;
-    if(i==null){ vendasSemDono++; continue; }
+    if(i==null){ vendasSemDono++; semDono.push(v); continue; }
     comprou[i]=true;
   }
   const linhas=[...PRIO_PRODUTOS,"__sem__"].map(k=>{
@@ -16732,7 +16734,7 @@ function conversaoPorProduto(start,end){
     return {k,captados:n,vendas:v,conv:n>0?(v/n)*100:null};
   });
   const totCap=pessoas.length, totVen=comprou.filter(Boolean).length;
-  return {linhas,totCap,totVen,convTotal:totCap>0?(totVen/totCap)*100:null,vendasSemDono};
+  return {linhas,totCap,totVen,convTotal:totCap>0?(totVen/totCap)*100:null,vendasSemDono,semDono};
 }
 function carrinhoDiario(start,end){
   const porDia={};
@@ -16903,6 +16905,22 @@ function renderCarrinhoBlack(){
       ${kpiCard("Compradores captados",cp.totVen.toLocaleString("pt-BR"),cp.vendasSemDono>0?`${cp.vendasSemDono} venda(s) de fora da base captada`:"todas as vendas vieram da base captada","var(--text-strong)")}
       ${kpiCard("Conversão em venda",cp.convTotal!=null?fPct(cp.convTotal):d,"compradores ÷ pessoas captadas","var(--text-strong)")}
     </div>
+
+    ${cp.semDono.length>0?`
+    <div class="cc" style="margin-bottom:12px">
+      <div class="ct" style="margin-bottom:8px">Diagnóstico — vendas que não acharam dono na base captada</div>
+      <div style="font-size:10px;color:var(--hint);margin-bottom:8px">Mostra o valor do telefone <b>exatamente como chegou da planilha</b> e a chave de 10 dígitos que saiu dele.</div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>E-mail da venda</th><th>Telefone como veio</th><th>Chave gerada</th><th style="text-align:right">E-mail bate?</th>
+      </tr></thead><tbody>
+        ${cp.semDono.slice(0,12).map(v=>`<tr>
+          <td class="mono" style="font-size:11px">${(v.email||"—").replace(/</g,"&lt;")}</td>
+          <td class="mono" style="font-size:11px">${(v.telRaw||"—").replace(/</g,"&lt;")}</td>
+          <td class="mono" style="font-size:11px">${v.phone||"—"}</td>
+          <td class="mono" style="text-align:right;font-size:11px">${v.email?"não":"sem e-mail"}</td>
+        </tr>`).join("")}
+      </tbody></table></div>
+    </div>`:""}
 
     ${diario.length>0?`
     <div class="cc" style="position:relative;margin-bottom:12px">
