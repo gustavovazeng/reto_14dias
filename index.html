@@ -11207,6 +11207,19 @@ const VENDAS_COLS = {
   valor:   ["Payment Amount"],
   estorno: ["Refunded amount"],
 };
+// Compradores que aparecem na Base vendas mas NÃO compraram por esta oferta
+// (entraram por outro caminho e caíram no mesmo produto do checkout). Ficam
+// fora de tudo: vendas, faturamento, ticket, ROAS e as tabelas de conversão.
+// Basta o e-mail OU o telefone bater. Telefone pelos 10 últimos dígitos,
+// mesma chave do resto do dashboard. Para voltar a contar alguém, apague a
+// linha daqui. Informados pelo Gustavo em 27/11/2026.
+const VENDAS_EXCLUIDAS = [
+  {email:"mj.alcantara.g@gmail.com",      tel:"7223522619"},
+  {email:"alanvilmar15@gmail.com",        tel:"+527223807283"},
+  {email:"lanuye@hotmail.com",            tel:"5564881881"},
+  {email:"sandraovandovasquez@gmail.com", tel:"9686899913"},
+  {email:"luis.ortegaruvalcaba@gmail.com",tel:"+523312274306"},
+];
 const SHEET_GRUPO_NAME = "Grupo";
 const GRUPO_COLS = ["Número","Numero","Telefone","Número de telefone","Phone"];
 
@@ -11368,6 +11381,7 @@ const S = {
   telsAC:new Set(),         // telefones de TODO contato da Base leads (sem corte de data)
   vendasRows:[],            // vendas pagas da aba "Base vendas"
   vendasIgnoradas:0,        // linhas com status diferente de pago
+  vendasExcluidas:0,        // compras que não vieram desta oferta (VENDAS_EXCLUIDAS)
   vendasSemTelefone:0,      // vendas que chegaram sem telefone
   alertaTelefone:0,         // >0 = coluna de telefone voltando vazia (ver processVendas)
   telefonesRecuperados:0,   // células repostas pelo reparo do gviz
@@ -13185,7 +13199,9 @@ async function reparaColunaVazia(sheetName, linhas, cabecalho, alts){
 
 // Aba "Base vendas" → vendas pagas, já no fuso do México.
 function processVendas(rows){
-  const out=[]; let ignoradas=0;
+  const out=[]; let ignoradas=0, excluidas=0;
+  const exMail=new Set(VENDAS_EXCLUIDAS.map(x=>normalizeEmail(x.email)).filter(Boolean));
+  const exTel =new Set(VENDAS_EXCLUIDAS.map(x=>telKey(x.tel)).filter(Boolean));
   for(const r of rows){
     // VENDA_STATUS_OK (mais abaixo) já lista APPROVED/COMPLETED etc.; o
     // checkout novo usa "paid"/"succeeded", então entram aqui.
@@ -13193,6 +13209,10 @@ function processVendas(rows){
     if(st&&!VENDA_STATUS_OK.includes(st)&&!["PAID","SUCCEEDED"].includes(st)){ ignoradas++; continue; }
     const d=parseVendaDateTime(getCol(r,...VENDAS_COLS.data));
     if(!d)continue;
+    // Compra que não veio desta oferta (ver VENDAS_EXCLUIDAS)
+    const emailV=normalizeEmail(getCol(r,...VENDAS_COLS.email));
+    const telV=telKey(getCol(r,...VENDAS_COLS.telefone));
+    if((emailV&&exMail.has(emailV))||(telV&&exTel.has(telV))){ excluidas++; continue; }
     const bruto=parseNum(getCol(r,...VENDAS_COLS.valor));
     const estorno=parseNum(getCol(r,...VENDAS_COLS.estorno));
     out.push({
@@ -13204,6 +13224,7 @@ function processVendas(rows){
     });
   }
   S.vendasIgnoradas=ignoradas;
+  S.vendasExcluidas=excluidas;
   // Alarme pro problema do gviz (ver sheetCsvUrl): quando a coluna de telefone
   // tem maioria numérica, toda célula gravada como texto ("+52…") volta VAZIA,
   // e some o único jeito de ligar a venda a quem entrou só no grupo. Em vez de
@@ -16979,7 +17000,7 @@ function renderCarrinhoBlack(){
     <div class="hdr" style="margin-bottom:6px">
       <div>
         <div class="hdr-title">black_nov26 — Carrinho</div>
-        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · ${m.vendas.toLocaleString("pt-BR")} vendas no período${S.vendasIgnoradas>0?` · ${S.vendasIgnoradas} linha(s) ignorada(s) por status`:""}${S.telefonesRecuperados>0?` · ${S.telefonesRecuperados} telefone(s) recuperados da planilha`:""}</div>
+        <div class="hdr-sub">atualizado em: ${S.updated||"—"} · ${m.vendas.toLocaleString("pt-BR")} vendas no período${S.vendasIgnoradas>0?` · ${S.vendasIgnoradas} linha(s) ignorada(s) por status`:""}${S.vendasExcluidas>0?` · ${S.vendasExcluidas} compra(s) fora desta oferta, não contabilizadas`:""}${S.telefonesRecuperados>0?` · ${S.telefonesRecuperados} telefone(s) recuperados da planilha`:""}</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">${statusLegend()}</div>
     </div>
